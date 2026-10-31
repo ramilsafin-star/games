@@ -1,0 +1,1527 @@
+// =====================================================
+// ЯДРО ИГРЫ: физика, ходы, способности, камера, отрисовка
+// =====================================================
+const { Engine, World, Bodies, Body, Events, Composite, Sleeping } = Matter;
+const engine = Engine.create({ enableSleeping: true, positionIterations: 8, velocityIterations: 6 });
+const world = engine.world;
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d', { alpha: false });
+
+// Игровые объекты
+let level = 0;
+let cfg = LEVELS[0];
+let blocks = [];
+let bots = [];
+let orbs = [];
+let flying = [];
+let primary = null;
+let queue = [];
+let queueView = [];
+let slingHero = null;
+let removals = [];
+let presettling = false;
+let levelShift = 0;        // на узких экранах крепость ближе к рогатке, поэтому всё крупнее
+let queueGap = 38;
+
+// Ход и прогресс
+let phase = 'attract'; // attract | intro | aim | flight | settle | over
+let levelOver = false;
+let abilityUsed = false;
+let shotsFired = 0;
+let aimIdle = 0;
+// После проигрыша уровень становится проще: при новой попытке даём ещё пуфов
+const MAX_EXTRA_HEROES = 2;
+const levelFails = new Array(LEVELS.length).fill(0);
+let score = 0;
+let shownScore = 0;
+let combo = 0;
+let comboTimer = 0;
+let turnTimer = 0;
+let restTimer = 0;
+let settleTimer = 0;
+let introTimer = 0;
+let botsAtTurnStart = 0;
+let lastKill = null;
+let timers = [];
+
+// Прицел
+let pull = null;           // смещение пуфа от центра рогатки
+let drag = null;           // активный указатель
+let kbAim = null;          // прицел с клавиатуры
+let recoil = { x: 0, y: 0, vx: 0, vy: 0 };
+let tapPrompt = 0;
+let showTutorial = false;
+
+// Время
+let time = 0;
+let rafId = 0;
+let lastNow = 0;
+let accum = 0;
+let hitStopMs = 0;
+let slowmoT = 0;
+let slowmoScale = 1;
+let sysPaused = false;
+
+// Экран и камера
+let vw = 0;
+let vh = 0;
+let dpr = 1;
+let viewReady = false;
+let quality = 2;
+let perfTime = 0;
+let perfFrames = 0;
+const cam = { x: 640, y: 360, zoom: 1, trauma: 0, punch: 0, focus: null };
+const overview = { x: 640, y: 360, zoom: 1, groundY: 600, flightZoom: 1 };
+const bounds = { left: 100, right: 1100, top: 300 };
+
+// =====================================================
+// ПОСТРОЕНИЕ УРОВНЯ
+// =====================================================
+function addBlock(x, y, w, h, mat) {
+  const m = MATERIALS[mat];
+  const rng = seeded(blocks.length * 13 + level * 7 + 1);
+  const b = Bodies.rectangle(x + levelShift, y, w, h, {
+    label: 'block', density: m.density, friction: 0.68, frictionStatic: 0.8, restitution: 0.08, sleepThreshold: 50
+  });
+  b.w = w;
+  b.h = h;
+  b.mat = mat;
+  b.hp = m.hp;
+  b.maxHp = m.hp;
+  b.hitFlash = 0;
+  b.cracks = makeCracks(w, h, rng);
+  blocks.push(b);
+  World.add(world, b);
+}
+
+function addBot(x, y, r, isMega) {
+  const hp = isMega ? 60 : 20;
+  const b = Bodies.circle(x + levelShift, y, r, { label: 'bot', density: 0.002, friction: 0.5, restitution: 0.3, sleepThreshold: 50 });
+  b.isMega = isMega;
+  b.hp = hp;
+  b.maxHp = hp;
+  b.hitFlash = 0;
+  b.scared = 0;
+  b.laugh = 0;
+  b.lookX = -1;
+  b.lookY = 0;
+  bots.push(b);
+  World.add(world, b);
+}
+
+function queueX(i) {
+  return SLING_X - 74 - i * queueGap;
+}
+
+function updateLayoutForAspect() {
+  const aspect = vw && vh ? vw / vh : 16 / 9;
+  levelShift = -170 * clamp((1.2 - aspect) / 0.6, 0, 1);
+  queueGap = aspect < 0.85 ? 26 : 38;
+}
+
+function loadLevel(index, opts) {
+  opts = opts || {};
+  level = clamp(index, 0, LEVELS.length - 1);
+  cfg = LEVELS[level];
+
+  // Отменяем всё запланированное со старого уровня (иначе окна всплывают поверх нового)
+  timers = [];
+  removals = [];
+  Composite.clear(world, false);
+  blocks = [];
+  bots = [];
+  orbs = [];
+  flying = [];
+  primary = null;
+  pull = null;
+  drag = null;
+  kbAim = null;
+  recoil = { x: 0, y: 0, vx: 0, vy: 0 };
+  tapPrompt = 0;
+  FX.clear();
+
+  levelOver = false;
+  abilityUsed = false;
+  shotsFired = 0;
+  score = 0;
+  shownScore = 0;
+  combo = 0;
+  comboTimer = 0;
+  turnTimer = 0;
+  restTimer = 0;
+  settleTimer = 0;
+  lastKill = null;
+  hitStopMs = 0;
+  slowmoT = 0;
+  cam.focus = null;
+  cam.trauma = 0;
+  cam.punch = 0;
+
+  updateLayoutForAspect();
+  World.add(world, Bodies.rectangle(WORLD_W / 2, GROUND_Y + 100, 7000, 200, {
+    isStatic: true, label: 'ground', friction: 0.95, restitution: 0.1
+  }));
+  cfg.build(addBlock, addBot);
+  presettle();
+
+  const extras = Math.min(levelFails[level], MAX_EXTRA_HEROES);
+  queue = cfg.heroes.concat(new Array(extras).fill('rocky'));
+  if (queue.length > 6) queueGap = Math.min(queueGap, 22);
+  aimIdle = 0;
+  queueView = queue.map((type, i) => ({ type, x: queueX(i - 1) }));
+  slingHero = null;
+  computeBounds();
+  computeOverview();
+  applyViewScale();
+  Music.setTrack(BIOMES[cfg.biome].music);
+
+  takeNextHero(true);
+  showTutorial = level === 0 && !Save.seen.tutorial;
+
+  if (opts.attract) {
+    phase = 'attract';
+    snapCamera();
+  } else if (opts.quick) {
+    phase = 'aim';
+    snapCamera();
+    UI.clearBanner();
+    showHeroHint();
+  } else {
+    phase = 'intro';
+    introTimer = 1.25;
+    cam.zoom = overview.zoom * 1.28;
+    cam.x = (bounds.fortL + bounds.right) / 2 - 20;
+    cam.y = baseCamY(cam.zoom);
+    UI.banner(`${t('level')} ${level + 1}`, t('biome')[cfg.biome]);
+    UI.setHint('');
+  }
+  UI.updateHud();
+}
+
+// Даём постройке улечься заранее: уровень не рассыпается у игрока на глазах
+function presettle() {
+  presettling = true;
+  engine.timing.timeScale = 1;
+  for (let i = 0; i < 90; i++) Engine.update(engine, STEP_MS);
+  presettling = false;
+  blocks.concat(bots).forEach((b) => {
+    Body.setVelocity(b, { x: 0, y: 0 });
+    Body.setAngularVelocity(b, 0);
+    Sleeping.set(b, true);
+  });
+}
+
+function computeBounds() {
+  let right = 0;
+  let top = GROUND_Y;
+  let fortL = WORLD_W;
+  blocks.concat(bots).forEach((b) => {
+    right = Math.max(right, b.bounds.max.x);
+    top = Math.min(top, b.bounds.min.y);
+    fortL = Math.min(fortL, b.bounds.min.x);
+  });
+  const lastQueue = queueX(Math.max(0, queue.length - 2)) - 34;
+  bounds.left = Math.min(SLING_X - 135, lastQueue);
+  bounds.right = right + 60;
+  bounds.top = top;
+  bounds.fortL = fortL;
+}
+
+function heroHint(type) {
+  const key = { rocky: 'heroRocky', zip: 'heroZip', trio: 'heroTrio', nimbus: 'heroNimbus', magma: 'heroMagma' }[type];
+  return t(key);
+}
+
+function takeNextHero(instant) {
+  const type = queue.shift();
+  queueView.shift();
+  slingHero = {
+    type, r: HEROES[type].r, x: SLING_X, y: SLING_Y, hop: instant ? 1 : 0,
+    fromX: queueX(0), fromY: GROUND_Y - HEROES[type].r, squish: 0
+  };
+  if (!instant) {
+    Sound.hop();
+    UI.setHint(heroHint(type));
+  }
+  pull = null;
+  kbAim = null;
+  phase = instant ? phase : 'aim';
+  botsAtTurnStart = bots.length;
+}
+
+// =====================================================
+// ВЫСТРЕЛ И СПОСОБНОСТИ
+// =====================================================
+function createHeroBody(type, x, y) {
+  const H = HEROES[type];
+  const b = Bodies.circle(x, y, H.r, {
+    label: 'hero', density: H.density, restitution: H.restitution, friction: 0.55,
+    collisionFilter: { group: -1 }, sleepThreshold: Infinity
+  });
+  b.heroType = type;
+  b.hasHit = false;
+  b.squish = 0;
+  b.hurtT = 0;
+  b.fuse = 0;
+  b.trail = [];
+  b.dashT = 0;
+  return b;
+}
+
+function fire() {
+  if (phase !== 'aim' || !slingHero || !pull) return;
+  const type = slingHero.type;
+  const start = { x: SLING_X + pull.x, y: SLING_Y + pull.y };
+  const b = createHeroBody(type, start.x, start.y);
+  World.add(world, b);
+  Body.setVelocity(b, { x: -pull.x * LAUNCH_POWER, y: -pull.y * LAUNCH_POWER });
+  flying = [b];
+  primary = b;
+
+  recoil = { x: pull.x, y: pull.y, vx: 0, vy: 0 };
+  slingHero = null;
+  pull = null;
+  drag = null;
+  kbAim = null;
+  phase = 'flight';
+  abilityUsed = false;
+  turnTimer = 0;
+  restTimer = 0;
+  shotsFired++;
+  botsAtTurnStart = bots.length;
+
+  Sound.launch();
+  Sound.voice(type);
+  addTrauma(0.16);
+  FX.ring(SLING_X, SLING_Y, 70, '#ffffff', 6, 0.28);
+  FX.sparks(SLING_X, SLING_Y, HEROES[type].trail, 12, 280, 0.4);
+  UI.setHint('');
+
+  if (showTutorial) {
+    showTutorial = false;
+    Save.seen.tutorial = true;
+    Platform.requestSave();
+  }
+  // Первый полёт с новой способностью: замедляем время и показываем, куда нажать
+  if (!Save.seen[type]) {
+    tapPrompt = 1.6;
+    later(240, () => {
+      if (phase === 'flight' && !abilityUsed) slowmo(1.3, 0.42);
+    });
+  }
+}
+
+// Рывок, деление и сброс молнии работают только до первого удара
+function abilityReady(h) {
+  if (abilityUsed || !h || !flying.includes(h)) return false;
+  const kind = HEROES[h.heroType].ability;
+  return !h.hasHit || kind === 'blast' || kind === 'roar';
+}
+
+function useAbility() {
+  if (phase !== 'flight' || !abilityReady(primary)) return;
+  abilityUsed = true;
+  tapPrompt = 0;
+  slowmoT = 0;
+  const h = primary;
+  const type = h.heroType;
+  const H = HEROES[type];
+  if (!Save.seen[type]) {
+    Save.seen[type] = true;
+    Platform.requestSave();
+  }
+  const { x, y } = h.position;
+  const v = Body.getVelocity(h);
+  const speed = Math.hypot(v.x, v.y);
+
+  if (H.ability === 'roar') {
+    Sound.ability('roar');
+    [0, 1, 2].forEach((i) => FX.ring(x, y, 90 + i * 55, i ? '#ffb07a' : '#ffffff', 11 - i * 3, 0.32 + i * 0.1));
+    FX.text(x, y - 40, t('wordRoar'), '#ffb07a', 28);
+    addTrauma(0.3);
+    blastBodies(x, y, 170, 10, 34, h);
+    Body.setVelocity(h, { x: v.x * 1.2, y: v.y * 1.2 });
+  } else if (H.ability === 'dash') {
+    Sound.ability('dash');
+    const a = Math.atan2(v.y, v.x);
+    const s = Math.max(31, speed * 1.7);
+    Body.setVelocity(h, { x: Math.cos(a) * s, y: Math.sin(a) * s });
+    h.dashT = 0.5;
+    FX.ring(x, y, 80, H.trail, 9, 0.28);
+    FX.sparks(x, y, H.trail, 22, 420, 0.42);
+    FX.text(x, y - 40, t('wordTurbo'), '#fff06a', 28);
+    addTrauma(0.18);
+  } else if (H.ability === 'split') {
+    Sound.ability('split');
+    const base = Math.atan2(v.y, v.x);
+    [-0.26, 0.26].forEach((off) => {
+      const c = createHeroBody('trio', x, y);
+      World.add(world, c);
+      Body.setVelocity(c, { x: Math.cos(base + off) * speed, y: Math.sin(base + off) * speed });
+      flying.push(c);
+    });
+    FX.flash(x, y, 60, H.trail);
+    FX.sparks(x, y, H.trail, 20, 300, 0.42);
+    FX.text(x, y - 40, t('wordSplit'), '#9ffbff', 28);
+  } else if (H.ability === 'drop') {
+    Sound.ability('drop');
+    const orb = Bodies.circle(x, y + 8, 13, {
+      label: 'orb', density: 0.006, restitution: 0.1, collisionFilter: { group: -1 }, sleepThreshold: Infinity
+    });
+    orb.dead = false;
+    World.add(world, orb);
+    Body.setVelocity(orb, { x: v.x * 0.35, y: 16 });
+    orbs.push(orb);
+    Body.setVelocity(h, { x: Math.max(v.x, 8), y: -13 });
+    h.dropped = true;
+    FX.flash(x, y, 70, '#7ef9ff');
+    FX.lightning(x, y, 70, 4);
+    FX.text(x, y - 42, t('wordOrb'), '#bff4ff', 28);
+  } else if (H.ability === 'blast') {
+    detonateHero(h, 190);
+  }
+}
+
+function detonateHero(h, radius) {
+  const { x, y } = h.position;
+  flying = flying.filter((b) => b !== h);
+  if (primary === h) primary = null;
+  World.remove(world, h);
+  explode(x, y, radius, 19, 110);
+}
+
+// =====================================================
+// ВЗРЫВЫ И УРОН
+// =====================================================
+function blastBodies(x, y, radius, kick, dmg, source) {
+  wakeAll();
+  blocks.concat(bots).forEach((b) => {
+    if (b.dead) return;
+    const dx = b.position.x - x;
+    const dy = b.position.y - y;
+    const dist = Math.hypot(dx, dy);
+    if (dist >= radius || dist < 0.1) return;
+    const k = 1 - dist / radius;
+    const heavy = clamp(Math.sqrt(6 / b.mass), 0.55, 1.2);
+    const v = Body.getVelocity(b);
+    Body.setVelocity(b, {
+      x: v.x + (dx / dist) * kick * k * heavy,
+      y: v.y + ((dy / dist) * kick - 4) * k * heavy
+    });
+    Body.setAngularVelocity(b, b.angularVelocity + (Math.random() - 0.5) * 0.3 * k);
+    damage(b, dmg * k, source);
+  });
+}
+
+function explode(x, y, radius, kick, dmg) {
+  Sound.explosion();
+  addTrauma(0.72);
+  cam.punch = Math.max(cam.punch, 0.05);
+  hitStopMs = Math.max(hitStopMs, 55);
+  UI.screenFlash();
+
+  FX.flash(x, y, radius * 1.05, '#ffffff', 0.15);
+  FX.flash(x, y, radius * 1.5, '#ff9a1f', 0.28);
+  FX.fire(x, y, radius * 0.42, quality > 0 ? 26 : 13);
+  FX.smoke(x, y, '#3b2240', quality > 0 ? 12 : 6, 120, 1.15, radius * 0.45);
+  FX.sparks(x, y, '#ffd23f', 26, 760, 0.65);
+  FX.sparks(x, y, '#ff7a1a', 14, 560, 0.5);
+  FX.ring(x, y, radius, '#ffe9a8', 16, 0.42);
+  FX.ring(x, y, radius * 0.62, '#ff7a1a', 11, 0.32);
+  FX.text(x, y - 74, t('wordBoom'), '#ffd23f', 36, 1.0);
+  if (y > GROUND_Y - 80) FX.scorch(x, GROUND_Y, radius * 1.1);
+  if (phase === 'flight' || phase === 'settle') cam.focus = { x, y, zoom: overview.flightZoom, t: 0.8 };
+
+  blastBodies(x, y, radius, kick, dmg, null);
+}
+
+function damage(b, dmg, attacker) {
+  if (b.dead || presettling) return;
+  if (attacker && attacker.label === 'hero' && b.mat) {
+    dmg *= HEROES[attacker.heroType].vs[b.mat] || 1;
+  }
+  b.hp -= dmg;
+  b.hitFlash = Math.min(1, b.hitFlash + 0.6);
+  if (b.hp <= 0) {
+    if (b.label === 'block') killBlock(b);
+    else if (b.label === 'bot') killBot(b);
+  }
+}
+
+function killBlock(b) {
+  b.dead = true;
+  blocks = blocks.filter((q) => q !== b);
+  removals.push(b);
+  const m = MATERIALS[b.mat];
+  const { x, y } = b.position;
+  Sound.shatter(m.sound);
+  FX.chips(x, y, m.chips, b.mat === 'stone' ? 14 : 11, 340);
+  FX.smoke(x, y, b.mat === 'ice' ? '#e8fbff' : '#d9c7b8', 3, 60, 0.6, 22);
+  if (b.mat === 'ice') FX.sparks(x, y, '#d9fbff', 12, 340, 0.4);
+  addScore(m.pts, x, y - 8, m.chips[0], 18);
+  if (b.mat === 'boom') {
+    later(55 + Math.random() * 60, () => explode(x, y, 175, 17, 85));
+  }
+}
+
+function killBot(b) {
+  b.dead = true;
+  bots = bots.filter((q) => q !== b);
+  removals.push(b);
+  const { x, y } = b.position;
+  combo = comboTimer > 0 ? combo + 1 : 1;
+  comboTimer = 1.5;
+  lastKill = { x, y };
+
+  Sound.botDown(combo - 1);
+  addTrauma(b.isMega ? 0.46 : 0.28);
+  hitStopMs = Math.max(hitStopMs, b.isMega ? 75 : 45);
+  FX.flash(x, y, 90, '#7ef9ff', 0.16);
+  FX.ring(x, y, b.isMega ? 130 : 88, '#7ef9ff', 9, 0.34);
+  FX.lightning(x, y, b.isMega ? 110 : 76, b.isMega ? 8 : 5);
+  FX.gears(x, y, b.isMega ? 12 : 7, 430, b.isMega);
+  FX.sparks(x, y, '#7ef9ff', 16, 480, 0.5);
+  FX.sparks(x, y, '#ff2e88', 10, 360, 0.42);
+  FX.smoke(x, y, '#46406e', 4, 70, 0.8, 26);
+
+  const pts = Math.round((b.isMega ? 3000 : 1000) * (1 + (combo - 1) * 0.5));
+  addScore(pts, x, y - 18, b.isMega ? '#ffd23f' : '#7cff5c', b.isMega ? 32 : 26);
+  const words = t('wordBot');
+  if (combo >= 2) {
+    const word = combo === 2 ? t('wordCombo2') : combo === 3 ? t('wordCombo3') : t('wordComboN');
+    FX.text(x, y - 64, word, '#ff7ac6', 30 + Math.min(combo, 5) * 3, 1.25);
+  } else {
+    FX.text(x, y - 56, words[Math.floor(Math.random() * words.length)], '#ffffff', 22, 0.85);
+  }
+  queueCheer();
+}
+
+let cheerT = 0;
+function queueCheer() {
+  cheerT = 1.1;
+}
+
+function addScore(pts, x, y, color, size) {
+  score += pts;
+  // Небольшой разброс, чтобы числа при цепной реакции не слипались
+  if (x !== undefined) FX.text(x + (Math.random() - 0.5) * 44, y + (Math.random() - 0.5) * 16, `+${pts}`, color, size);
+}
+
+function wakeAll() {
+  blocks.concat(bots).forEach((b) => {
+    if (b.isSleeping) Sleeping.set(b, false);
+  });
+}
+
+function flushRemovals() {
+  if (!removals.length) return;
+  removals.forEach((b) => World.remove(world, b));
+  removals = [];
+  wakeAll();
+}
+
+Events.on(engine, 'collisionStart', (event) => {
+  if (presettling) return;
+  event.pairs.forEach((pair) => {
+    const a = pair.bodyA;
+    const b = pair.bodyB;
+
+    // Шаровая молния срабатывает от любого касания
+    [a, b].forEach((o) => {
+      if (o.label === 'orb' && !o.dead) {
+        o.dead = true;
+        removals.push(o);
+        orbs = orbs.filter((q) => q !== o);
+        const { x, y } = o.position;
+        later(0, () => {
+          explode(x, y, 165, 16, 100);
+          FX.lightning(x, y, 150, 9);
+        });
+      }
+    });
+
+    const va = Body.getVelocity(a);
+    const vb = Body.getVelocity(b);
+    const rel = Math.hypot(va.x - vb.x, va.y - vb.y);
+    const hero = a.label === 'hero' ? a : b.label === 'hero' ? b : null;
+    const other = hero === a ? b : a;
+
+    if (hero) {
+      if (!hero.hasHit) {
+        hero.hasHit = true;
+        hero.frictionAir = 0.018;
+      }
+      if (hero.heroType === 'magma' && !hero.fuse && flying.includes(hero)) hero.fuse = 70;
+      if (rel > 3) {
+        hero.squish = Math.min(0.38, 0.1 + rel * 0.012);
+        hero.hurtT = 0.32;
+      }
+    }
+
+    if (rel < 2.2) return;
+    const contact = pair.collision && pair.collision.supports && pair.collision.supports[0];
+    const cx = contact ? contact.x : (a.position.x + b.position.x) / 2;
+    const cy = contact ? contact.y : (a.position.y + b.position.y) / 2;
+
+    [[a, b], [b, a]].forEach(([target, source]) => {
+      if (target.label === 'block' || target.label === 'bot') {
+        damage(target, rel * 4.3, source);
+      }
+    });
+
+    const matBody = a.mat ? a : b.mat ? b : null;
+    if (matBody && rel > 3) {
+      const m = MATERIALS[matBody.mat];
+      Sound.hit(m.sound, rel);
+      FX.chips(cx, cy, m.chips, Math.min(5, Math.floor(rel / 3)), 170);
+    } else if (other.label === 'ground' && hero && rel > 4) {
+      Sound.thud();
+      FX.smoke(cx, GROUND_Y - 2, '#e8dcc8', 3, 60, 0.45, 18);
+    } else if (hero && other.label === 'bot' && rel > 3) {
+      Sound.hit('stone', rel * 0.5);
+      FX.sparks(cx, cy, '#ffffff', 8, 300, 0.3);
+    }
+    if (rel > 6) addTrauma(Math.min(0.26, rel * 0.012));
+  });
+});
+
+// =====================================================
+// ЛОГИКА ХОДА (фиксированный шаг 60 Гц)
+// =====================================================
+function later(ms, fn) {
+  timers.push({ t: ms, fn });
+}
+
+function slowmo(seconds, scale) {
+  slowmoT = seconds;
+  slowmoScale = scale;
+}
+
+function speedOf(b) {
+  const v = Body.getVelocity(b);
+  return Math.hypot(v.x, v.y);
+}
+
+function outOfWorld(b) {
+  return b.position.x > WORLD_W + 500 || b.position.x < -500 || b.position.y > GROUND_Y + 300;
+}
+
+function poof(h) {
+  FX.smoke(h.position.x, h.position.y, '#ffffff', 5, 70, 0.55, 26);
+  FX.sparks(h.position.x, h.position.y, HEROES[h.heroType].trail, 8, 200, 0.35);
+}
+
+function worldCalm() {
+  for (let i = 0; i < blocks.length; i++) if (!blocks[i].isSleeping && speedOf(blocks[i]) > 0.55) return false;
+  for (let i = 0; i < bots.length; i++) if (!bots[i].isSleeping && speedOf(bots[i]) > 0.55) return false;
+  return orbs.length === 0;
+}
+
+function endTurn() {
+  flying.forEach((h) => {
+    poof(h);
+    World.remove(world, h);
+  });
+  flying = [];
+  primary = null;
+  tapPrompt = 0;
+  slowmoT = 0;
+  phase = 'settle';
+  settleTimer = 0;
+}
+
+function stepSim() {
+  engine.timing.timeScale = slowmoT > 0 ? slowmoScale : 1;
+  Engine.update(engine, STEP_MS);
+  flushRemovals();
+
+  // Запланированные события считаются игровым временем — на паузе они стоят
+  if (timers.length) {
+    const due = [];
+    timers = timers.filter((q) => {
+      q.t -= STEP_MS;
+      if (q.t <= 0) {
+        due.push(q);
+        return false;
+      }
+      return true;
+    });
+    due.forEach((q) => q.fn());
+    flushRemovals();
+  }
+
+  // Боты, улетевшие за край мира, считаются уничтоженными
+  bots.slice().forEach((b) => {
+    if (outOfWorld(b)) killBot(b);
+  });
+  blocks.slice().forEach((b) => {
+    if (outOfWorld(b)) {
+      b.dead = true;
+      blocks = blocks.filter((q) => q !== b);
+      removals.push(b);
+    }
+  });
+  flushRemovals();
+
+  updateFlight();
+
+  if (!levelOver) {
+    if (bots.length === 0 && phase !== 'attract') {
+      startWin();
+    } else if (phase === 'flight') {
+      updateTurn();
+    } else if (phase === 'settle') {
+      updateSettle();
+    }
+  }
+}
+
+function updateFlight() {
+  for (let i = flying.length - 1; i >= 0; i--) {
+    const h = flying[i];
+    if (h.fuse > 0) {
+      h.fuse--;
+      if (h.fuse === 0) {
+        abilityUsed = true;
+        detonateHero(h, 190);
+        continue;
+      }
+    }
+    if (!h.hasHit) {
+      Body.setAngle(h, 0);
+      Body.setAngularVelocity(h, 0);
+    }
+  }
+}
+
+function updateTurn() {
+  turnTimer++;
+  // Магма ждёт свой запал, а Нимбус после сброса молнии просто улетает
+  const done = orbs.length === 0 && flying.every((h) => h.dropped || (speedOf(h) < 0.42 && !h.fuse) || outOfWorld(h));
+  restTimer = done ? restTimer + 1 : 0;
+  if (flying.length === 0 || restTimer > 30 || turnTimer > 480) endTurn();
+}
+
+function updateSettle() {
+  settleTimer++;
+  const calm = worldCalm();
+  if (queue.length > 0) {
+    if ((calm && settleTimer > 14) || settleTimer > 70) takeNextHero(false);
+  } else if ((calm && settleTimer > 30) || settleTimer > 260) {
+    startLose();
+  }
+}
+
+function startWin() {
+  levelOver = true;
+  phase = 'over';
+  flying.forEach((h) => {
+    h.frictionAir = 0.03;
+  });
+  pull = null;
+  drag = null;
+  UI.setHint('');
+  if (lastKill) cam.focus = { x: lastKill.x, y: lastKill.y, zoom: overview.zoom * 1.22, t: 0.95 };
+  slowmo(0.8, 0.28);
+  UI.banner(t('clear'), '', true);
+  Sound.win();
+  later(240, () => FX.confetti(cam.x, cam.y - vh / 2 / cam.zoom, quality > 0 ? 70 : 34, vw / cam.zoom, 120));
+  later(1000, runBonus);
+}
+
+// Каждый оставшийся пуф превращается в очки
+function runBonus() {
+  const leftovers = [];
+  if (slingHero) leftovers.push({ x: slingHero.x, y: slingHero.y, type: slingHero.type, onSling: true });
+  queueView.forEach((q, i) => leftovers.push({ x: queueX(i), y: GROUND_Y - 22, type: q.type }));
+  const per = 1500;
+  // Дополнительные пуфы очков не дают, иначе проигрыш стал бы способом набить счёт
+  const paid = Math.min(leftovers.length, Math.max(0, cfg.heroes.length - shotsFired));
+  leftovers.forEach((lv, i) => {
+    later(i * 300, () => {
+      if (lv.onSling) slingHero = null;
+      else queueView.shift();
+      if (queue.length) queue.shift();
+      Sound.coin();
+      FX.flash(lv.x, lv.y, 50, HEROES[lv.type].trail);
+      for (let k = 0; k < 8; k++) FX.star(lv.x, lv.y);
+      if (i < paid) addScore(per, lv.x, lv.y - 30, '#ffd23f', 26);
+    });
+  });
+  later(leftovers.length * 300 + 350, () => finishLevel(true, paid * per));
+}
+
+function finishLevel(win, bonus) {
+  if (win) {
+    levelFails[level] = 0;
+    const used = shotsFired;
+    const stars = used <= cfg.par ? 3 : used <= cfg.par + 1 ? 2 : 1;
+    const before = Save.best[level] || 0;
+    const newBest = score > before;
+    Save.recordWin(level, stars, score);
+    UI.showResult({ win: true, stars, score, bonus, newBest, level });
+  } else {
+    levelFails[level]++;
+    UI.showResult({ win: false, stars: 0, score, bonus: 0, newBest: false, level });
+  }
+}
+
+function startLose() {
+  levelOver = true;
+  phase = 'over';
+  UI.setHint('');
+  Sound.lose();
+  bots.forEach((b) => {
+    b.laugh = 1.5;
+  });
+  later(1150, () => finishLevel(false));
+}
+
+// =====================================================
+// УПРАВЛЕНИЕ: касание, мышь, клавиатура
+// =====================================================
+function pullScale() {
+  // На маленьком экране полное натяжение не требует длинного свайпа
+  return Math.max(cam.zoom, 110 / MAX_PULL);
+}
+
+function setPull(dx, dy) {
+  if (dx > 14) dx = 14;
+  const len = Math.hypot(dx, dy);
+  if (len > MAX_PULL) {
+    dx = (dx / len) * MAX_PULL;
+    dy = (dy / len) * MAX_PULL;
+  }
+  pull = { x: dx, y: dy };
+  Sound.stretch(Math.hypot(dx, dy) / MAX_PULL);
+}
+
+function showHeroHint() {
+  // На обучении подсказка про способность только отвлекала бы от первого выстрела
+  UI.setHint(showTutorial ? '' : heroHint(slingHero.type));
+}
+
+function skipIntro() {
+  if (phase === 'intro') {
+    phase = 'aim';
+    introTimer = 0;
+    showHeroHint();
+  }
+}
+
+function inputBlocked() {
+  return sysPaused || UI.current !== null || levelOver || phase === 'attract';
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  Sound.unlock();
+  if (inputBlocked()) return;
+  skipIntro();
+  if (phase === 'aim' && slingHero) {
+    if (drag) return;
+    if (slingHero.hop < 1) slingHero.hop = 1;
+    drag = { id: e.pointerId, sx: e.clientX, sy: e.clientY };
+    kbAim = null;
+    pull = { x: 0, y: 0 };
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* не критично */ }
+  } else if (phase === 'flight') {
+    useAbility();
+  }
+});
+
+window.addEventListener('pointermove', (e) => {
+  if (!drag || e.pointerId !== drag.id || sysPaused) return;
+  const k = pullScale();
+  setPull((e.clientX - drag.sx) / k, (e.clientY - drag.sy) / k);
+});
+
+function endDrag(e, cancel) {
+  if (!drag || e.pointerId !== drag.id) return;
+  drag = null;
+  if (cancel || sysPaused || !pull || phase !== 'aim') {
+    pull = null;
+    return;
+  }
+  if (Math.hypot(pull.x, pull.y) > 18) {
+    fire();
+  } else {
+    pull = null;
+    if (!showTutorial) UI.setHint(t('dragHint'));
+  }
+}
+
+window.addEventListener('pointerup', (e) => endDrag(e, false));
+window.addEventListener('pointercancel', (e) => endDrag(e, true));
+
+function applyKbAim() {
+  setPull(-Math.cos(kbAim.angle) * kbAim.power * MAX_PULL, Math.sin(kbAim.angle) * kbAim.power * MAX_PULL);
+}
+
+window.addEventListener('keydown', (e) => {
+  // Esc только закрывает окна; preventDefault на нём запрещён требованиями YouTube
+  if (e.key === 'Escape') {
+    UI.handleEsc();
+    return;
+  }
+  if (sysPaused || UI.current !== null) return;
+  if (e.code === 'KeyP') {
+    UI.show('pause');
+    return;
+  }
+  if (e.code === 'KeyR' && phase !== 'attract') {
+    UI.restart();
+    return;
+  }
+  if (inputBlocked()) return;
+
+  const arrows = { ArrowUp: [0.05, 0], ArrowDown: [-0.05, 0], ArrowLeft: [0, 0.04], ArrowRight: [0, -0.04] };
+  if (arrows[e.code]) {
+    e.preventDefault();
+    skipIntro();
+    if (phase === 'aim' && slingHero) {
+      if (!kbAim) kbAim = { angle: 0.6, power: 0.8 };
+      kbAim.angle = clamp(kbAim.angle + arrows[e.code][0], -0.5, 1.45);
+      kbAim.power = clamp(kbAim.power + arrows[e.code][1], 0.2, 1);
+      applyKbAim();
+    }
+    return;
+  }
+  if (e.code === 'Space' || e.code === 'Enter') {
+    e.preventDefault();
+    if (e.repeat) return;
+    skipIntro();
+    if (phase === 'flight') {
+      useAbility();
+    } else if (phase === 'aim' && slingHero) {
+      if (!kbAim) {
+        kbAim = { angle: 0.6, power: 0.8 };
+        applyKbAim();
+      } else {
+        fire();
+      }
+    }
+  }
+});
+
+// =====================================================
+// ЭКРАН: подстройка под любой размер и соотношение сторон
+// =====================================================
+function resize() {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  // На Android игра сначала грузится в скрытом WebView с нулевым размером
+  if (w <= 0 || h <= 0) {
+    viewReady = false;
+    return;
+  }
+  vw = w;
+  vh = h;
+  const raw = window.devicePixelRatio || 1;
+  dpr = Math.min(raw, quality >= 2 ? 2.5 : quality === 1 ? 2 : 1.5);
+  const maxPixels = quality >= 2 ? 4.4e6 : 2.4e6;
+  if (w * h * dpr * dpr > maxPixels) dpr = Math.sqrt(maxPixels / (w * h));
+  canvas.width = Math.round(w * dpr);
+  canvas.height = Math.round(h * dpr);
+
+  computeOverview();
+  applyViewScale();
+  viewReady = true;
+  snapCameraKeepFocus();
+}
+
+function computeOverview() {
+  if (!vw || !vh) return;
+  const spanX = bounds.right - bounds.left;
+  const spanY = Math.max(GROUND_Y - bounds.top + 190, 500) + 60;
+  const zoom = Math.min(vw / spanX, vh / spanY);
+  const free = Math.max(0, vh - spanY * zoom);
+  overview.zoom = zoom;
+  overview.groundY = vh - (60 * zoom + free * 0.34);
+  overview.x = (bounds.left + bounds.right) / 2;
+  overview.y = baseCamY(zoom);
+  overview.flightZoom = zoom < 0.75 ? zoom * 1.5 : zoom * 1.1;
+}
+
+// Где должна быть камера по вертикали, чтобы земля осталась на своём месте
+function baseCamY(zoom) {
+  return GROUND_Y - (overview.groundY - vh / 2) / zoom;
+}
+
+function applyViewScale() {
+  if (!vw) return;
+  Art.setScale(clamp(overview.flightZoom * 1.25 * dpr, 1.5, 4));
+  const layerK = lerp(overview.zoom, 1, 0.5);
+  Background.build(cfg.biome, clamp(Math.max(layerK, overview.zoom) * dpr, 1, quality >= 2 ? 2 : 1.25));
+}
+
+function snapCamera() {
+  cam.x = overview.x;
+  cam.y = overview.y;
+  cam.zoom = overview.zoom;
+}
+
+function snapCameraKeepFocus() {
+  if (phase === 'flight' || phase === 'over') return;
+  snapCamera();
+}
+
+function addTrauma(v) {
+  if (!Save.shake) return;
+  cam.trauma = Math.min(1, cam.trauma + v);
+}
+
+function updateCamera(dt) {
+  let tx = overview.x;
+  let ty = overview.y;
+  let tz = overview.zoom;
+  let rate = 3.2;
+
+  if (phase === 'intro') {
+    introTimer -= dt;
+    rate = 2.6;
+    if (introTimer <= 0) {
+      phase = 'aim';
+      showHeroHint();
+    } else if (introTimer > 0.5) {
+      tz = overview.zoom * 1.28;
+      tx = (bounds.fortL + bounds.right) / 2 - 20;
+      ty = baseCamY(tz);
+    }
+  } else if (cam.focus) {
+    tx = cam.focus.x;
+    tz = cam.focus.zoom;
+    ty = Math.min(baseCamY(tz), cam.focus.y + 40);
+    rate = 5;
+    cam.focus.t -= dt;
+    if (cam.focus.t <= 0) cam.focus = null;
+  } else if (phase === 'flight' && flying.length) {
+    const lead = orbs[0] || (primary && flying.includes(primary) ? primary : flying[0]);
+    tz = overview.flightZoom;
+    const halfW = vw / 2 / tz;
+    const minX = overview.x - Math.max(0, overview.x - bounds.left - halfW);
+    const maxX = Math.max(minX, bounds.right - halfW + 30);
+    tx = clamp(lead.position.x + halfW * 0.25, minX, maxX);
+    // Следим за пуфом и по высоте, когда он улетает вверх
+    ty = Math.min(baseCamY(tz), lead.position.y + (vh / 2 - 90) / tz);
+    rate = 4;
+  }
+
+  const k = 1 - Math.exp(-dt * rate);
+  cam.x += (tx - cam.x) * k;
+  cam.y += (ty - cam.y) * k;
+  cam.zoom += (tz - cam.zoom) * k;
+  cam.trauma = Math.max(0, cam.trauma - dt * 1.7);
+  cam.punch *= Math.exp(-dt * 7);
+}
+
+// =====================================================
+// ОБНОВЛЕНИЕ ВИЗУАЛЬНЫХ ЭФФЕКТОВ
+// =====================================================
+function updateVisuals(dt) {
+  time += dt;
+  updateCamera(dt);
+  FX.update(dt);
+
+  comboTimer = Math.max(0, comboTimer - dt);
+  cheerT = Math.max(0, cheerT - dt);
+  aimIdle = phase === 'aim' && !pull ? aimIdle + dt : 0;
+  if (tapPrompt > 0) tapPrompt = Math.max(0, tapPrompt - dt);
+  if (slowmoT > 0) slowmoT = Math.max(0, slowmoT - dt);
+
+  // Пружинящая резинка
+  if (!slingHero || slingHero.hop < 1) {
+    const a = { x: -recoil.x * 320 - recoil.vx * 11, y: -recoil.y * 320 - recoil.vy * 11 };
+    recoil.vx += a.x * dt;
+    recoil.vy += a.y * dt;
+    recoil.x += recoil.vx * dt;
+    recoil.y += recoil.vy * dt;
+  }
+
+  if (slingHero) {
+    if (slingHero.hop < 1) {
+      slingHero.hop = Math.min(1, slingHero.hop + dt / 0.36);
+      if (slingHero.hop >= 1) {
+        slingHero.squish = 0.28;
+        FX.sparks(SLING_X, SLING_Y + 10, HEROES[slingHero.type].trail, 6, 130, 0.3);
+      }
+    }
+    slingHero.squish *= Math.exp(-dt * 9);
+  }
+
+  flying.forEach((h) => {
+    const sp = speedOf(h);
+    if (!h.hasHit || sp > 6) {
+      h.trail.push(h.position.x, h.position.y);
+      if (h.trail.length > 44) h.trail.splice(0, 2);
+    } else if (h.trail.length) {
+      h.trail.splice(0, 2);
+    }
+    h.squish *= Math.exp(-dt * 10);
+    h.hurtT = Math.max(0, h.hurtT - dt);
+    h.dashT = Math.max(0, h.dashT - dt);
+    if (!h.hasHit && Math.random() < dt * 28) {
+      FX.star(h.position.x - 6, h.position.y, HEROES[h.heroType].trail);
+    }
+    if (h.fuse > 0 && Math.random() < dt * 40) {
+      FX.sparks(h.position.x, h.position.y - h.circleRadius, '#ffb347', 1, 160, 0.3);
+    }
+  });
+
+  const target = flying.length ? flying[0].position : slingHero ? { x: SLING_X, y: SLING_Y } : null;
+  bots.forEach((b) => {
+    b.hitFlash *= Math.exp(-dt * 9);
+    if (b.laugh > 0) b.laugh -= dt;
+    if (target) {
+      const dx = target.x - b.position.x;
+      const dy = target.y - b.position.y;
+      const d = Math.hypot(dx, dy) || 1;
+      const c = Math.cos(-b.angle);
+      const s = Math.sin(-b.angle);
+      b.lookX += ((dx * c - dy * s) / d - b.lookX) * Math.min(1, dt * 7);
+      b.lookY += ((dx * s + dy * c) / d - b.lookY) * Math.min(1, dt * 7);
+      const danger = flying.length && d < 250 ? 1 : 0;
+      b.scared += (danger - b.scared) * Math.min(1, dt * 9);
+    }
+    // Повреждённый бот дымит и искрит
+    if (b.hp < b.maxHp * 0.5 && Math.random() < dt * 5) {
+      FX.sparks(b.position.x, b.position.y - b.circleRadius * 0.4, '#7ef9ff', 1, 150, 0.3);
+      if (Math.random() < 0.4) FX.smoke(b.position.x, b.position.y - b.circleRadius, '#46406e', 1, 16, 0.7, 14);
+    }
+  });
+  blocks.forEach((b) => {
+    if (b.hitFlash > 0) b.hitFlash *= Math.exp(-dt * 12);
+  });
+
+  // Плавный счёт очков
+  if (shownScore !== score) {
+    shownScore = Math.min(score, Math.ceil(shownScore + Math.max(1, (score - shownScore) * Math.min(1, dt * 12))));
+    UI.setScore(shownScore);
+  }
+
+  // Если устройство не тянет, быстро снижаем качество, а не FPS
+  perfTime += dt;
+  perfFrames++;
+  if (perfTime >= 1.2) {
+    if (perfTime / perfFrames > 0.026 && quality > 0) {
+      quality--;
+      FX.max = quality === 0 ? 180 : 300;
+      resize();
+    }
+    perfTime = 0;
+    perfFrames = 0;
+  }
+}
+
+// =====================================================
+// ОТРИСОВКА
+// =====================================================
+function drawTrail(h) {
+  const tr = h.trail;
+  const n = tr.length / 2;
+  if (n < 2) return;
+  const color = HEROES[h.heroType].trail;
+  const sprite = softSprite(color);
+  const r = h.circleRadius;
+  ctx.globalCompositeOperation = 'lighter';
+  const boost = h.dashT > 0 ? 1.6 : 1;
+  const stride = quality === 0 ? 2 : 1;
+  for (let i = 0; i < n; i += stride) {
+    const k = i / n;
+    const s = r * (0.5 + k * 1.5) * boost;
+    ctx.globalAlpha = k * k * 0.72;
+    ctx.drawImage(sprite, tr[i * 2] - s, tr[i * 2 + 1] - s, s * 2, s * 2);
+  }
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function pouchPos() {
+  if (slingHero && slingHero.hop >= 1) {
+    const px = pull ? pull.x : 0;
+    const py = pull ? pull.y : 0;
+    return { x: SLING_X + px, y: SLING_Y + py };
+  }
+  return { x: SLING_X + recoil.x, y: SLING_Y + recoil.y };
+}
+
+function drawBand(tip, pouch, heroR) {
+  if (heroR) {
+    // Передняя резинка заканчивается у края пуфа и не закрывает ему лицо
+    const dx = tip.x - pouch.x;
+    const dy = tip.y - pouch.y;
+    const d = Math.hypot(dx, dy) || 1;
+    pouch = { x: pouch.x + (dx / d) * heroR * 0.82, y: pouch.y + (dy / d) * heroR * 0.82 };
+  }
+  const stretch = clamp(Math.hypot(pouch.x - tip.x, pouch.y - tip.y) / 150, 0, 1);
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = '#3a0a22';
+  ctx.lineWidth = lerp(12, 7, stretch);
+  ctx.beginPath();
+  ctx.moveTo(tip.x, tip.y);
+  ctx.lineTo(pouch.x, pouch.y);
+  ctx.stroke();
+  ctx.strokeStyle = stretch > 0.72 ? '#ff5a3c' : '#ff2e88';
+  ctx.lineWidth = lerp(8, 4, stretch);
+  ctx.stroke();
+}
+
+// Во что попадёт пуф, если лететь по этой точке траектории
+function aimContact(x, y, r) {
+  for (let i = 0; i < bots.length; i++) {
+    const b = bots[i];
+    if (Math.hypot(b.position.x - x, b.position.y - y) < b.circleRadius + r) return b;
+  }
+  for (let i = 0; i < blocks.length; i++) {
+    const m = blocks[i].bounds;
+    if (x > m.min.x - r && x < m.max.x + r && y > m.min.y - r && y < m.max.y + r) return blocks[i];
+  }
+  return null;
+}
+
+function drawAim() {
+  if (!pull || !slingHero) return;
+  let x = SLING_X + pull.x;
+  let y = SLING_Y + pull.y;
+  let vx = -pull.x * LAUNCH_POWER;
+  let vy = -pull.y * LAUNCH_POWER;
+  if (Math.hypot(pull.x, pull.y) < 18) return;
+  const shimmer = Math.floor((time * 18) % 3);
+  const scale = clamp(1 / cam.zoom, 1, 2);
+  let hit = null;
+  ctx.lineWidth = 1.6 / cam.zoom;
+  ctx.strokeStyle = 'rgba(26,8,56,0.65)';
+  ctx.fillStyle = '#ffffff';
+  for (let step = 1; step <= 240; step++) {
+    // Точно те же формулы, что и в физике Matter.js
+    vx *= 0.99;
+    vy = vy * 0.99 + 0.2778;
+    x += vx;
+    y += vy;
+    if (y > GROUND_Y) break;
+    hit = aimContact(x, y, slingHero.r);
+    if (hit) break;
+    if ((step + shimmer) % 3 === 0) {
+      const k = clamp(1 - step / 110, 0, 1);
+      ctx.globalAlpha = 0.55 + k * 0.45;
+      ctx.beginPath();
+      ctx.arc(x, y, (2.4 + k * 3.4) * scale, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+  ctx.globalAlpha = 1;
+  // Метка попадания: сразу видно, что выстрел придётся в бота
+  if (hit && hit.label === 'bot') {
+    const pulse = 0.5 + 0.5 * Math.sin(time * 10);
+    const R = hit.circleRadius + 8 + pulse * 5;
+    ctx.strokeStyle = '#1a0838';
+    ctx.lineWidth = 7 / clamp(cam.zoom, 0.5, 1.2);
+    ctx.beginPath();
+    ctx.arc(hit.position.x, hit.position.y, R, 0, TAU);
+    ctx.stroke();
+    ctx.strokeStyle = '#7cff5c';
+    ctx.lineWidth = 4 / clamp(cam.zoom, 0.5, 1.2);
+    ctx.stroke();
+  } else if (hit) {
+    ctx.fillStyle = '#ffe14d';
+    ctx.strokeStyle = '#1a0838';
+    ctx.lineWidth = 2 / cam.zoom;
+    ctx.beginPath();
+    ctx.arc(x, y, 6 * scale, 0, TAU);
+    ctx.fill();
+    ctx.stroke();
+  }
+}
+
+function heroLook(h) {
+  const v = Body.getVelocity(h);
+  const sp = Math.hypot(v.x, v.y) || 1;
+  return { x: v.x / sp, y: v.y / sp, sp };
+}
+
+function drawFlyingHero(h) {
+  const look = heroLook(h);
+  const idleBlink = (time * 1000 + h.id * 733) % 2900 < 110;
+  const o = {
+    time,
+    lookX: look.x,
+    lookY: look.y,
+    blink: h.hasHit && idleBlink,
+    mood: h.hurtT > 0 ? 'hurt' : h.hasHit ? 'angry' : 'scream',
+    rot: h.hasHit ? h.angle : 0,
+    stretch: h.hasHit ? 0 : Math.min(0.26, look.sp / 95),
+    stretchAngle: Math.atan2(look.y, look.x),
+    squish: h.squish,
+    fuse: h.fuse > 0
+  };
+  drawHero(ctx, h.heroType, h.position.x, h.position.y, h.circleRadius, o);
+  // Кольцо-подсказка: способность ещё доступна
+  if (h === primary && abilityReady(h)) {
+    const pulse = 0.5 + 0.5 * Math.sin(time * 9);
+    const R = h.circleRadius + 9 + pulse * 7;
+    ctx.strokeStyle = '#ffffff';
+    ctx.globalAlpha = 0.45 + pulse * 0.45;
+    ctx.lineWidth = 3 / clamp(cam.zoom, 0.6, 1.2);
+    ctx.beginPath();
+    ctx.arc(h.position.x, h.position.y, R, 0, TAU);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    if (tapPrompt > 0) {
+      const size = (30 + pulse * 6) / cam.zoom;
+      ctx.font = `900 ${size}px Rubik, system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = '#1a0838';
+      ctx.lineWidth = size * 0.26;
+      ctx.strokeText(t('tapNow'), h.position.x, h.position.y - h.circleRadius - size);
+      ctx.fillStyle = '#ffe14d';
+      ctx.fillText(t('tapNow'), h.position.x, h.position.y - h.circleRadius - size);
+      if (HAND_PATH) {
+        const hs = clamp(1 / cam.zoom, 1, 2.1) * (1 - pulse * 0.12);
+        ctx.save();
+        ctx.translate(h.position.x + h.circleRadius * 0.6, h.position.y + h.circleRadius + 26 * hs);
+        ctx.scale(hs, hs);
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = '#1a0838';
+        ctx.stroke(HAND_PATH);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill(HAND_PATH);
+        ctx.restore();
+      }
+    }
+  }
+}
+
+function drawSlingHero() {
+  const s = slingHero;
+  if (!s) return;
+  let x = s.x;
+  let y = s.y;
+  let look = { x: 0.9, y: -0.1 };
+  if (s.hop < 1) {
+    // Прыжок из очереди на рогатку
+    const k = s.hop;
+    x = lerp(s.fromX, SLING_X, k);
+    y = lerp(s.fromY, SLING_Y, k) - Math.sin(k * Math.PI) * 90;
+  } else if (pull) {
+    x += pull.x;
+    y += pull.y;
+    const len = Math.hypot(pull.x, pull.y) || 1;
+    look = { x: -pull.x / len, y: -pull.y / len };
+  }
+  const tension = pull ? Math.hypot(pull.x, pull.y) / MAX_PULL : 0;
+  if (tension > 0.92) {
+    x += Math.sin(time * 70) * 0.8;
+    y += Math.cos(time * 63) * 0.8;
+  }
+  const breath = Math.sin(time * 3) * 0.018;
+  const blink = (time * 1000) % 2600 < 110;
+  drawHero(ctx, s.type, x, y, s.r, {
+    time, lookX: look.x, lookY: look.y, blink: blink && !pull, mood: 'angry', squish: s.squish + breath + tension * 0.07
+  });
+}
+
+function drawQueue() {
+  const n = queueView.length;
+  for (let i = n - 1; i >= 0; i--) {
+    const q = queueView[i];
+    const targetX = queueX(i);
+    q.x += (targetX - q.x) * 0.16;
+    const r = HEROES[q.type].r;
+    const hop = cheerT > 0 ? Math.abs(Math.sin(time * 11 + i)) * 15 : Math.abs(Math.sin(time * 2.2 + i * 1.3)) * 2.6;
+    const blink = (time * 1000 + i * 941) % 3300 < 120;
+    drawHero(ctx, q.type, q.x, GROUND_Y - r - hop - 2, r, {
+      time, lookX: 0.8, lookY: -0.1, blink, mood: cheerT > 0 ? 'happy' : 'angry', squish: hop > 8 ? -0.05 : 0
+    });
+  }
+}
+
+function drawTutorialHand() {
+  // Подсказка повторяется, если игрок долго не стреляет
+  const idleHint = phase === 'aim' && aimIdle > 5;
+  if ((!showTutorial && !idleHint) || phase === 'over' || phase === 'attract' || pull) return;
+  const cycle = (time % 2.2) / 2.2;
+  const k = cycle < 0.15 ? 0 : cycle < 0.7 ? (cycle - 0.15) / 0.55 : 1;
+  const ease = k * k * (3 - 2 * k);
+  const dx = -92 * ease;
+  const dy = 52 * ease;
+  const scale = clamp(1 / cam.zoom, 1, 2.1);
+  const hx = SLING_X + dx;
+  const hy = SLING_Y + dy;
+
+  // Траектория-намёк
+  ctx.globalAlpha = 0.85 * ease;
+  ctx.fillStyle = '#ffffff';
+  let x = SLING_X;
+  let y = SLING_Y;
+  let vx = 92 * LAUNCH_POWER * 1.15;
+  let vy = -52 * LAUNCH_POWER * 1.15;
+  for (let i = 1; i < 34; i++) {
+    vx *= 0.99;
+    vy = vy * 0.99 + 0.2778;
+    x += vx;
+    y += vy;
+    if (i % 3 === 0 && y < GROUND_Y) {
+      ctx.beginPath();
+      ctx.arc(x, y, (5 - i * 0.09) * scale * 0.8, 0, TAU);
+      ctx.fill();
+    }
+  }
+  ctx.globalAlpha = cycle > 0.86 ? (1 - cycle) / 0.14 : 1;
+
+  if (HAND_PATH) {
+    ctx.save();
+    ctx.translate(hx + 6 * scale, hy + 24 * scale);
+    ctx.scale(scale * 1.25, scale * 1.25);
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#1a0838';
+    ctx.stroke(HAND_PATH);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill(HAND_PATH);
+    ctx.restore();
+  }
+
+  if (!showTutorial) return;
+  const size = 25 / cam.zoom;
+  ctx.font = `900 ${size}px Rubik, system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = '#1a0838';
+  ctx.lineWidth = size * 0.26;
+  const tx = clamp(SLING_X + 20, bounds.left + (size * 6.5), bounds.right - size * 6.5);
+  const ty = SLING_Y - 92 - 24 / cam.zoom;
+  ctx.globalAlpha = 1;
+  ctx.strokeText(t('tutorial'), tx, ty);
+  ctx.fillStyle = '#ffe14d';
+  ctx.fillText(t('tutorial'), tx, ty);
+}
+
+function render(dt) {
+  if (!viewReady) return;
+  const zoom = cam.zoom * (1 + cam.punch);
+  const trauma = cam.trauma * cam.trauma;
+  const sx = trauma * 20 * Math.sin(time * 61);
+  const sy = trauma * 20 * Math.sin(time * 73 + 1.3);
+  const tilt = trauma * 0.02 * Math.sin(time * 47);
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const gy = (GROUND_Y - cam.y) * zoom + vh / 2 + sy;
+  Background.drawSky(ctx, vw, vh, Math.round(gy / 6) * 6, cam.x, zoom, time, quality);
+
+  const layerK = lerp(zoom, 1, 0.5);
+  Background.drawLayer(ctx, Background.far, 0.14, cam.x + sx * 0.3, layerK * 0.92, gy, vw);
+  Background.drawLayer(ctx, Background.mid, 0.36, cam.x + sx * 0.6, layerK, gy, vw);
+
+  // Мир: масштаб камеры, тряска и лёгкий наклон
+  const ox = vw / 2 + sx;
+  const oy = vh / 2 + sy;
+  const cos = Math.cos(tilt) * zoom;
+  const sin = Math.sin(tilt) * zoom;
+  ctx.setTransform(dpr * cos, dpr * sin, -dpr * sin, dpr * cos, dpr * (ox - cos * cam.x + sin * cam.y), dpr * (oy - sin * cam.x - cos * cam.y));
+
+  const pad = 40 / zoom + 30;
+  const viewL = cam.x - vw / 2 / zoom - pad;
+  const viewR = cam.x + vw / 2 / zoom + pad;
+  const viewB = cam.y + vh / 2 / zoom + pad;
+  const overlap = 1.5 / zoom;
+  Background.drawGround(ctx, viewL, viewR, viewB, overlap);
+  FX.drawDecals(ctx);
+
+  // Рогатка: задняя стойка
+  stamp(ctx, slingSprite(false), SLING_X, SLING_Y);
+  const pouch = pouchPos();
+  drawBand(SLING_TIP_BACK, pouch);
+  drawQueue();
+
+  blocks.forEach((b) => drawBlock(ctx, b, time));
+  orbs.forEach((o) => drawOrb(ctx, o, time));
+  bots.forEach((b) => drawBot(ctx, b, time));
+
+  flying.forEach(drawTrail);
+  flying.forEach(drawFlyingHero);
+  drawSlingHero();
+
+  // Рогатка: передняя стойка и прицел поверх героя
+  drawBand(SLING_TIP_FRONT, pouch, slingHero && slingHero.hop >= 1 ? slingHero.r : 0);
+  stamp(ctx, slingSprite(true), SLING_X, SLING_Y);
+  drawAim();
+
+  FX.drawNormal(ctx);
+  FX.drawGlow(ctx);
+  Background.drawFrontGrass(ctx, viewL, viewR, overlap);
+  FX.drawTexts(ctx, zoom);
+  drawTutorialHand();
+
+  // Экранные слои
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  Background.drawAmbient(ctx, vw, vh, gy, dt, time, UI.pausesSim(), quality);
+}
+
+// =====================================================
+// ГЛАВНЫЙ ЦИКЛ (независимо от частоты экрана: 60, 90, 120 Гц)
+// =====================================================
+function frame(now) {
+  rafId = requestAnimationFrame(frame);
+  if (!viewReady) {
+    resize();
+    Platform.markFirstFrame();
+    return;
+  }
+  let ms = now - lastNow;
+  lastNow = now;
+  if (ms > 100 || ms < 0) ms = 100;
+  if (Math.abs(ms - STEP_MS) < 3) ms = STEP_MS;
+
+  const dt = ms / 1000;
+  if (!UI.pausesSim()) {
+    accum += ms;
+    let steps = 0;
+    while (accum >= STEP_MS && steps < 5) {
+      accum -= STEP_MS;
+      steps++;
+      if (hitStopMs > 0) hitStopMs -= STEP_MS;
+      else stepSim();
+    }
+    if (steps === 5) accum = 0;
+    updateVisuals(dt);
+  }
+  Music.tick();
+  render(dt);
+  Platform.markFirstFrame();
+}
+
+function startLoop() {
+  if (rafId) return;
+  lastNow = performance.now();
+  accum = 0;
+  rafId = requestAnimationFrame(frame);
+}
+
+// Системная пауза YouTube: останавливается абсолютно всё — цикл, звук, ввод, анимации интерфейса
+function systemPause() {
+  if (sysPaused) return;
+  sysPaused = true;
+  if (rafId) cancelAnimationFrame(rafId);
+  rafId = 0;
+  drag = null;
+  if (phase === 'aim') pull = kbAim ? pull : null;
+  Sound.pause();
+  document.body.classList.add('sys-paused');
+  Platform.flushSave();
+}
+
+function systemResume() {
+  if (!sysPaused) return;
+  sysPaused = false;
+  document.body.classList.remove('sys-paused');
+  Sound.resume();
+  startLoop();
+}
+
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', resize);
