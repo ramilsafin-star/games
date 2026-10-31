@@ -106,6 +106,7 @@ function groundTexture() {
   return tex;
 }
 
+const indoorGround = new T.Color("#f0dcc0");
 export class World {
   constructor(canvas) {
     this.canvas = canvas;
@@ -125,6 +126,8 @@ export class World {
     this.yaw = 0;
     this.pitch = 0;
     this.zoom = 1;
+    this.cosyMin = 0;
+    this.indoor = 0;
     this.quality = Math.min(2, devicePixelRatio || 1);
     this.frameTotal = this.frameCount = 0;
     this.view = { target: new T.Vector3(0, 7, 1), radius: 15, yaw: 0, lift: 0.1 };
@@ -145,6 +148,7 @@ export class World {
   }
   lightSetup() {
     this.hemi = new T.HemisphereLight("#d9f2ff", "#7fb45a", 1.5);
+    this.hemiGround = this.hemi.groundColor.clone();
     this.scene.add(this.hemi);
     this.sun = new T.DirectionalLight("#fff0d2", 2.9);
     this.sun.position.set(-26, 44, 30);
@@ -517,12 +521,15 @@ export class World {
       front: p.z < 1,
     };
   }
-  raycast(x, y, objects) {
+  hits(x, y, objects) {
     this.ray.setFromCamera(
       new T.Vector2((x / this.canvas.clientWidth) * 2 - 1, -(y / this.canvas.clientHeight) * 2 + 1),
       this.camera,
     );
-    return this.ray.intersectObjects(objects, true)[0] || null;
+    return this.ray.intersectObjects(objects, true);
+  }
+  raycast(x, y, objects) {
+    return this.hits(x, y, objects)[0] || null;
   }
   // Самое близкое к пальцу: маленькому ребёнку не надо попадать точно
   nearest(x, y, objects, reach = 110) {
@@ -568,13 +575,16 @@ export class World {
     this.night += (this.nightTarget - this.night) * (1 - Math.exp(-dt * 1.3));
     const n = this.night;
     this.skyMat.uniforms.night.value = n;
-    this.hemi.intensity = 1.5 - 0.92 * n;
+    // В комнате трава не должна отражаться в белых вещах зелёным
+    this.indoor += ((this.cosyMin > 0 ? 1 : 0) - this.indoor) * (1 - Math.exp(-dt * 3));
+    this.hemi.intensity = 1.5 - 0.92 * n + 0.5 * this.indoor;
+    this.hemi.groundColor.copy(this.hemiGround).lerp(indoorGround, this.indoor);
     this.hemi.color.set("#d9f2ff").lerp(new T.Color("#6f7fd6"), n);
     this.sun.intensity = 2.9 - 2.35 * n;
     this.sun.color.set("#fff0d2").lerp(new T.Color("#ff9d6b"), n);
-    this.scene.environmentIntensity = 0.55 - 0.3 * n;
+    this.scene.environmentIntensity = (0.55 - 0.3 * n) * (1 - 0.72 * this.indoor);
     this.scene.fog.color.set("#cdeeff").lerp(new T.Color("#5a4a86"), n);
-    this.cosy.intensity = 62 * n;
+    this.cosy.intensity = Math.max(62 * n, this.cosyMin);
     this.fireflies.material.opacity = n;
     if (n > 0.02) {
       const a = this.fireflies.geometry.attributes.position;

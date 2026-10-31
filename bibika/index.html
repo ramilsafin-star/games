@@ -50,7 +50,7 @@
             aria-label="Выбранная машина"
           ></canvas>
           <div id="bubbles" aria-hidden="true"></div>
-          <span id="hero-power" aria-hidden="true"></span>
+          <button id="hero-power" type="button" aria-label="Показать суперсилу"></button>
           <div id="tune-list">
             <button id="tune-wheels" class="tune-button" type="button" aria-label="Цвет дисков"></button>
             <button id="tune-beacon" class="tune-button" type="button" aria-label="Мигалка" aria-pressed="false">
@@ -67,6 +67,7 @@
       </section>
       <section class="picker">
         <div id="world-list" class="world-list" aria-label="Выбор мира"></div>
+        <button id="btn-mission" type="button" hidden></button>
         <div id="car-list" class="car-grid" aria-label="Выбор машины"></div>
         <footer>
           <a href="./assets/models/CREDITS.md" target="_blank" rel="noopener"
@@ -98,11 +99,14 @@
           </button>
         </div>
         <div id="world-toast" role="status"></div>
+        <div id="patrol-mirror" aria-label="Зеркало заднего вида" hidden></div>
+        <div id="mission-hint" role="status" hidden></div>
         <div id="steer-hint" aria-hidden="true"><span>👆</span></div>
         <div class="drive-bottom">
           <button id="btn-horn" class="icon-button" aria-label="Гудок">
             <span aria-hidden="true">📢</span>
           </button>
+          <button id="btn-brake" class="icon-button" aria-label="Остановиться" hidden>🛑</button>
           <button id="btn-power" aria-label="Суперспособность">
             <span id="power-fill"></span>
             <span id="power-icon" aria-hidden="true">🔥</span>
@@ -181,6 +185,8 @@
     <script src="./js/art.js"></script>
     <script src="./js/cars.js"></script>
     <script src="./js/world.js"></script>
+    <script src="./js/powers.js"></script>
+    <script src="./js/missions.js"></script>
     <script src="./js/game.js"></script>
     <script
       type="module"

@@ -23,6 +23,11 @@ let removals = [];
 let presettling = false;
 let levelShift = 0;        // на узких экранах крепость ближе к рогатке, поэтому всё крупнее
 let queueGap = 38;
+let rocks = [];            // скалы и батуты: не ломаются и не двигаются
+let portals = [];
+let wells = [];
+let gems = [];
+let gemsTaken = 0;
 
 // Ход и прогресс
 let phase = 'attract'; // attract | intro | aim | flight | settle | over
@@ -95,10 +100,27 @@ function addBlock(x, y, w, h, mat) {
   World.add(world, b);
 }
 
-function addBot(x, y, r, isMega) {
-  const hp = isMega ? 60 : 20;
-  const b = Bodies.circle(x + levelShift, y, r, { label: 'bot', density: 0.002, friction: 0.5, restitution: 0.3, sleepThreshold: 50 });
+function addBot(x, y, r, isMega, opts) {
+  opts = opts || {};
+  const hp = opts.hp || (isMega ? 60 : 20);
+  const b = Bodies.circle(x + levelShift, y, r, {
+    label: 'bot', density: opts.hover ? 0.004 : 0.002, friction: 0.5, restitution: 0.3, sleepThreshold: opts.hover ? Infinity : 50
+  });
   b.isMega = isMega;
+  b.isBoss = !!opts.boss;
+  b.shield = opts.shield ? 1 : 0;
+  b.shieldT = 0;
+  b.volatile = !!opts.volatile;
+  b.frozenT = 0;
+  b.phases = (opts.phases || []).slice();
+  b.bombs = !!opts.bombs;
+  b.skin = opts.boss ? 'boss' : opts.volatile ? 'volatile' : opts.hover ? 'drone' : isMega ? 'mega' : 'plain';
+  if (opts.hover) {
+    b.hover = {
+      x: x + levelShift, y, ax: opts.hover.ax || 0, ay: opts.hover.ay || 0,
+      speed: opts.hover.speed || 1, phase: opts.hover.phase || 0, t: 0
+    };
+  }
   b.hp = hp;
   b.maxHp = hp;
   b.hitFlash = 0;
@@ -108,7 +130,39 @@ function addBot(x, y, r, isMega) {
   b.lookY = 0;
   bots.push(b);
   World.add(world, b);
+  return b;
 }
+
+function addRock(x, y, w, h, angle) {
+  const b = Bodies.rectangle(x + levelShift, y, w, h, { isStatic: true, label: 'rock', friction: 0.8, restitution: 0.2, angle: angle || 0 });
+  b.w = w;
+  b.h = h;
+  rocks.push(b);
+  World.add(world, b);
+}
+
+function addJelly(x, y, w, h, angle) {
+  const b = Bodies.rectangle(x + levelShift, y, w, h, { isStatic: true, label: 'jelly', friction: 0.1, restitution: 1.02, angle: angle || 0 });
+  b.w = w;
+  b.h = h;
+  b.wob = 0;
+  rocks.push(b);
+  World.add(world, b);
+}
+
+function addPortal(ax, ay, bx, by) {
+  portals.push({ a: { x: ax + levelShift, y: ay }, b: { x: bx + levelShift, y: by } });
+}
+
+function addWell(x, y, radius, pull) {
+  wells.push({ x: x + levelShift, y, radius, pull });
+}
+
+function addGem(x, y) {
+  gems.push({ x: x + levelShift, y, taken: false, phase: gems.length * 1.7 });
+}
+
+const LEVEL_KIT = { rock: addRock, jelly: addJelly, portal: addPortal, well: addWell, gem: addGem };
 
 function queueX(i) {
   return SLING_X - 74 - i * queueGap;
@@ -133,6 +187,11 @@ function loadLevel(index, opts) {
   bots = [];
   orbs = [];
   flying = [];
+  rocks = [];
+  portals = [];
+  wells = [];
+  gems = [];
+  gemsTaken = 0;
   primary = null;
   pull = null;
   drag = null;
@@ -162,7 +221,7 @@ function loadLevel(index, opts) {
   World.add(world, Bodies.rectangle(WORLD_W / 2, GROUND_Y + 100, 7000, 200, {
     isStatic: true, label: 'ground', friction: 0.95, restitution: 0.1
   }));
-  cfg.build(addBlock, addBot);
+  cfg.build(addBlock, addBot, LEVEL_KIT);
   presettle();
 
   const extras = Math.min(levelFails[level], MAX_EXTRA_HEROES);
@@ -193,7 +252,7 @@ function loadLevel(index, opts) {
     cam.zoom = overview.zoom * 1.28;
     cam.x = (bounds.fortL + bounds.right) / 2 - 20;
     cam.y = baseCamY(cam.zoom);
-    UI.banner(`${t('level')} ${level + 1}`, t('biome')[cfg.biome]);
+    UI.banner(`${t('level')} ${level + 1}`, cfg.name !== undefined ? t('levelNames')[cfg.name] : t('biome')[cfg.biome]);
     UI.setHint('');
   }
   UI.updateHud();
@@ -208,7 +267,7 @@ function presettle() {
   blocks.concat(bots).forEach((b) => {
     Body.setVelocity(b, { x: 0, y: 0 });
     Body.setAngularVelocity(b, 0);
-    Sleeping.set(b, true);
+    if (!b.hover) Sleeping.set(b, true);
   });
 }
 
@@ -216,11 +275,18 @@ function computeBounds() {
   let right = 0;
   let top = GROUND_Y;
   let fortL = WORLD_W;
-  blocks.concat(bots).forEach((b) => {
-    right = Math.max(right, b.bounds.max.x);
-    top = Math.min(top, b.bounds.min.y);
-    fortL = Math.min(fortL, b.bounds.min.x);
+  const cover = (l, tp, r) => {
+    right = Math.max(right, r);
+    top = Math.min(top, tp);
+    fortL = Math.min(fortL, l);
+  };
+  blocks.concat(bots, rocks).forEach((b) => cover(b.bounds.min.x, b.bounds.min.y, b.bounds.max.x));
+  bots.forEach((b) => {
+    if (b.hover) cover(b.hover.x - b.hover.ax - b.circleRadius, b.hover.y - b.hover.ay - b.circleRadius * 2, b.hover.x + b.hover.ax + b.circleRadius);
   });
+  portals.forEach((p) => [p.a, p.b].forEach((q) => cover(q.x - PORTAL_R, q.y - PORTAL_R, q.x + PORTAL_R)));
+  wells.forEach((w) => cover(w.x - 50, w.y - 50, w.x + 50));
+  gems.forEach((g) => cover(g.x - GEM_R, g.y - GEM_R * 1.5, g.x + GEM_R));
   const lastQueue = queueX(Math.max(0, queue.length - 2)) - 34;
   bounds.left = Math.min(SLING_X - 135, lastQueue);
   bounds.right = right + 60;
@@ -229,7 +295,7 @@ function computeBounds() {
 }
 
 function heroHint(type) {
-  const key = { rocky: 'heroRocky', zip: 'heroZip', trio: 'heroTrio', nimbus: 'heroNimbus', magma: 'heroMagma' }[type];
+  const key = { rocky: 'heroRocky', zip: 'heroZip', trio: 'heroTrio', nimbus: 'heroNimbus', magma: 'heroMagma', drill: 'heroDrill', frost: 'heroFrost' }[type];
   return t(key);
 }
 
@@ -266,6 +332,9 @@ function createHeroBody(type, x, y) {
   b.fuse = 0;
   b.trail = [];
   b.dashT = 0;
+  b.drillT = 0;
+  b.portalCd = 0;
+  b.inWell = 0;
   return b;
 }
 
@@ -316,7 +385,7 @@ function fire() {
 function abilityReady(h) {
   if (abilityUsed || !h || !flying.includes(h)) return false;
   const kind = HEROES[h.heroType].ability;
-  return !h.hasHit || kind === 'blast' || kind === 'roar';
+  return !h.hasHit || kind === 'blast' || kind === 'roar' || kind === 'frost';
 }
 
 function useAbility() {
@@ -380,7 +449,64 @@ function useAbility() {
     FX.text(x, y - 42, t('wordOrb'), '#bff4ff', 28);
   } else if (H.ability === 'blast') {
     detonateHero(h, 190);
+  } else if (H.ability === 'drill') {
+    Sound.ability('drill');
+    const a = Math.atan2(v.y, v.x);
+    const s = Math.max(26, speed * 1.2);
+    h.drillV = { x: Math.cos(a) * s, y: Math.sin(a) * s };
+    h.drillT = 28;
+    h.isSensor = true;
+    FX.ring(x, y, 70, H.trail, 8, 0.26);
+    FX.sparks(x, y, '#e8ffd0', 16, 380, 0.4);
+    FX.text(x, y - 40, t('wordDrill'), '#c8ff8a', 28);
+    addTrauma(0.2);
+  } else if (H.ability === 'frost') {
+    Body.setVelocity(h, { x: v.x * 0.85, y: v.y * 0.85 });
+    frostWave(x, y, 215);
   }
+}
+
+// Снежок превращает постройку в хрупкий лёд, сбивает дронов и щиты
+function frostWave(x, y, radius) {
+  Sound.ability('frost');
+  addTrauma(0.22);
+  FX.flash(x, y, radius * 0.95, '#bff7ff', 0.2);
+  FX.ring(x, y, radius, '#ffffff', 12, 0.4);
+  FX.ring(x, y, radius * 0.68, '#c8fff6', 9, 0.32);
+  FX.sparks(x, y, '#e8ffff', 26, 540, 0.6);
+  FX.text(x, y - 44, t('wordFrost'), '#c8fff6', 30);
+  wakeAll();
+  blocks.forEach((b) => {
+    if (b.mat === 'ice' || b.mat === 'boom') return;
+    if (Math.hypot(b.position.x - x, b.position.y - y) > radius + Math.max(b.w, b.h) * 0.3) return;
+    const k = b.hp / b.maxHp;
+    b.mat = 'ice';
+    b.maxHp = MATERIALS.ice.hp;
+    b.hp = Math.max(1, b.maxHp * k);
+    b.hitFlash = 1;
+    FX.sparks(b.position.x, b.position.y, '#d9fbff', 5, 200, 0.4);
+  });
+  bots.forEach((b) => {
+    if (Math.hypot(b.position.x - x, b.position.y - y) > radius) return;
+    b.frozenT = b.isBoss ? 2.6 : 4;
+    if (b.shield > 0) popShield(b);
+    if (b.hover && !b.isBoss) {
+      b.hover = null;
+      b.sleepThreshold = 50;
+    }
+  });
+}
+
+// Щит гаснет целиком: сразу следом урон не проходит
+function popShield(b) {
+  b.shield = 0;
+  b.shieldT = 0.3;
+  b.hitFlash = 1;
+  const { x, y } = b.position;
+  Sound.shieldPop();
+  FX.ring(x, y, b.circleRadius * 2.6, '#9be8ff', 8, 0.32);
+  FX.sparks(x, y, '#bff4ff', 14, 340, 0.4);
+  FX.text(x, y - b.circleRadius - 26, t('wordShield'), '#9be8ff', 22, 0.8);
 }
 
 function detonateHero(h, radius) {
@@ -441,12 +567,56 @@ function damage(b, dmg, attacker) {
   if (attacker && attacker.label === 'hero' && b.mat) {
     dmg *= HEROES[attacker.heroType].vs[b.mat] || 1;
   }
+  if (b.label === 'bot') {
+    if (b.shieldT > 0) return;
+    if (b.shield > 0) {
+      if (dmg >= 6) popShield(b);
+      return;
+    }
+    if (b.frozenT > 0) dmg *= 2.5;
+  }
   b.hp -= dmg;
   b.hitFlash = Math.min(1, b.hitFlash + 0.6);
   if (b.hp <= 0) {
     if (b.label === 'block') killBlock(b);
     else if (b.label === 'bot') killBot(b);
+  } else if (b.isBoss) {
+    while (b.phases.length && b.hp / b.maxHp <= b.phases[0]) {
+      b.phases.shift();
+      later(30, () => bossRage(b));
+    }
   }
+}
+
+function reachTop(x) {
+  for (let i = 1; i < REACH_TOP.length; i++) {
+    const [x1, y1] = REACH_TOP[i];
+    const [x0, y0] = REACH_TOP[i - 1];
+    if (x <= x1) return lerp(y0, y1, clamp((x - x0) / (x1 - x0), 0, 1));
+  }
+  return 0;
+}
+
+// Босс злится: снова закрывается щитом и зовёт помощников
+function bossRage(b) {
+  if (b.dead) return;
+  const { x, y } = b.position;
+  b.shield = 1;
+  b.hover.speed *= 1.25;
+  Sound.bossRage();
+  addTrauma(0.5);
+  FX.ring(x, y, b.circleRadius * 3, '#ff5470', 12, 0.45);
+  FX.text(x, y - b.circleRadius * 2.3, t('wordRage'), '#ff7a9a', 34, 1.2);
+  [-1, 1].forEach((s) => {
+    // Помощник появляется там, куда пуф ещё долетит
+    const hx = clamp(x - levelShift + s * 150, 640, 1060);
+    const hy = Math.max(y - 40, GROUND_Y - reachTop(hx) + 110);
+    const helper = addBot(hx, hy, 21, false, {
+      volatile: b.bombs, hover: { ax: 40, ay: 40, speed: 1.3, phase: s }
+    });
+    helper.hitFlash = 1;
+    FX.flash(helper.position.x, helper.position.y, 70, '#ffffff');
+  });
 }
 
 function killBlock(b) {
@@ -465,6 +635,14 @@ function killBlock(b) {
   }
 }
 
+function bodyHas(q, x, y, r) {
+  const c = Math.cos(q.angle);
+  const s = Math.sin(q.angle);
+  const dx = x - q.position.x;
+  const dy = y - q.position.y;
+  return Math.abs(dx * c + dy * s) < q.w / 2 + r && Math.abs(dy * c - dx * s) < q.h / 2 + r;
+}
+
 function killBot(b) {
   b.dead = true;
   bots = bots.filter((q) => q !== b);
@@ -473,6 +651,12 @@ function killBot(b) {
   combo = comboTimer > 0 ? combo + 1 : 1;
   comboTimer = 1.5;
   lastKill = { x, y };
+  if (b.volatile) later(70 + Math.random() * 70, () => explode(x, y, 150, 15, 90));
+  if (b.isBoss) {
+    for (let i = 0; i < 4; i++) {
+      later(130 + i * 170, () => explode(x + (Math.random() - 0.5) * 120, y + (Math.random() - 0.5) * 120, 110, 6, 30));
+    }
+  }
 
   Sound.botDown(combo - 1);
   addTrauma(b.isMega ? 0.46 : 0.28);
@@ -485,7 +669,7 @@ function killBot(b) {
   FX.sparks(x, y, '#ff2e88', 10, 360, 0.42);
   FX.smoke(x, y, '#46406e', 4, 70, 0.8, 26);
 
-  const pts = Math.round((b.isMega ? 3000 : 1000) * (1 + (combo - 1) * 0.5));
+  const pts = Math.round((b.isBoss ? 10000 : b.isMega ? 3000 : 1000) * (1 + (combo - 1) * 0.5));
   addScore(pts, x, y - 18, b.isMega ? '#ffd23f' : '#7cff5c', b.isMega ? 32 : 26);
   const words = t('wordBot');
   if (combo >= 2) {
@@ -547,8 +731,21 @@ Events.on(engine, 'collisionStart', (event) => {
     const hero = a.label === 'hero' ? a : b.label === 'hero' ? b : null;
     const other = hero === a ? b : a;
 
+    // Бур идёт насквозь: ломает всё, чего коснётся, и не останавливается
+    if (hero && hero.drillT > 0) {
+      if (other.label === 'block' || other.label === 'bot') {
+        damage(other, 160, hero);
+        Sound.hit('stone', 14);
+        addTrauma(0.14);
+        FX.sparks(hero.position.x, hero.position.y, '#e8ffd0', 10, 420, 0.32);
+        if (other.mat) FX.chips(hero.position.x, hero.position.y, MATERIALS[other.mat].chips, 6, 260);
+      }
+      return;
+    }
+
     if (hero) {
-      if (!hero.hasHit) {
+      // Батут не считается ударом: способность после него ещё работает
+      if (!hero.hasHit && other.label !== 'jelly') {
         hero.hasHit = true;
         hero.frictionAir = 0.018;
       }
@@ -570,14 +767,23 @@ Events.on(engine, 'collisionStart', (event) => {
       }
     });
 
+    const pad = a.label === 'jelly' ? a : b.label === 'jelly' ? b : null;
+    if (pad) {
+      pad.wob = 1;
+      Sound.boing();
+      FX.ring(cx, cy, 46, '#ff9ae0', 7, 0.26);
+      FX.sparks(cx, cy, '#ffc4ee', 8, 280, 0.32);
+      return;
+    }
+
     const matBody = a.mat ? a : b.mat ? b : null;
     if (matBody && rel > 3) {
       const m = MATERIALS[matBody.mat];
       Sound.hit(m.sound, rel);
       FX.chips(cx, cy, m.chips, Math.min(5, Math.floor(rel / 3)), 170);
-    } else if (other.label === 'ground' && hero && rel > 4) {
+    } else if ((other.label === 'ground' || other.label === 'rock') && hero && rel > 4) {
       Sound.thud();
-      FX.smoke(cx, GROUND_Y - 2, '#e8dcc8', 3, 60, 0.45, 18);
+      FX.smoke(cx, other.label === 'ground' ? GROUND_Y - 2 : cy, '#e8dcc8', 3, 60, 0.45, 18);
     } else if (hero && other.label === 'bot' && rel > 3) {
       Sound.hit('stone', rel * 0.5);
       FX.sparks(cx, cy, '#ffffff', 8, 300, 0.3);
@@ -614,7 +820,7 @@ function poof(h) {
 
 function worldCalm() {
   for (let i = 0; i < blocks.length; i++) if (!blocks[i].isSleeping && speedOf(blocks[i]) > 0.55) return false;
-  for (let i = 0; i < bots.length; i++) if (!bots[i].isSleeping && speedOf(bots[i]) > 0.55) return false;
+  for (let i = 0; i < bots.length; i++) if (!bots[i].hover && !bots[i].isSleeping && speedOf(bots[i]) > 0.55) return false;
   return orbs.length === 0;
 }
 
@@ -631,10 +837,39 @@ function endTurn() {
   settleTimer = 0;
 }
 
+// Дроны и босс сами держатся в воздухе; после удара они возвращаются на свой маршрут
+function updateHover() {
+  const k = engine.timing.timeScale;
+  for (let i = 0; i < bots.length; i++) {
+    const b = bots[i];
+    const h = b.hover;
+    if (!h) continue;
+    const v = Body.getVelocity(b);
+    if (b.frozenT > 0) {
+      Body.setVelocity(b, { x: v.x * 0.9, y: v.y * 0.9 - 0.2778 });
+      continue;
+    }
+    h.t += (STEP_MS / 1000) * k;
+    const tx = h.x + Math.sin(h.t * h.speed + h.phase) * h.ax;
+    const ty = h.y + Math.sin(h.t * h.speed * 1.37 + h.phase) * h.ay;
+    Body.setVelocity(b, {
+      x: lerp(v.x, (tx - b.position.x) * 0.1, 0.25),
+      y: lerp(v.y, (ty - b.position.y) * 0.1, 0.25) - 0.2778
+    });
+    Body.setAngle(b, b.angle * 0.92);
+    Body.setAngularVelocity(b, 0);
+  }
+}
+Events.on(engine, 'beforeUpdate', updateHover);
+
 function stepSim() {
   engine.timing.timeScale = slowmoT > 0 ? slowmoScale : 1;
   Engine.update(engine, STEP_MS);
   flushRemovals();
+  for (let i = 0; i < bots.length; i++) {
+    if (bots[i].shieldT > 0) bots[i].shieldT -= STEP_MS / 1000;
+    if (bots[i].frozenT > 0) bots[i].frozenT -= STEP_MS / 1000;
+  }
 
   // Запланированные события считаются игровым временем — на паузе они стоят
   if (timers.length) {
@@ -677,6 +912,99 @@ function stepSim() {
   }
 }
 
+// Ускорение от вихрей в точке. Этой же формулой считается линия прицела
+const wellA = { x: 0, y: 0 };
+function wellAccel(x, y) {
+  wellA.x = 0;
+  wellA.y = 0;
+  let inside = false;
+  for (let i = 0; i < wells.length; i++) {
+    const w = wells[i];
+    const dx = w.x - x;
+    const dy = w.y - y;
+    const d = Math.hypot(dx, dy);
+    if (d >= w.radius || d < 1) continue;
+    const k = w.pull * (1 - d / w.radius);
+    wellA.x += (dx / d) * k;
+    wellA.y += (dy / d) * k;
+    inside = true;
+  }
+  return inside;
+}
+
+function pullByWells(b) {
+  if (!wells.length) return;
+  if (wellAccel(b.position.x, b.position.y)) {
+    const v = Body.getVelocity(b);
+    Body.setVelocity(b, { x: v.x + wellA.x, y: v.y + wellA.y });
+    b.inWell = (b.inWell || 0) + 1;
+  }
+}
+
+// Куда ведёт портал в этой точке
+function portalExit(x, y) {
+  for (let i = 0; i < portals.length; i++) {
+    const p = portals[i];
+    if (Math.hypot(p.a.x - x, p.a.y - y) < PORTAL_R) return p.b;
+    if (Math.hypot(p.b.x - x, p.b.y - y) < PORTAL_R) return p.a;
+  }
+  return null;
+}
+
+function passPortals(b) {
+  if (!portals.length) return;
+  if (b.portalCd > 0) {
+    b.portalCd--;
+    return;
+  }
+  if (speedOf(b) < 3) return;
+  const to = portalExit(b.position.x, b.position.y);
+  if (!to) return;
+  const { x, y } = b.position;
+  Body.setPosition(b, { x: to.x, y: to.y });
+  b.portalCd = 24;
+  if (b.trail) b.trail.length = 0;
+  Sound.portal();
+  [[x, y], [to.x, to.y]].forEach(([px, py]) => {
+    FX.ring(px, py, PORTAL_R * 2.4, '#ffffff', 8, 0.3);
+    FX.sparks(px, py, '#b78cff', 12, 320, 0.4);
+  });
+}
+
+function takeGems(h) {
+  for (let i = 0; i < gems.length; i++) {
+    const g = gems[i];
+    if (g.taken || Math.hypot(g.x - h.position.x, g.y - h.position.y) > h.circleRadius + GEM_R) continue;
+    g.taken = true;
+    gemsTaken++;
+    Sound.gem();
+    addScore(1500, g.x, g.y - 24, '#7ef9ff', 26);
+    FX.ring(g.x, g.y, 60, '#7ef9ff', 8, 0.3);
+    for (let k = 0; k < 10; k++) FX.star(g.x, g.y, '#b8fbff');
+    UI.updateGems();
+  }
+}
+
+function updateDrill(h) {
+  Body.setVelocity(h, h.drillV);
+  const r = h.circleRadius;
+  const nx = h.position.x + h.drillV.x;
+  const ny = h.position.y + h.drillV.y;
+  h.drillT--;
+  // В землю и в скалу сверло не войдёт
+  const stopped = ny + r > GROUND_Y || rocks.some((q) => bodyHas(q, nx, ny, r));
+  if (stopped) h.drillT = 0;
+  if (h.drillT > 0) return;
+  // Пока пуф внутри блока, сверло крутится: иначе физика вышвырнет его наружу
+  if (!stopped && blocks.some((q) => bodyHas(q, h.position.x, h.position.y, r))) {
+    h.drillT = 1;
+    return;
+  }
+  h.isSensor = false;
+  h.hasHit = true;
+  h.frictionAir = 0.018;
+}
+
 function updateFlight() {
   for (let i = flying.length - 1; i >= 0; i--) {
     const h = flying[i];
@@ -688,11 +1016,27 @@ function updateFlight() {
         continue;
       }
     }
+    if (h.drillT > 0) updateDrill(h);
+    else pullByWells(h);
+    // Из вихря долго не выбраться: пуф исчезает, чтобы ход не затягивался
+    if (h.inWell > 260) {
+      poof(h);
+      flying.splice(i, 1);
+      if (primary === h) primary = null;
+      World.remove(world, h);
+      continue;
+    }
+    passPortals(h);
+    takeGems(h);
     if (!h.hasHit) {
       Body.setAngle(h, 0);
       Body.setAngularVelocity(h, 0);
     }
   }
+  orbs.forEach((o) => {
+    pullByWells(o);
+    passPortals(o);
+  });
 }
 
 function updateTurn() {
@@ -759,6 +1103,7 @@ function finishLevel(win, bonus) {
     const stars = used <= cfg.par ? 3 : used <= cfg.par + 1 ? 2 : 1;
     const before = Save.best[level] || 0;
     const newBest = score > before;
+    Save.gems[level] = Math.max(Save.gems[level], gemsTaken);
     Save.recordWin(level, stars, score);
     UI.showResult({ win: true, stars, score, bonus, newBest, level });
   } else {
@@ -1066,6 +1411,12 @@ function updateVisuals(dt) {
     if (h.fuse > 0 && Math.random() < dt * 40) {
       FX.sparks(h.position.x, h.position.y - h.circleRadius, '#ffb347', 1, 160, 0.3);
     }
+    if (h.drillT > 0 && Math.random() < dt * 70) {
+      FX.sparks(h.position.x, h.position.y, '#e8ffd0', 1, 260, 0.26);
+    }
+  });
+  rocks.forEach((q) => {
+    if (q.wob > 0) q.wob = Math.max(0, q.wob - dt * 2.4);
   });
 
   const target = flying.length ? flying[0].position : slingHero ? { x: SLING_X, y: SLING_Y } : null;
@@ -1176,40 +1527,86 @@ function aimContact(x, y, r) {
     const m = blocks[i].bounds;
     if (x > m.min.x - r && x < m.max.x + r && y > m.min.y - r && y < m.max.y + r) return blocks[i];
   }
+  for (let i = 0; i < rocks.length; i++) {
+    if (bodyHas(rocks[i], x, y, r)) return rocks[i];
+  }
   return null;
 }
 
-function drawAim() {
-  if (!pull || !slingHero) return;
-  let x = SLING_X + pull.x;
-  let y = SLING_Y + pull.y;
-  let vx = -pull.x * LAUNCH_POWER;
-  let vy = -pull.y * LAUNCH_POWER;
-  if (Math.hypot(pull.x, pull.y) < 18) return;
-  const shimmer = Math.floor((time * 18) % 3);
-  const scale = clamp(1 / cam.zoom, 1, 2);
+// Прицел показывает весь путь: сквозь порталы, вихри и отскоки от батутов.
+// dot(x, y, step) вызывается для каждой точки; возвращается то, во что пуф врежется
+function traceAim(px, py, r, dot) {
+  let x = SLING_X + px;
+  let y = SLING_Y + py;
+  let vx = -px * LAUNCH_POWER;
+  let vy = -py * LAUNCH_POWER;
+  let portalCd = 0;
+  let bounceCd = 0;
+  let bounces = 0;
   let hit = null;
-  ctx.lineWidth = 1.6 / cam.zoom;
-  ctx.strokeStyle = 'rgba(26,8,56,0.65)';
-  ctx.fillStyle = '#ffffff';
   for (let step = 1; step <= 240; step++) {
     // Точно те же формулы, что и в физике Matter.js
     vx *= 0.99;
     vy = vy * 0.99 + 0.2778;
+    if (wells.length && wellAccel(x, y)) {
+      vx += wellA.x;
+      vy += wellA.y;
+    }
     x += vx;
     y += vy;
+    if (portalCd > 0) portalCd--;
+    else if (portals.length) {
+      const to = portalExit(x, y);
+      if (to) {
+        x = to.x;
+        y = to.y;
+        portalCd = 24;
+      }
+    }
     if (y > GROUND_Y) break;
-    hit = aimContact(x, y, slingHero.r);
-    if (hit) break;
+    if (bounceCd > 0) bounceCd--;
+    hit = aimContact(x, y, r);
+    if (hit && hit.label === 'jelly') {
+      if (bounceCd === 0 && bounces < 3) {
+        const c = Math.cos(hit.angle);
+        const s = Math.sin(hit.angle);
+        const dx = x - hit.position.x;
+        const dy = y - hit.position.y;
+        let lvx = vx * c + vy * s;
+        let lvy = vy * c - vx * s;
+        if (hit.w / 2 - Math.abs(dx * c + dy * s) < hit.h / 2 - Math.abs(dy * c - dx * s)) lvx = -lvx;
+        else lvy = -lvy;
+        vx = lvx * c - lvy * s;
+        vy = lvx * s + lvy * c;
+        bounces++;
+        bounceCd = 6;
+      }
+      hit = null;
+    }
+    if (hit) return { hit, x, y };
+    dot(x, y, step);
+  }
+  return { hit: null, x, y };
+}
+
+function drawAim() {
+  if (!pull || !slingHero) return;
+  if (Math.hypot(pull.x, pull.y) < 18) return;
+  const shimmer = Math.floor((time * 18) % 3);
+  const scale = clamp(1 / cam.zoom, 1, 2);
+  ctx.lineWidth = 1.6 / cam.zoom;
+  ctx.strokeStyle = 'rgba(26,8,56,0.65)';
+  ctx.fillStyle = '#ffffff';
+  const { hit, x, y } = traceAim(pull.x, pull.y, slingHero.r, (dx, dy, step) => {
     if ((step + shimmer) % 3 === 0) {
       const k = clamp(1 - step / 110, 0, 1);
       ctx.globalAlpha = 0.55 + k * 0.45;
       ctx.beginPath();
-      ctx.arc(x, y, (2.4 + k * 3.4) * scale, 0, TAU);
+      ctx.arc(dx, dy, (2.4 + k * 3.4) * scale, 0, TAU);
       ctx.fill();
       ctx.stroke();
     }
-  }
+  });
   ctx.globalAlpha = 1;
   // Метка попадания: сразу видно, что выстрел придётся в бота
   if (hit && hit.label === 'bot') {
@@ -1249,8 +1646,8 @@ function drawFlyingHero(h) {
     lookY: look.y,
     blink: h.hasHit && idleBlink,
     mood: h.hurtT > 0 ? 'hurt' : h.hasHit ? 'angry' : 'scream',
-    rot: h.hasHit ? h.angle : 0,
-    stretch: h.hasHit ? 0 : Math.min(0.26, look.sp / 95),
+    rot: h.drillT > 0 ? Math.atan2(look.y, look.x) + Math.PI / 2 : h.hasHit ? h.angle : 0,
+    stretch: h.hasHit || h.drillT > 0 ? 0 : Math.min(0.26, look.sp / 95),
     stretchAngle: Math.atan2(look.y, look.x),
     squish: h.squish,
     fuse: h.fuse > 0
@@ -1438,9 +1835,21 @@ function render(dt) {
   drawBand(SLING_TIP_BACK, pouch);
   drawQueue();
 
+  wells.forEach((w) => drawWell(ctx, w, time));
+  portals.forEach((p) => {
+    drawPortal(ctx, p.a.x, p.a.y, time, '#29f3ff', 1);
+    drawPortal(ctx, p.b.x, p.b.y, time, '#ff9a1f', -1);
+  });
+  rocks.forEach((q) => drawRock(ctx, q, cfg.biome, time));
   blocks.forEach((b) => drawBlock(ctx, b, time));
   orbs.forEach((o) => drawOrb(ctx, o, time));
   bots.forEach((b) => drawBot(ctx, b, time));
+  gems.forEach((g) => {
+    if (!g.taken) drawGem(ctx, g, time);
+  });
+  bots.forEach((b) => {
+    if (b.isBoss) drawBossBar(ctx, b, cam.zoom);
+  });
 
   flying.forEach(drawTrail);
   flying.forEach(drawFlyingHero);

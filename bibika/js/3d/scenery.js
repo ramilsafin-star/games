@@ -13,8 +13,9 @@ const CURVES = [
   [9, 0.02, 4, 0.04],
   [26, 0.008, 5, 0.022],
 ];
-let curve = CURVES[0];
+let curve = CURVES[0], trackWorld = 0;
 export function setTrack(world) {
+  trackWorld = world;
   curve = CURVES[world % CURVES.length];
   hillHeight = HILL_HEIGHT[world % HILL_HEIGHT.length];
 }
@@ -64,6 +65,9 @@ export const LOOP_RADIUS = 9.5;
 let hillHeight = HILL_HEIGHT[0];
 function zoneOf(index) {
   if (index < 0) return null;
+  // Первые кварталы и поля открыты для заданий. У моря начинаем со стеклянной галереи.
+  if ((trackWorld === 0 || trackWorld === 1) && index >= 2 && index <= 5) return null;
+  if ([2, 3, 6].includes(trackWorld) && (index === 2 || index === 3)) return null;
   const at = ZONES[index % CYCLE];
   if (!at) return null;
   return {
@@ -788,26 +792,43 @@ function building(b, x, z, w, h, l, i) {
   for (let j = -1; j <= 1; j++)
     b.box(front, 1.52, z + j * l * 0.31, 0.19, 2.9, 0.13, "#dbceb8");
 }
-function intersection(b, center, z) {
+const signalLenses = {
+  red: new T.MeshBasicMaterial({ color: "#ff363c" }),
+  green: new T.MeshBasicMaterial({ color: "#3dff90" }),
+  off: new T.MeshStandardMaterial({ color: "#302e30" }),
+};
+function hasIntersection(index) {
+  return index >= 0 && index % 3 === 1 && !zoneOf(index);
+}
+export function nextSignal(from) {
+  for (let i = Math.max(0, Math.floor(from / TILE)); ; i++) {
+    const centre = i * TILE + 22;
+    if (centre >= from && hasIntersection(i)) return centre;
+  }
+}
+function intersection(b, extras, start) {
+  const s = start + 22, center = bend(s), z = -22;
   b.box(center, 0.05, z, 105, 0.035, 7.6, "#595e62");
   for (let i = 0; i < 8; i++) {
     b.box(center - 5.3 + i * 1.5, 0.08, z - 5, 0.64, 0.025, 2.3, "#ede8d6");
     b.box(center - 5.3 + i * 1.5, 0.08, z + 5, 0.64, 0.025, 2.3, "#ede8d6");
   }
+  const line = s - 8;
+  const lift = b.lift;
+  b.lift = rise(line);
+  b.box(bend(line), 0.11, -14, 12.4, 0.06, 0.55, "#fff6cb");
+  b.lift = lift;
   for (const side of [-1, 1]) {
     const x = center + side * 7.7;
-    b.trunk(x, 2.2, z + side * 5, 0.09, 4.4, "#55656b");
-    b.box(x, 4.22, z + side * 5, 0.43, 1.12, 0.34, "#34414a");
-    for (let i = 0; i < 3; i++)
-      b.ell(
-        x,
-        4.55 - i * 0.33,
-        z + side * 5 + 0.18,
-        0.13,
-        0.13,
-        0.045,
-        i === 2 ? "#72c583" : "#443e3c",
-      );
+    b.trunk(x, 2.5, z, 0.11, 5, "#53626b");
+    b.box(x, 4.6, z, 0.7, 1.8, 0.46, "#26323d");
+    for (const [i, color] of ["red", "amber", "green"].entries()) {
+      const lens = new T.Mesh(new T.SphereGeometry(0.23, 10, 8), signalLenses.off);
+      lens.scale.z = 0.35;
+      lens.position.set(x, b.lift + 5.16 - i * 0.53, z + 0.26);
+      lens.userData.signalColor = color;
+      extras.add(lens);
+    }
   }
 }
 // Фонари загораются вечером: материал общий на все участки
@@ -1594,10 +1615,31 @@ function tile(index, originWorld) {
       }
     }
   }
+  if (index === 1 && wi === 1) {
+    b.lift = rise(start + 32);
+    const x = bend(start + 32) + 17, z = -32;
+    b.box(x, 2.8, z, 9, 5.6, 11, "#a63727");
+    for (const side of [-1, 1])
+      b.part(cube, material("#593b31"), x + side * 2.3, 6.25, z, 5.3, 0.36, 12, 0, 0, -side * 0.37);
+    b.box(x, 2.1, z + 5.55, 4.4, 4.2, 0.13, "#63332b");
+    for (const side of [-1, 1])
+      b.part(cube, material("#f5dec1"), x + side * 1.02, 2.1, z + 5.68, 0.15, 4.5, 0.14, 0, 0, side * 0.48);
+    for (let row = 0; row < 6; row++)
+      b.box(x + 7 + row * 1.0, 0.09, z, 0.4, 0.16, 42, "#987144");
+  }
+  if (index === 1 && wi === 0) {
+    b.lift = rise(start + 40);
+    const x = bend(start + 40) - 19;
+    b.box(x, 7, -40, 6.8, 14, 6.8, "#bc8867");
+    b.box(x, 14.4, -40, 7.4, 0.65, 7.4, "#e8d5ad");
+    b.ell(x, 11.1, -36.5, 2.05, 2.05, 0.15, "#fceab5");
+    b.box(x, 11.62, -36.3, 0.15, 1.12, 0.1, "#32444a");
+    b.box(x + 0.43, 11.14, -36.3, 0.93, 0.14, 0.1, "#32444a");
+  }
   b.lift = 0;
-  if (!bare && wi === 0 && index % 3 === 1) {
+  if (wi === 0 && hasIntersection(index)) {
     b.lift = hilly ? rise(start + 22) : 0;
-    intersection(b, bend(start + 22), -22);
+    intersection(b, extras, start);
     b.lift = 0;
   }
   // Участки до старта тоже строятся, если машину отвести назад: шаров там нет
@@ -1610,6 +1652,7 @@ function tile(index, originWorld) {
   // У петли нет домов и деревьев: сбоку на неё смотрит камера. Дальние холмы остаются
   if ((!bare || zone?.kind === "loop") && [1, 2, 3].includes(wi))
     group.add(terrain(start, wi));
+  group.userData.signals = extras.children.filter((n) => n.userData.signalColor);
   while (extras.children.length) group.add(extras.children[0]);
   group.position.z = -start;
   return group;
@@ -1806,7 +1849,7 @@ export class Scenery {
       if (n.isMesh) n.geometry.dispose();
     });
   }
-  update(d, world, previous, fade, mood) {
+  update(d, world, previous, fade, mood, city) {
     const base = Math.floor(d / TILE),
       rx = bend(d),
       here = rise(d);
@@ -1824,6 +1867,11 @@ export class Scenery {
       }
       const group = this.tiles.get(i);
       group.position.set(-rx, -here, d - i * TILE);
+      const red = city?.signal === i * TILE + 22 && city.phase !== "green";
+      for (const lens of group.userData.signals) {
+        const on = lens.userData.signalColor === (red ? "red" : "green");
+        lens.material = on ? signalLenses[lens.userData.signalColor] : signalLenses.off;
+      }
       for (const mesh of group.children) mesh.castShadow = i <= base + 1;
     }
     for (const strip of [this.road, ...this.verges]) {

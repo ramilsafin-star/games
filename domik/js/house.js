@@ -5,17 +5,17 @@ import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js";
 import { mat, easeBack, easeOut, TRUNK_Z } from "./world.js";
 
 export const DECK_Y = 5.6;
+export const WALL_H = 3.1,
+  HOUSE_W = 5,
+  HOUSE_FRONT = 3.7,
+  HOUSE_BACK = 0.7;
 const DECK_W = 8.8,
   DECK_FRONT = 5.1,
   DECK_BACK = 0,
-  WALL_H = 3.1,
-  HOUSE_W = 5,
-  HOUSE_FRONT = 3.7,
-  HOUSE_BACK = 0.7,
   WOODS = ["#c98f55", "#bd8349", "#d29a60", "#b57c44"],
   RAW = "#dcb88a";
 
-function part(parent, geo, material, x = 0, y = 0, z = 0) {
+export function part(parent, geo, material, x = 0, y = 0, z = 0) {
   const m = new T.Mesh(geo, material);
   m.position.set(x, y, z);
   m.castShadow = true;
@@ -30,7 +30,7 @@ function rounded(w, h, d, r = 0.04) {
     boxes.set(key, new RoundedBoxGeometry(w, h, d, 2, Math.min(r, w / 2.1, h / 2.1, d / 2.1)));
   return boxes.get(key);
 }
-function plank(parent, w, h, d, color, x, y, z, r) {
+export function plank(parent, w, h, d, color, x, y, z, r) {
   return part(parent, rounded(w, h, d, r), typeof color === "string" ? mat(color, 0.78) : color, x, y, z);
 }
 function pole(parent, a, b, r, color) {
@@ -42,10 +42,10 @@ function pole(parent, a, b, r, color) {
   m.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), dir.normalize());
   return m;
 }
-function ball(parent, x, y, z, r, color, rough = 0.6) {
+export function ball(parent, x, y, z, r, color, rough = 0.6) {
   return part(parent, new T.SphereGeometry(r, 14, 10), typeof color === "string" ? mat(color, rough) : color, x, y, z);
 }
-function shapeOf(kind, s) {
+export function shapeOf(kind, s) {
   const p = new T.Shape();
   if (kind === "round") p.absarc(0, 0, s, 0, Math.PI * 2, false);
   else if (kind === "arch") {
@@ -114,6 +114,8 @@ export class TreeHouse {
     this.swingItem = null;
     this.birdFly = 0;
     this.lightsOn = true;
+    this.hammer = null;
+    this.frontParts = [];
     this.frameGroup = new T.Group();
     this.deckGroup = new T.Group();
     this.railGroup = new T.Group();
@@ -318,7 +320,8 @@ export class TreeHouse {
     hole.scale.set(1, 1.08, 1);
     this.wallGroup.add(hole);
     this.wallGroup.add(hinge);
-    plank(this.wallGroup, 1.55, 0.14, 0.22, "#8f5f35", 0, DECK_Y + 0.05 + h * 1.03, HOUSE_FRONT + 0.1, 0.03);
+    const lintel = plank(this.wallGroup, 1.55, 0.14, 0.22, "#8f5f35", 0, DECK_Y + 0.05 + h * 1.03, HOUSE_FRONT + 0.1, 0.03);
+    this.frontParts = [hole, hinge, lintel];
     this.door = hinge;
     this.door.userData.act = "door";
     this.doorMaterial = material;
@@ -357,6 +360,7 @@ export class TreeHouse {
     this.config.roofColor = color;
     const g = this.roofGroup;
     g.clear();
+    g.userData.baked = false;
     const paint = new T.MeshStandardMaterial({ color, roughness: 0.5 }),
       base = DECK_Y + WALL_H + 0.05,
       cz = (HOUSE_FRONT + HOUSE_BACK) / 2,
@@ -476,16 +480,21 @@ export class TreeHouse {
     const groups = [this.frameGroup, this.deckGroup, this.railGroup, this.roofGroup];
     if (!this.swingers.some((s) => s.tag === "way")) groups.push(this.wayGroup);
     for (const g of groups) {
+      if (g.userData.baked) continue;
+      g.userData.baked = true;
       g.updateWorldMatrix(true, true);
       const inverse = g.matrixWorld.clone().invert(),
         byMaterial = new Map();
-      g.traverseVisible((n) => {
-        if (!n.isMesh) return;
-        const geo = n.geometry.index ? n.geometry.toNonIndexed() : n.geometry.clone();
-        geo.applyMatrix4(new T.Matrix4().multiplyMatrices(inverse, n.matrixWorld));
-        if (!byMaterial.has(n.material)) byMaterial.set(n.material, []);
-        byMaterial.get(n.material).push(geo);
-      });
+      // Сама группа может быть скрыта, пока открыта комната: смотрим только на её детали
+      for (const child of g.children)
+        child.traverseVisible((n) => {
+          if (!n.isMesh) return;
+          const geo = n.geometry.index ? n.geometry.toNonIndexed() : n.geometry.clone();
+          geo.applyMatrix4(new T.Matrix4().multiplyMatrices(inverse, n.matrixWorld));
+          if (!byMaterial.has(n.material)) byMaterial.set(n.material, []);
+          byMaterial.get(n.material).push(geo);
+        });
+      if (!byMaterial.size) continue;
       const merged = [];
       for (const [material, list] of byMaterial) {
         const geo = mergeGeometries(list);
@@ -503,6 +512,7 @@ export class TreeHouse {
     this.config.way = kind;
     const g = this.wayGroup;
     g.clear();
+    g.userData.baked = false;
     this.swingers = this.swingers.filter((s) => s.tag !== "way");
     const wood = "#b67e46",
       topY = DECK_Y,
@@ -797,6 +807,7 @@ export class TreeHouse {
     [[0.05, 0.02, -0.06, 0.15], [0.15, 0.22, -0.2, 0.2], [0.27, 0.46, -0.24, 0.23], [0.37, 0.72, -0.14, 0.21], [0.36, 0.9, 0.02, 0.15]].forEach(([x, y, z, r]) => ball(tail, x, y, z, r, "#d97a2e", 0.95));
     this.tail = tail;
     s.scale.setScalar(1.5);
+    s.userData.size = 1.5;
     this.squirrel = s;
     this.friends.add(s);
     s.position.set(-5.2, 0.05, 6.4);
@@ -900,7 +911,7 @@ export class TreeHouse {
         o.userData.lift = Math.abs(Math.sin(time * 9)) * this.hop[who] * 0.9;
       } else o.userData.lift = 0;
       const lift = o.userData.lift;
-      o.scale.y = (who === "squirrel" ? 1.5 : 1.4) * (1 + lift * 0.1);
+      o.scale.y = (o.userData.size || 1.4) * (1 + lift * 0.1);
       o.position.y += lift - (o.userData.lastLift || 0);
       o.userData.lastLift = lift;
     }

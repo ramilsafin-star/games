@@ -22,6 +22,7 @@ import {
   riseSlope,
   tunnelAmount,
   zoneAt,
+  nextSignal,
   leapAt,
   leapNear,
   bridgeNear,
@@ -203,7 +204,7 @@ for (const [name, m] of Object.entries(MOODS)) {
   m.horizon = new T.Color(m.horizon);
   m.sunColor = new T.Color(m.sunColor);
 }
-const carLike = (e) => e.kind === "traffic" || e.kind === "rival";
+const carLike = (e) => e.kind === "traffic" || e.kind === "rival" || e.kind === "patrolActor";
 // Кто живёт у дороги на каждой трассе
 const WORLD_ANIMALS = [
   ["dog"],
@@ -218,6 +219,60 @@ const MOOD_TIME = 75,
   SHIP_WORLDS = [0, 1, 3, 4, 5];
 function marker(kind) {
   if (kind === "star") return new T.Mesh(star, gold);
+  if (kind === "wagon") {
+    const wagon = new T.Group();
+    for (const [w,h,l,x,y,z,color] of [
+      [1.75,0.32,2.4,0,0.45,0,"#374854"], [1.65,0.9,2.1,0,1,0,"#cf5444"],
+      [1.78,0.12,2.24,0,1.5,0,"#f1c062"], [0.15,0.13,1.1,0,0.5,-1.5,"#555f64"]
+    ]) {
+      const m = new T.Mesh(new T.BoxGeometry(w,h,l), standard(color));
+      m.position.set(x,y,z); wagon.add(m);
+    }
+    for (const x of [-0.82,0.82]) for (const z of [-0.74,0.74]) {
+      const wheel = new T.Mesh(new T.CylinderGeometry(0.29,0.29,0.17,12),standard("#29323a"));
+      wheel.rotation.z = Math.PI/2;
+      wheel.position.set(x,0.29,z); wagon.add(wheel);
+    }
+    return wagon;
+  }
+  if (kind === "hayCart") {
+    const cart = new T.Group();
+    const bed = new T.Mesh(new T.BoxGeometry(3.0,0.32,3.7), standard("#875334"));
+    bed.position.y = 0.49;
+    cart.add(bed);
+    for (const x of [-1.4,1.4]) for (const z of [-1.6,1.6]) {
+      const post = new T.Mesh(new T.BoxGeometry(0.12,1.3,0.12), standard("#eaca88"));
+      post.position.set(x,0.99,z); cart.add(post);
+    }
+    const load = marker("bale");
+    load.position.y = 0.63;
+    cart.add(load);
+    cart.userData.load = load;
+    return cart;
+  }
+  if (kind === "bale") {
+    const bale = new T.Group();
+    const straw = new T.Mesh(new T.CylinderGeometry(0.91, 0.91, 2.2, 20), standard("#db9a3b"));
+    straw.rotation.z = Math.PI / 2;
+    straw.position.y = 0.92;
+    bale.add(straw);
+    for (const x of [-0.71, 0.71]) {
+      const band = new T.Mesh(new T.TorusGeometry(0.91, 0.045, 5, 22), standard("#79613c"));
+      band.rotation.y = Math.PI / 2;
+      band.position.set(x, 0.92, 0);
+      bale.add(band);
+    }
+    for (const radius of [0.28, 0.55, 0.77]) {
+      const ring = new T.Mesh(new T.TorusGeometry(radius, 0.018, 4, 22), standard("#aa752c"));
+      ring.rotation.y = Math.PI / 2;
+      ring.position.set(1.11, 0.92, 0);
+      bale.add(ring);
+      const left = ring.clone();
+      left.position.x = -1.11;
+      bale.add(left);
+    }
+    return bale;
+  }
   if (kind === "ramp") return rampMesh();
   if (kind === "boost") return boostMesh();
   if (kind === "gift") return giftMesh();
@@ -288,6 +343,7 @@ export class DriveView {
     this.scene.environment = this.environment.texture;
     this.scene.environmentIntensity = 0.72;
     this.cam = new T.PerspectiveCamera(51, 0.7, 0.12, 470);
+    this.mirrorCam = new T.PerspectiveCamera(52, 2.8, 0.12, 110);
     this.sun = setupLights(this.scene, true);
     this.mood = {
       k: 0,
@@ -419,6 +475,14 @@ export class DriveView {
     );
     this.water.rotation.x = Math.PI / 2;
     this.scene.add(this.aura, this.water);
+    this.pullOverBay = new T.Mesh(new T.PlaneGeometry(3.8, 13),
+      new T.MeshBasicMaterial({color: "#57edb7", transparent: true, opacity: 0.64, depthWrite: false}));
+    this.pullOverBay.rotation.x = -Math.PI / 2;
+    this.scene.add(this.pullOverBay);
+    this.carpet = new T.Mesh(new T.PlaneGeometry(3.1, 21),
+      new T.MeshStandardMaterial({color:"#b62638", roughness:0.88}));
+    this.carpet.rotation.x = -Math.PI / 2;
+    this.scene.add(this.carpet);
     this.rings = [];
     this.hook = new T.Line(
       new T.BufferGeometry().setFromPoints([new T.Vector3(), new T.Vector3()]),
@@ -779,6 +843,9 @@ export class DriveView {
     this.scene.add(node);
     return node;
   }
+  nextSignal(from) {
+    return nextSignal(from);
+  }
   zone(d) {
     return zoneAt(d);
   }
@@ -838,7 +905,7 @@ export class DriveView {
         (game.h * 0.73 - car.y) / UNITS_PER_METRE,
       px = (car.x - 300) / 30;
     const mood = this.updateMood(game);
-    this.scenery.update(d, game.world, game.previousWorld, game.worldFade, mood);
+    this.scenery.update(d, game.world, game.previousWorld, game.worldFade, mood, game.city);
     // В туннеле солнца нет: светят только лампы, на выходе снова ярко
     const dark = tunnelAmount(d);
     this.sun.intensity = mood.sun * (1 - 0.92 * dark);
@@ -882,6 +949,11 @@ export class DriveView {
       heading(d) - car.angle * 1.25,
       spin - car.angle * (car.type === "bike" ? 1.5 : 0.42),
     );
+    if (fx === "wheelie") {
+      const pitchUp = 0.53 * Math.min(1, game.active * 3, (CARS.bike.duration - game.active) * 3);
+      player.rotation.x += pitchUp;
+      player.position.y += Math.sin(pitchUp) * 0.85;
+    }
     // Петля: машина идёт по кругу, дорога в это время стоит
     const looping = game.loop,
       // Камера уходит вбок: так петлю и машину на ней видно целиком
@@ -911,7 +983,20 @@ export class DriveView {
       (["nitro", "comet", "wind"].includes(fx) || car.boost > 0) && !game.loop;
     this.exhaust.position.set(px, 0.4 + lift, this.playerTail + 0.1);
     this.exhaust.scale.z = 1 + Math.sin(game.time * 30) * 0.18;
-    pose(player, car.type, game.time, d, fx, car.angle, car.recoil);
+    const stroke = fx === "plow" ? 1 - game.active / CARS.tractor.duration : 0;
+    pose(player, car.type, game.time, d, fx, car.angle, car.recoil, stroke);
+    const pullOver = ["chase", "pursue", "pullOver"].includes(game.city?.phase);
+    this.carpet.visible = fx === "carpet";
+    if (this.carpet.visible) {
+      this.carpet.position.set(this.roadPosition(car.carpetX, -9, d), this.roadLift(-9, d) + 0.13, -9);
+      this.carpet.rotation.z = heading(d + 9);
+    }
+    this.pullOverBay.visible = pullOver;
+    if (pullOver) {
+      const z = game.city.phase === "pullOver" ? -2 : -15;
+      this.pullOverBay.position.set(this.roadPosition(483, z, d), this.roadLift(z, d) + 0.15, z);
+      this.pullOverBay.rotation.set(-Math.PI/2 + Math.atan(riseSlope(d-z)),0,heading(d-z));
+    }
     const activeEntities = new Set(game.entities);
     for (const [key, node] of this.nodes)
       if (!activeEntities.has(key)) this.recycle(key, node);
@@ -921,7 +1006,7 @@ export class DriveView {
       node.position.set(
         this.roadPosition(e.x, z, d),
         e.kind === "star"
-          ? (e.air || 0.98) +
+          ? (e.alt || e.air || 0.98) +
               0.16 * Math.sin(game.time * 3 + e.phase) +
               this.roadLift(z, d)
           : (e.alt || 0) + 0.018 + this.roadLift(z, d),
@@ -943,11 +1028,12 @@ export class DriveView {
           e.kind === "gift"
             ? game.time * 0.9
             : heading(d - z) - (e.drift || 0),
-          (e.spin || 0) * 0.6,
+          e.kind === "bale" ? 0 : (e.spin || 0) * 0.6 + (e.kick || 0) * (e.pushSide || 0) * 0.15,
         );
+      if (e.kind === "hayCart") node.userData.load.visible = !!e.loaded;
       if (e.kind === "gift") node.userData.chute.visible = (e.alt || 0) > 0.4;
       if (carLike(e)) {
-        pose(node, e.type, game.time, d * 0.28, "", 0, 0);
+        pose(node, e.type, game.time, d * 0.28, e.kind === "patrolActor" && e.type === "police" ? "siren" : "", 0, 0);
         if (node.userData.parts.blob)
           node.userData.parts.blob.visible = !leapAt(d - z);
         node.visible = z < 13;
@@ -971,13 +1057,16 @@ export class DriveView {
     const smooth = this.cameraInitialized
       ? 1 - Math.exp(-Math.max(dt, 0) * (looping ? 14 : 6))
       : 1;
-    this.smoothX = T.MathUtils.lerp(this.smoothX, px * 0.76, smooth);
-    const cameraZ = distance * (1 - loopK);
+    const patrolX = pullOver ? (game.city.npc.x - 300) / 30 : px;
+    const followX = pullOver ? (px + patrolX) / 2 : px * 0.76;
+    this.smoothX = T.MathUtils.lerp(this.smoothX, followX, smooth);
+    const shoulder = car.type === "tractor" ? 3.6 + 4.2 * bladeExtension(stroke) : fx === "whistle" ? 4.5 : 0;
+    const cameraZ = (distance + (pullOver ? 3.5 : 0)) * (1 - loopK);
     this.point.set(
       this.roadPosition(300, cameraZ, d) +
         this.smoothX +
-        (car.type === "truck" ? 1.1 : 0),
-      height + cameraLift,
+        (car.type === "truck" ? 1.1 : 0) + shoulder * (1 - loopK),
+      height + cameraLift + shoulder * 0.47 + (pullOver ? 1.15 : 0),
       cameraZ,
     );
     this.point.x += loopK * 25;
@@ -987,6 +1076,11 @@ export class DriveView {
       1.2 + this.roadLift(-18, d),
       -18,
     );
+    if (shoulder) {
+      this.look.x = this.roadPosition(300, -8, d) + px * 0.8;
+      this.look.y = 0.8 + this.roadLift(-8, d);
+      this.look.z = -8;
+    }
     if (looping) {
       this.look.x += loopK * (px - this.look.x);
       this.look.y += loopK * (LOOP_RADIUS - this.look.y);
@@ -1007,6 +1101,30 @@ export class DriveView {
     this.renderer.shadowMap.needsUpdate =
       this.shadowFrame++ % (this.quality < 1 ? 5 : 2) === 0;
     this.renderer.render(this.scene, this.cam);
+    this.drawMirror(game, px, d, screen);
+  }
+  drawMirror(game, px, d, screen) {
+    const frame = document.getElementById("patrol-mirror");
+    const rear = !game.finished && game.city?.phase === "chase" && game.city.npc.y - game.car.y > 68;
+    frame.hidden = !rear;
+    if (!rear) return;
+    const box = frame.getBoundingClientRect(), cam = this.mirrorCam;
+    cam.aspect = box.width / box.height;
+    cam.position.set(px, 2.65, 2.95);
+    const z = (game.city.npc.y - game.car.y) / UNITS_PER_METRE;
+    cam.lookAt(this.roadPosition(game.city.npc.x, z, d), this.roadLift(z,d) + 1, z);
+    cam.updateProjectionMatrix();
+    const x = box.left - screen.left, y = screen.bottom - box.bottom;
+    const npc = this.nodes.get(game.city.npc);
+    const visible = npc.visible;
+    npc.visible = true;
+    this.renderer.setScissorTest(true);
+    this.renderer.setScissor(x,y,box.width,box.height);
+    this.renderer.setViewport(x,y,box.width,box.height);
+    this.renderer.render(this.scene,cam);
+    this.renderer.setScissorTest(false);
+    this.renderer.setViewport(0,0,screen.width,screen.height);
+    npc.visible = visible;
   }
   drawLights(game, player, px, lift, lamps, d) {
     const on = lamps > 0.04 && !game.loop,
@@ -1298,8 +1416,9 @@ export class DriveView {
       const h = game.hooks[0],
         z = (h.ty - c.y) / UNITS_PER_METRE,
         a = this.hook.geometry.attributes.position;
-      a.setXYZ(0, x, 1.2, -1);
-      a.setXYZ(1, this.roadPosition(h.tx, z, d), 1, z);
+      this.hook.material.color.set(h.beam ? "#6dfff6" : "#ffe990");
+      a.setXYZ(0, x, h.beam ? 2.2 : 1.2, -1);
+      a.setXYZ(1, this.roadPosition(h.tx, z, d), (h.target.alt || 0) + 1 + this.roadLift(z, d), z);
       a.needsUpdate = true;
       this.hook.frustumCulled = false;
     }

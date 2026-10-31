@@ -17,6 +17,7 @@
     <div class="hud-left">
       <div class="chip chip-level"><span data-i18n="level"></span> <b id="hud-level">1</b></div>
       <div class="chip chip-score"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l3 6.6 7.2.8-5.4 4.8 1.5 7.1L12 17.7l-6.3 3.6 1.5-7.1L1.800 9.400 9 8.600z" fill="currentColor"/></svg><b id="hud-score">0</b></div>
+      <div id="hud-gems-wrap" class="chip chip-gems hidden"><i class="gem-ico"></i><b id="hud-gems">0/0</b></div>
     </div>
     <div class="hud-right"><a class="icon-btn" href="../" aria-label="Все игры" style="display:grid;place-items:center;padding:0;font-size:26px;line-height:1;text-decoration:none">🎮</a>
       <button id="btn-restart" class="icon-btn" type="button" aria-label="Restart">
@@ -41,6 +42,7 @@
     <button id="btn-title-levels" class="btn secondary" type="button" data-i18n="levels"></button>
     <div id="title-best-wrap" class="title-best hidden">
       <span><i class="star-ico"></i> <b id="title-stars">0/18</b></span>
+      <span id="title-gems-wrap" class="hidden"><i class="gem-ico"></i> <b id="title-gems">0/0</b></span>
       <span><span data-i18n="totalBest"></span>: <b id="title-best">0</b></span>
     </div>
   </section>
@@ -85,6 +87,7 @@
         <div id="result-new" class="new-best hidden" data-i18n="newBest"></div>
         <div class="score-sub"><span data-i18n="best"></span>: <b id="result-best">0</b></div>
         <div id="result-bonus-wrap" class="score-sub hidden"><span data-i18n="bonus"></span>: <b id="result-bonus">0</b></div>
+        <div id="result-gems-wrap" class="score-sub hidden"><span data-i18n="gems"></span>: <b id="result-gems">0</b></div>
       </div>
       <p id="result-tip" class="tip hidden" data-i18n="loseTip"></p>
       <button id="btn-next" class="btn primary" type="button"></button>

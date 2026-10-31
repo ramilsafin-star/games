@@ -8,6 +8,10 @@ const SLING_Y = GROUND_Y - 140;
 const MAX_PULL = 115;
 const LAUNCH_POWER = 0.2;
 const STEP_MS = 1000 / 60;
+const PORTAL_R = 34;
+const GEM_R = 20;
+// Как высоко над землёй долетает пуф на этом расстоянии (x, высота)
+const REACH_TOP = [[450, 615], [600, 572], [700, 528], [800, 471], [900, 401], [1000, 318], [1100, 216], [1150, 160], [1200, 99]];
 
 // Пуфы — герои игры. vs: множитель урона по материалу (кто что лучше ломает).
 const HEROES = {
@@ -19,12 +23,12 @@ const HEROES = {
   zip: {
     r: 20, density: 0.0034, restitution: 0.4, ability: 'dash',
     fur: ['#fff79a', '#ffcf1f', '#e6890a'], line: '#6b3a00', iris: '#00a6c8',
-    trail: '#ffe14d', lumps: 15, vs: { wood: 1.4, ice: 1, stone: 0.6 }
+    trail: '#ffe14d', lumps: 15, vs: { wood: 1.4, ice: 1, stone: 0.6, steel: 0.4 }
   },
   trio: {
     r: 16, density: 0.0036, restitution: 0.42, ability: 'split',
     fur: ['#9ffbff', '#19c6f2', '#0a76c9'], line: '#04386e', iris: '#ff3d9a',
-    trail: '#38e1ff', lumps: 14, vs: { wood: 0.8, ice: 2, stone: 0.5 }
+    trail: '#38e1ff', lumps: 14, vs: { wood: 0.8, ice: 2, stone: 0.5, steel: 0.35 }
   },
   nimbus: {
     r: 24, density: 0.0036, restitution: 0.38, ability: 'drop',
@@ -35,6 +39,16 @@ const HEROES = {
     r: 25, density: 0.0055, restitution: 0.25, ability: 'blast',
     fur: ['#8c52ff', '#44209a', '#1c0b45'], line: '#0e0528', iris: '#ff8a1f',
     trail: '#ff7a1a', lumps: 12, vs: { wood: 1, ice: 1, stone: 1 }
+  },
+  drill: {
+    r: 21, density: 0.0048, restitution: 0.28, ability: 'drill',
+    fur: ['#e4ffb8', '#7ed957', '#2e8f3e'], line: '#14501f', iris: '#ff2e88',
+    trail: '#9cff6a', lumps: 13, vs: { wood: 1, ice: 1, stone: 1 }
+  },
+  frost: {
+    r: 21, density: 0.0038, restitution: 0.36, ability: 'frost',
+    fur: ['#f4fffd', '#a8f0e8', '#2fa8a8'], line: '#0b4f5a', iris: '#ff6a3d',
+    trail: '#c8fff6', lumps: 16, vs: { wood: 1, ice: 1.6, stone: 1 }
   }
 };
 
@@ -42,6 +56,7 @@ const MATERIALS = {
   ice:   { hp: 20,  density: 0.0014, pts: 50,  chips: ['#d9fbff', '#7fe3ff', '#ffffff'], sound: 'ice' },
   wood:  { hp: 40,  density: 0.0022, pts: 80,  chips: ['#ffc46b', '#e8893a', '#8a4a1c'], sound: 'wood' },
   stone: { hp: 85, density: 0.0040, pts: 150, chips: ['#c9d2f2', '#8b95c7', '#565e96'], sound: 'stone' },
+  steel: { hp: 300, density: 0.0062, pts: 300, chips: ['#f2f5ff', '#a3aec9', '#515b7a'], sound: 'stone' },
   boom:  { hp: 12,  density: 0.0020, pts: 200, chips: ['#ff5a3c', '#ffd23f', '#6d0f24'], sound: 'wood' }
 };
 
@@ -67,7 +82,8 @@ const BIOMES = [
     grass: ['#ff9a2e', '#d13f12', '#5a1208'], dirt: ['#3d1420', '#240a15', '#10040a'], ambient: 'embers', music: 5 }
 ];
 
-// Шесть уровней. par — сколько пуфов нужно потратить на 3 звезды.
+// Уровни. par — сколько пуфов нужно потратить на 3 звезды.
+// В третьем аргументе build набор из скал, батутов, порталов, вихрей и кристаллов.
 const G = GROUND_Y;
 const LEVELS = [
   // 1. Знакомство: рогатка и ящик-бум
@@ -178,6 +194,244 @@ const LEVELS = [
       addP(x, G - 188, 34, true);
       addB(x, G - 276, 150, 24, 'stone');
       addB(x, G - 310, 44, 44, 'boom');
+    }
+  },
+  // 7. Силовые щиты: первый удар только снимает щит
+  {
+    biome: 0, par: 3, name: 0, gems: 2, heroes: ['rocky', 'trio', 'zip', 'rocky', 'magma'],
+    build(addB, addP, L) {
+      const a = 770, b = 1020;
+      addB(a - 55, G - 60, 24, 120, 'wood');
+      addB(a + 55, G - 60, 24, 120, 'wood');
+      addB(a, G - 132, 150, 24, 'wood');
+      addP(a, G - 24, 24, false, { shield: true });
+      addP(a, G - 168, 24, false, { shield: true });
+
+      addB(b - 60, G - 60, 26, 120, 'stone');
+      addB(b + 60, G - 60, 26, 120, 'stone');
+      addB(b, G - 132, 170, 24, 'wood');
+      addB(b - 45, G - 166, 44, 44, 'boom');
+      addP(b, G - 28, 28, true, { shield: true });
+      addP(b + 40, G - 168, 24, false);
+
+      L.gem(640, G - 330);
+      L.gem(895, G - 250);
+    }
+  },
+  // 8. Дроны: цели в воздухе, под ними нечего обрушить
+  {
+    biome: 1, par: 3, name: 1, gems: 2, heroes: ['trio', 'zip', 'trio', 'rocky', 'nimbus'],
+    build(addB, addP, L) {
+      addP(780, G - 340, 22, false, { hover: { ax: 90, speed: 1.1 } });
+      addP(960, G - 230, 22, false, { hover: { ay: 70, speed: 1.4, phase: 1 } });
+      addP(860, G - 370, 22, false, { hover: { ax: 50, ay: 25, speed: 0.9, phase: 2 } });
+      const x = 900;
+      addB(x - 55, G - 50, 22, 100, 'ice');
+      addB(x + 55, G - 50, 22, 100, 'ice');
+      addB(x, G - 111, 140, 22, 'wood');
+      addP(x, G - 24, 24, false);
+
+      L.gem(690, G - 230);
+      L.gem(930, G - 340);
+    }
+  },
+  // 9. Батут: стена закрывает ботов, зато можно перепрыгнуть
+  {
+    biome: 2, par: 3, name: 2, gems: 2, heroes: ['zip', 'rocky', 'nimbus', 'trio', 'rocky'],
+    build(addB, addP, L) {
+      L.rock(790, G - 160, 60, 320);
+      L.jelly(590, G - 10, 210, 20);
+      L.jelly(1170, G - 130, 24, 260);
+      addB(950, G - 50, 24, 100, 'wood');
+      addB(1070, G - 50, 24, 100, 'wood');
+      addB(1010, G - 112, 170, 24, 'wood');
+      addP(1010, G - 22, 22, false);
+      addP(880, G - 24, 24, false, { shield: true });
+      addP(1010, G - 146, 22, false);
+
+      L.gem(590, G - 230);
+      L.gem(790, G - 400);
+    }
+  },
+  // 10. Бур: сквозь стальные стены проходит только он
+  {
+    biome: 3, par: 3, name: 3, gems: 1, heroes: ['drill', 'rocky', 'drill', 'magma'],
+    build(addB, addP, L) {
+      const x = 900;
+      addB(x - 150, G - 70, 44, 140, 'steel');
+      addB(x - 105, G - 70, 44, 140, 'stone');
+      addB(x + 150, G - 70, 44, 140, 'steel');
+      addB(x, G - 153, 360, 26, 'steel');
+      addP(x - 25, G - 28, 28, true);
+      addP(x + 70, G - 22, 22, false);
+      addP(x + 60, G - 188, 22, false, { shield: true });
+      addB(x - 60, G - 196, 44, 60, 'stone');
+
+      L.gem(590, G - 150);
+    }
+  },
+  // 11. Портал: влетел здесь, вылетел за стеной
+  {
+    biome: 4, par: 3, name: 4, gems: 2, heroes: ['rocky', 'zip', 'trio', 'nimbus', 'magma', 'rocky'],
+    build(addB, addP, L) {
+      L.rock(740, G - 240, 50, 480);
+      L.portal(500, G - 330, 830, G - 300);
+      addB(930, G - 60, 26, 120, 'ice');
+      addB(1040, G - 60, 26, 120, 'ice');
+      addB(985, G - 132, 150, 24, 'wood');
+      addP(985, G - 28, 28, true, { shield: true });
+      addP(985, G - 168, 24, false);
+      addB(1130, G - 50, 26, 100, 'wood');
+      addB(1130, G - 112, 90, 24, 'wood');
+      addP(1130, G - 148, 24, false);
+
+      L.gem(830, G - 180);
+      L.gem(1100, G - 310);
+    }
+  },
+  // 12. Гигабот: первый босс
+  {
+    biome: 5, par: 5, name: 5, gems: 2, boss: true, heroes: ['magma', 'rocky', 'zip', 'nimbus', 'magma', 'trio', 'rocky'],
+    build(addB, addP, L) {
+      L.rock(780, G - 90, 90, 180);
+      addB(780, G - 202, 44, 44, 'boom');
+      L.rock(1100, G - 70, 80, 140);
+      addB(1100, G - 162, 44, 44, 'boom');
+      addB(880, G - 40, 24, 80, 'stone');
+      addB(1020, G - 40, 24, 80, 'stone');
+      addP(950, G - 24, 24, false, { shield: true });
+      addP(950, G - 280, 56, true, { boss: true, hp: 300, phases: [0.5], hover: { ax: 40, ay: 70, speed: 0.8 } });
+
+      L.gem(620, G - 360);
+      L.gem(860, G - 420);
+    }
+  },
+  // 13. Снежок: сталь почти ничего не берёт, пока её не заморозить
+  {
+    biome: 3, par: 4, name: 6, gems: 1, heroes: ['frost', 'rocky', 'frost', 'rocky', 'zip'],
+    build(addB, addP, L) {
+      [760, 1040].forEach((x, i) => {
+        addB(x - 72, G - 60, 34, 120, 'steel');
+        addB(x + 72, G - 60, 34, 120, 'steel');
+        addB(x, G - 132, 190, 24, 'steel');
+        addP(x, G - 26, 26, i === 1);
+        addP(x, G - 168, 24, false);
+      });
+
+      L.gem(900, G - 300);
+    }
+  },
+  // 14. Вихрь: полёт изгибается, прямых путей больше нет
+  {
+    biome: 4, par: 3, name: 7, gems: 3, heroes: ['trio', 'zip', 'rocky', 'nimbus'],
+    build(addB, addP, L) {
+      L.well(640, G - 290, 240, 0.6);
+      L.rock(800, G - 80, 44, 160);
+      addB(860, G - 40, 20, 80, 'ice');
+      addB(940, G - 40, 20, 80, 'ice');
+      addB(900, G - 91, 110, 22, 'ice');
+      addP(900, G - 24, 24, false);
+      L.rock(1040, G - 170, 170, 28);
+      addB(1000, G - 214, 22, 60, 'wood');
+      addB(1080, G - 214, 22, 60, 'wood');
+      addB(1040, G - 255, 120, 22, 'wood');
+      addP(1040, G - 208, 24, false, { shield: true });
+      addP(1040, G - 288, 22, false, { shield: true });
+      addP(780, G - 410, 22, false, { hover: { ax: 50, ay: 30, speed: 1 } });
+
+      L.gem(640, G - 440);
+      L.gem(540, G - 230);
+      L.gem(760, G - 330);
+    }
+  },
+  // 15. Бомботы: один взрыв тянет за собой другой
+  {
+    biome: 2, par: 2, name: 8, gems: 1, heroes: ['rocky', 'zip', 'trio', 'rocky'],
+    build(addB, addP, L) {
+      [740, 920, 1100].forEach((x, i) => {
+        addB(x - 50, G - 45, 26, 90, 'stone');
+        addB(x + 50, G - 45, 26, 90, 'stone');
+        addB(x, G - 101, 150, 22, 'wood');
+        addP(x, G - 24, 24, false, i === 2 ? { shield: true } : { volatile: true });
+        addP(x - 40, G - 136, 24, false, { volatile: true });
+        addP(x + 40, G - 136, 24, false, i === 2 ? { shield: true } : { volatile: true });
+      });
+
+      L.gem(920, G - 330);
+    }
+  },
+  // 16. Небесные острова: у каждого острова свой подход
+  {
+    biome: 1, par: 4, name: 9, gems: 3, heroes: ['trio', 'zip', 'nimbus', 'magma', 'rocky', 'drill', 'rocky'],
+    build(addB, addP, L) {
+      L.rock(760, G - 230, 170, 28);
+      addB(715, G - 274, 22, 60, 'wood');
+      addB(805, G - 274, 22, 60, 'wood');
+      addB(760, G - 315, 130, 22, 'wood');
+      addP(760, G - 266, 22, false);
+      addP(760, G - 348, 22, false);
+
+      L.rock(950, G - 270, 160, 28);
+      addB(910, G - 314, 20, 60, 'ice');
+      addB(990, G - 314, 20, 60, 'ice');
+      addB(950, G - 355, 120, 22, 'stone');
+      addP(950, G - 308, 24, false, { shield: true });
+
+      L.rock(1120, G - 100, 140, 28);
+      addP(1120, G - 144, 30, true);
+
+      addP(880, G - 130, 20, false, { hover: { ay: 60, speed: 1.3 } });
+      L.portal(500, G - 110, 880, G - 500);
+      L.jelly(1000, G - 10, 220, 20);
+
+      L.gem(630, G - 400);
+      L.gem(880, G - 420);
+      L.gem(1060, G - 230);
+    }
+  },
+  // 17. Хитрый лабиринт: три этажа, в каждый свой ключ
+  {
+    biome: 0, par: 5, name: 10, gems: 3, heroes: ['drill', 'frost', 'zip', 'magma', 'trio', 'rocky'],
+    build(addB, addP, L) {
+      L.rock(1000, G - 130, 300, 24);
+      L.rock(1000, G - 262, 300, 24);
+      L.rock(1165, G - 170, 30, 340);
+      addB(865, G - 59, 30, 118, 'steel');
+      addP(950, G - 24, 24, false);
+      addP(1060, G - 24, 24, false, { shield: true });
+      addB(865, G - 196, 30, 108, 'stone');
+      addP(960, G - 166, 24, false, { volatile: true });
+      addP(1060, G - 166, 24, false);
+      addB(930, G - 309, 22, 70, 'ice');
+      addB(1070, G - 309, 22, 70, 'ice');
+      addB(1000, G - 355, 170, 22, 'wood');
+      addP(1000, G - 302, 28, true);
+      L.jelly(1143, G - 59, 14, 118);
+      L.portal(560, G - 430, 930, G - 196);
+
+      L.gem(700, G - 200);
+      L.gem(560, G - 280);
+      L.gem(900, G - 380);
+    }
+  },
+  // 18. Гигабот возвращается: щит, бомботы-помощники и ярость
+  {
+    biome: 5, par: 6, name: 11, gems: 3, boss: true, heroes: ['magma', 'frost', 'drill', 'rocky', 'magma', 'nimbus', 'zip', 'rocky'],
+    build(addB, addP, L) {
+      L.rock(760, G - 60, 60, 120);
+      addB(760, G - 142, 44, 44, 'boom');
+      L.rock(1120, G - 70, 60, 140);
+      addB(1120, G - 162, 44, 44, 'boom');
+      addB(880, G - 50, 26, 100, 'stone');
+      addB(1040, G - 50, 26, 100, 'stone');
+      addB(960, G - 112, 190, 24, 'steel');
+      addP(960, G - 24, 24, false);
+      L.portal(520, G - 90, 800, G - 470);
+      addP(930, G - 290, 60, true, { boss: true, hp: 360, shield: true, phases: [0.5], bombs: true, hover: { ax: 90, ay: 70, speed: 0.7 } });
+
+      L.gem(630, G - 300);
+      L.gem(800, G - 330);
+      L.gem(1040, G - 260);
     }
   }
 ];

@@ -154,7 +154,7 @@ const Sound = {
   // Голос каждого пуфа при вылете
   voice(type) {
     if (!this.canPlay('voice', 60)) return;
-    const pitch = { rocky: 330, zip: 620, trio: 880, nimbus: 480, magma: 210 }[type] || 400;
+    const pitch = { rocky: 330, zip: 620, trio: 880, nimbus: 480, magma: 210, drill: 260, frost: 740 }[type] || 400;
     this.tone({ type: 'square', f0: pitch, f1: pitch * 1.7, dur: 0.11, vol: 0.05, at: 0.03 });
     this.tone({ type: 'sine', f0: pitch * 1.7, f1: pitch * 1.2, dur: 0.2, vol: 0.1, at: 0.13 });
   },
@@ -174,7 +174,46 @@ const Sound = {
     } else if (kind === 'drop') {
       this.tone({ type: 'square', f0: 1200, f1: 180, dur: 0.24, vol: 0.09 });
       this.noise({ f0: 3000, f1: 700, dur: 0.14, vol: 0.13, filter: 'bandpass', q: 3 });
+    } else if (kind === 'drill') {
+      this.tone({ type: 'sawtooth', f0: 90, f1: 420, dur: 0.42, vol: 0.13 });
+      this.noise({ f0: 1800, f1: 4200, dur: 0.42, vol: 0.12, filter: 'bandpass', q: 2 });
+    } else if (kind === 'frost') {
+      [1760, 1319, 1047, 880].forEach((f, i) => {
+        this.tone({ type: 'sine', f0: f, f1: f * 0.94, dur: 0.2, vol: 0.13, at: i * 0.05 });
+      });
+      this.noise({ f0: 6000, f1: 2400, dur: 0.36, vol: 0.1, filter: 'highpass' });
     }
+  },
+
+  portal() {
+    if (!this.canPlay('portal', 80)) return;
+    this.tone({ type: 'sine', f0: 280, f1: 1400, dur: 0.22, vol: 0.15 });
+    this.tone({ type: 'triangle', f0: 1400, f1: 500, dur: 0.22, vol: 0.12, at: 0.1 });
+  },
+
+  boing() {
+    if (!this.canPlay('boing', 70)) return;
+    this.tone({ type: 'sine', f0: 190, f1: 720, dur: 0.2, vol: 0.2 });
+    this.tone({ type: 'triangle', f0: 720, f1: 340, dur: 0.14, vol: 0.09, at: 0.12 });
+  },
+
+  gem() {
+    if (!this.canPlay('gem', 60)) return;
+    [1319, 1760, 2349].forEach((f, i) => {
+      this.tone({ type: 'triangle', f0: f, f1: f, dur: 0.16, vol: 0.13, at: i * 0.06 });
+    });
+  },
+
+  shieldPop() {
+    if (!this.canPlay('shield', 60)) return;
+    this.tone({ type: 'sine', f0: 1900, f1: 520, dur: 0.2, vol: 0.14 });
+    this.noise({ f0: 5200, f1: 1800, dur: 0.22, vol: 0.13, filter: 'highpass' });
+  },
+
+  bossRage() {
+    if (!this.canPlay('rage', 200)) return;
+    this.tone({ type: 'sawtooth', f0: 150, f1: 55, dur: 0.6, vol: 0.2 });
+    this.tone({ type: 'square', f0: 300, f1: 110, dur: 0.5, vol: 0.07, at: 0.06 });
   },
 
   hit(mat, strength) {

@@ -6,6 +6,7 @@ const LEVEL_COUNT = LEVELS.length;
 const Save = {
   stars: new Array(LEVEL_COUNT).fill(0),
   best: new Array(LEVEL_COUNT).fill(0),
+  gems: new Array(LEVEL_COUNT).fill(0),
   unlocked: 1,
   music: true,
   sfx: true,
@@ -18,6 +19,10 @@ const Save = {
 
   totalStars() {
     return this.stars.reduce((a, b) => a + b, 0);
+  },
+
+  totalGems() {
+    return this.gems.reduce((a, b) => a + b, 0);
   },
 
   nextLevel() {
@@ -38,7 +43,7 @@ const Save = {
 
   serialize() {
     return JSON.stringify({
-      v: 2, stars: this.stars, best: this.best, unlocked: this.unlocked,
+      v: 2, stars: this.stars, best: this.best, gems: this.gems, unlocked: this.unlocked,
       music: this.music, sfx: this.sfx, shake: this.shake, seen: this.seen
     });
   },
@@ -54,9 +59,12 @@ const Save = {
     if (!d || typeof d !== 'object') return;
     const stars = Array.isArray(d.stars) ? d.stars : Array.isArray(d.levelStars) ? d.levelStars : [];
     const best = Array.isArray(d.best) ? d.best : [];
+    const gems = Array.isArray(d.gems) ? d.gems : [];
     for (let i = 0; i < LEVEL_COUNT; i++) {
       const s = Math.floor(Number(stars[i]));
       const b = Math.floor(Number(best[i]));
+      const g = Math.floor(Number(gems[i]));
+      if (g > 0) this.gems[i] = Math.max(this.gems[i], Math.min(g, LEVELS[i].gems || 0));
       if (s > 0) this.stars[i] = Math.max(this.stars[i], Math.min(s, 3));
       if (b > 0 && Number.isSafeInteger(b)) this.best[i] = Math.max(this.best[i], b);
       if (this.stars[i] > 0) this.unlocked = Math.max(this.unlocked, Math.min(i + 2, LEVEL_COUNT));
@@ -300,6 +308,12 @@ const UI = {
   updateHud() {
     $('hud-level').textContent = level + 1;
     this.setScore(score);
+    this.updateGems();
+  },
+
+  updateGems() {
+    $('hud-gems-wrap').classList.toggle('hidden', !gems.length);
+    $('hud-gems').textContent = `${gemsTaken}/${gems.length}`;
   },
 
   setScore(v) {
@@ -351,6 +365,9 @@ const UI = {
     $('title-best-wrap').classList.toggle('hidden', !has);
     $('title-best').textContent = formatNumber(Save.total());
     $('title-stars').textContent = `${Save.totalStars()}/${LEVEL_COUNT * 3}`;
+    const allGems = LEVELS.reduce((a, lv) => a + (lv.gems || 0), 0);
+    $('title-gems').textContent = `${Save.totalGems()}/${allGems}`;
+    $('title-gems-wrap').classList.toggle('hidden', Save.totalGems() === 0);
   },
 
   buildLevels() {
@@ -360,7 +377,7 @@ const UI = {
       const open = i < Save.unlocked;
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'level-card' + (open ? '' : ' locked') + (i === level ? ' current' : '');
+      btn.className = 'level-card' + (open ? '' : ' locked') + (i === level ? ' current' : '') + (lv.boss ? ' boss' : '');
       btn.disabled = !open;
       btn.setAttribute('aria-label', `${t('level')} ${i + 1}${open ? '' : ` — ${t('locked')}`}`);
       const thumb = biomeThumb(lv.biome, 200, 120);
@@ -379,6 +396,16 @@ const UI = {
         stars.appendChild(st);
       }
       btn.appendChild(stars);
+      if (lv.gems) {
+        const row = document.createElement('span');
+        row.className = 'mini-gems';
+        for (let g = 0; g < lv.gems; g++) {
+          const ge = document.createElement('i');
+          if (g < Save.gems[i]) ge.className = 'lit';
+          row.appendChild(ge);
+        }
+        btn.appendChild(row);
+      }
       if (open) {
         btn.addEventListener('click', () => {
           Sound.ui();
@@ -398,6 +425,8 @@ const UI = {
     $('result-new').classList.toggle('hidden', !r.newBest);
     $('result-bonus-wrap').classList.toggle('hidden', !r.bonus);
     $('result-bonus').textContent = `+${formatNumber(r.bonus)}`;
+    $('result-gems-wrap').classList.toggle('hidden', !r.win || !gems.length);
+    $('result-gems').textContent = `${gemsTaken}/${gems.length}`;
     $('result-tip').classList.toggle('hidden', r.win);
     $('result-tip').textContent = levelFails[r.level] <= MAX_EXTRA_HEROES ? t('loseTipExtra') : t('loseTip');
     $('btn-next').classList.toggle('hidden', !r.win);

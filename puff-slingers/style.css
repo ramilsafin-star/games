@@ -173,6 +173,15 @@ button {
 .chip-level b { color: #7ef9ff; }
 .chip-score { color: var(--gold); }
 .chip-score svg { width: 19px; height: 19px; }
+.chip-gems { color: #7ef9ff; }
+.gem-ico {
+  display: inline-block;
+  width: 16px;
+  height: 17px;
+  vertical-align: -2px;
+  background: linear-gradient(160deg, #e8feff, #39d8ff 55%, #1789e0);
+  clip-path: polygon(50% 100%, 0 36%, 22% 0, 78% 0, 100% 36%);
+}
 
 #hint {
   position: fixed;
@@ -453,6 +462,22 @@ button {
   clip-path: polygon(50% 0, 63% 33%, 98% 36%, 71% 59%, 80% 94%, 50% 75%, 20% 94%, 29% 59%, 2% 36%, 37% 33%);
 }
 .mini-stars i.lit { background: var(--gold); }
+.level-card .mini-gems {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: flex;
+  gap: 2px;
+}
+.mini-gems i {
+  width: 11px;
+  height: 12px;
+  background: rgba(26, 8, 56, 0.72);
+  clip-path: polygon(50% 100%, 0 36%, 22% 0, 78% 0, 100% 36%);
+}
+.mini-gems i.lit { background: #4fe3ff; }
+.level-card.locked .mini-gems { display: none; }
+.level-card.boss { border-color: #d61f6b; }
 .level-card.current { outline: 3px solid var(--pink); outline-offset: 1px; }
 .level-card:not(.locked):hover { filter: brightness(1.12); transform: translateY(-2px); }
 .level-card:not(.locked):active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }

@@ -1188,10 +1188,11 @@ ROAD_SPECS.limo = {
 };
 ROAD_SPECS.monster = { ...ROAD_SPECS.suv };
 ROAD_SPECS.tow = { ...ROAD_SPECS.pickup };
-ROAD_SPECS.police = ROAD_SPECS.taxi = ROAD_SPECS.sedan;
+ROAD_SPECS.taxi = ROAD_SPECS.sedan;
+ROAD_SPECS.police = ROAD_SPECS.suv;
 function roadCar(p, type, paint) {
   const kind = CARS[type].kind,
-    o = ROAD_SPECS[kind] || ROAD_SPECS.sedan,
+    o = (type === "ev" ? ROAD_SPECS.compact : ROAD_SPECS[kind]) || ROAD_SPECS.sedan,
     monster = kind === "monster",
     tyre = monster ? 0.84 : o.r,
     body = shell(p, o, paint);
@@ -1234,9 +1235,19 @@ function roadCar(p, type, paint) {
         rod(p, [side * 0.82, 0.99, z], [side * 0.66, 1.46, z], 0.022, trim);
     }
   if (type === "police") {
-    for (const side of [-1, 1])
-      box(p, side * (body.width(0) + 0.002), 0.62, 0, 0.012, 0.24, o.L * 0.58, surface("#155098", 0.3, 0.4));
-    lightbar(p, 1.56, 0.35);
+    for (const side of [-1, 1]) {
+      box(p, side * (body.width(0) + 0.012), 0.84, 0.06, 0.024, 0.56, o.L * 0.52, surface("#e7eff5", 0.34, 0.32), 0.015);
+      box(p, side * (body.width(0) + 0.033), 0.80, 0.06, 0.022, 0.15, o.L * 0.59, surface("#164988", 0.3, 0.4));
+    }
+    lightbar(p, 1.94, 0.22);
+    for (const side of [-1, 1]) {
+      rod(p, [side * 0.62, 1.91, -0.25], [side * 0.62, 1.91, 1.65], 0.035, trim);
+      box(p, side * 0.49, 1.07, 2.38, 0.7, 0.12, 0.04, tail, 0.02);
+    }
+  }
+  if (type === "ev") {
+    box(p, 0, 0.89, o.L / 2, 1.55, 0.066, 0.06, tail, 0.025);
+    box(p, 0, 0.78, -o.L / 2, 1.34, 0.05, 0.06, head, 0.02);
   }
   if (type === "taxi") {
     box(p, 0, 1.58, 0.32, 0.6, 0.2, 0.26, lamp("#ffe7a1", 0.7), 0.05);
@@ -1602,10 +1613,17 @@ function tractor(p, paint) {
   const blade = new T.Group();
   blade.name = "blade";
   p.add(blade);
-  for (const x of [-0.55, 0.55])
-    rod(blade, [x, 0.82, -1.05], [x, 0.36, -2.48], 0.085, alloy);
-  box(blade, 0, 0.44, -2.56, 2.74, 0.78, 0.14, surface("#d9dde0", 0.75, 0.36), 0.05);
-  box(blade, 0, 0.08, -2.62, 2.78, 0.09, 0.12, alloy, 0.02);
+  const ochre = surface("#f1a91f", 0.48, 0.36);
+  for (const x of [-0.85, 0.85]) {
+    rod(blade, [x, 1.23, -0.78], [x, 0.53, -2.48], 0.12, ochre);
+    rod(blade, [x, 1.34, -1.04], [x, 0.81, -2.36], 0.06, chrome);
+  }
+  box(blade, 0, 0.67, -2.53, 3.15, 1.1, 0.24, ochre, 0.09);
+  box(blade, 0, 0.18, -2.78, 3.2, 0.16, 0.59, alloy, 0.04);
+  for (const side of [-1, 1])
+    box(blade, side * 1.5, 0.48, -2.74, 0.14, 0.63, 0.53, ochre, 0.04);
+  for (const x of [-1.23, -0.62, 0, 0.62, 1.23])
+    box(blade, x, 0.17, -3.11, 0.18, 0.13, 0.4, chrome, 0.03);
   bake(blade);
 }
 
@@ -2166,7 +2184,7 @@ function flatten(p) {
   out.add(merged);
   return out;
 }
-const CONCEPT_TYPES = ["racer", "coupe", "hyper", "police", "ev", "comet", "neon"];
+const CONCEPT_TYPES = ["racer", "coupe", "hyper", "comet", "neon"];
 // Модель догрузилась позже старта: простые заготовки больше не нужны
 export function forgetConceptCars() {
   for (const type of CONCEPT_TYPES) templates.delete(type);
@@ -2194,7 +2212,6 @@ export function vehicle(type, mode = false) {
       core.position.set(0, size.y * 0.36, (bounds.min.z + bounds.max.z) / 2);
       core.scale.set(size.x * 0.44, size.y * 0.27, size.z * 0.44);
       p.add(core);
-      if (type === "police") lightbar(p, bounds.max.y + 0.085, 0.12);
       if (type === "coupe")
         wing(p, bounds.max.y - 0.3, bounds.max.z - 0.42, 1.55, surface("#10325f", 0.5, 0.3));
       if (type === "hyper")
@@ -2206,15 +2223,6 @@ export function vehicle(type, mode = false) {
         box(p, 0, 0.05, (bounds.min.z + bounds.max.z) / 2, size.x * 0.66, 0.02, size.z * 0.7, lamp("#27e6ff", 1.4));
         for (const s of [-1, 1])
           box(p, s * size.x * 0.48, size.y * 0.36, 0, 0.03, 0.05, size.z * 0.5, lamp("#ff37c7", 2));
-      }
-      if (type === "ev") {
-        const glow = new T.MeshStandardMaterial({
-          color: "#7ff1ff",
-          emissive: "#39d6ff",
-          emissiveIntensity: 1.6,
-        });
-        box(p, 0, bounds.max.y * 0.5, bounds.min.z - 0.01, 1.5, 0.05, 0.05, glow);
-        box(p, 0, bounds.max.y * 0.56, bounds.max.z + 0.01, 1.5, 0.05, 0.05, glow);
       }
     } else {
       if (type === "tank") tank(p, paint);
@@ -2278,7 +2286,7 @@ export function vehicle(type, mode = false) {
   });
   return clone;
 }
-export function pose(model, type, time, travel, ability, steer, recoil) {
+export function pose(model, type, time, travel, ability, steer, recoil, stroke = 0) {
   for (const wheel of model.userData.wheels) {
     wheel.quaternion
       .fromArray(wheel.userData.rest)
@@ -2292,20 +2300,25 @@ export function pose(model, type, time, travel, ability, steer, recoil) {
   if (type === "tank") animateTracks(model, travel);
   const part = model.userData.parts;
   if (part.trailer) part.trailer.rotation.y = steer * 0.35;
-  if (part.blade) part.blade.position.y = ability === "plow" ? 0 : 0.45;
+  if (part.blade) {
+    const extend = bladeExtension(stroke);
+    part.blade.position.set(0, 0.62 - extend * 0.5, -1.35 * extend);
+    part.blade.rotation.x = -0.05 + 0.19 * Math.sin(stroke * Math.PI) * extend;
+  }
   if (part.gun) part.gun.position.z = recoil * 0.022;
   if (part.drum) part.drum.rotation.z = time * (ability === "tornado" ? 9 : 1.6);
-  if (part.reel) part.reel.rotation.x = -time * (ability === "plow" ? 9 : 2.5);
+  if (part.reel) part.reel.rotation.x = -time * (ability === "harvest" ? 9 : 2.5);
   if (part.bed)
-    part.bed.rotation.x = ability === "starfall" ? 0.75 : 0;
+    part.bed.rotation.x = ability === "tip" ? 0.75 : 0;
   if (part.arm)
     part.arm.rotation.x =
-      ability === "plow" ? -0.42 : Math.sin(time * 1.4) * 0.05;
+      ability === "scoop" ? -0.42 : Math.sin(time * 1.4) * 0.05;
+  if (part.arm) part.arm.rotation.y = ability === "scoop" ? 0.65 * Math.sin(time * 3.5) : 0;
   if (part.saucer) {
     part.saucer.position.y = 0.95 + Math.sin(time * 3) * 0.09;
     part.saucer.rotation.z = steer * 0.8;
     part.lights.rotation.y = time * 2.4;
-    part.beam.visible = ability === "express";
+    part.beam.visible = ability === "beam";
   }
   if (part.wingL) {
     const flying = ability === "fly",

@@ -229,7 +229,7 @@ const Sound = {
     if (effect === "cannon") {
       this.pop();
       this.gift();
-    } else if (effect === "water") {
+    } else if (effect === "water" || effect === "wave") {
       this.noise({
         f0: 1800,
         f1: 900,
@@ -238,7 +238,7 @@ const Sound = {
         filter: "bandpass",
       });
     } else if (
-      ["freeze", "shield", "ghost", "mini", "magnet"].includes(effect)
+      ["freeze", "shield", "ghost", "mini", "magnet", "beam"].includes(effect)
     ) {
       [440, 660, 880].forEach((f, i) =>
         this.tone({
@@ -250,11 +250,11 @@ const Sound = {
           at: i * 0.07,
         }),
       );
-    } else if (["plow", "hook", "monster", "vacuum"].includes(effect)) {
+    } else if (["plow", "scoop", "harvest", "tip", "hook", "monster", "vacuum"].includes(effect)) {
       this.noise({ f0: 350, f1: 700, dur: 0.35, vol: 0.12 });
       this.tone({ type: "triangle", f0: 90, f1: 160, dur: 0.4, vol: 0.12 });
     } else if (
-      ["starfall", "double", "express", "rescue", "rainbow", "fly"].includes(effect)
+      ["starfall", "double", "carpet", "express", "rescue", "rainbow", "fly"].includes(effect)
     ) {
       this.gift();
     } else {
