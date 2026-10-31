@@ -468,12 +468,30 @@ function withTimeout(promise, ms) {
   return Promise.race([promise, new Promise((resolve) => setTimeout(resolve, ms))]);
 }
 
+// Трёхмерная версия включается, только если браузер с ней справится. Иначе игра идёт в двумерной
+async function start3D() {
+  const m = /[?&]gl=([01])/.exec(location.search);
+  if (m && m[1] === '0') return;
+  try {
+    const gl = document.getElementById('gl');
+    const mod = await withTimeout(import('./gl/scene3d.js').then((x) => x.createScene3D(gl, !!m)), 15000);
+    if (!mod) return;
+    scene3d = mod;
+    gl.addEventListener('webglcontextlost', () => disable3D('потерян контекст WebGL'));
+    gl.hidden = false;
+    document.getElementById('vignette').hidden = true;
+  } catch (e) {
+    console.warn('3D недоступно, работает двумерная версия:', e && e.message);
+  }
+}
+
 async function boot() {
   // Тем, кто просил систему меньше анимировать, сразу отключаем тряску и вспышки
   if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) Save.shake = false;
 
   Platform.init();
   Sound.init();
+  await start3D();
 
   // Сразу рисуем живую сцену: это и есть экран загрузки для YouTube
   resize();

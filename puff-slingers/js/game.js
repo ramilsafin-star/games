@@ -6,7 +6,21 @@ const engine = Engine.create({ enableSleeping: true, positionIterations: 8, velo
 const world = engine.world;
 
 const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d', { alpha: false });
+const ctx = canvas.getContext('2d');
+// Трёхмерная отрисовка; если браузер её не тянет, остаётся прежняя двумерная
+let scene3d = null;
+let lockQuality = false;
+let slowFrames3d = 0;
+
+// Если 3D сломалось или не тянет, игра продолжается в двумерной отрисовке
+function disable3D(why) {
+  if (!scene3d) return;
+  console.warn('3D выключено:', why);
+  scene3d = null;
+  document.getElementById('gl').hidden = true;
+  document.getElementById('vignette').hidden = false;
+  applyViewScale();
+}
 
 // Игровые объекты
 let level = 0;
@@ -1295,6 +1309,10 @@ function baseCamY(zoom) {
 
 function applyViewScale() {
   if (!vw) return;
+  if (scene3d) {
+    Background.prepareAmbient(cfg.biome);
+    return;
+  }
   Art.setScale(clamp(overview.flightZoom * 1.25 * dpr, 1.5, 4));
   const layerK = lerp(overview.zoom, 1, 0.5);
   Background.build(cfg.biome, clamp(Math.max(layerK, overview.zoom) * dpr, 1, quality >= 2 ? 2 : 1.25));
@@ -1376,11 +1394,17 @@ function updateVisuals(dt) {
 
   // Пружинящая резинка
   if (!slingHero || slingHero.hop < 1) {
-    const a = { x: -recoil.x * 320 - recoil.vx * 11, y: -recoil.y * 320 - recoil.vy * 11 };
-    recoil.vx += a.x * dt;
-    recoil.vy += a.y * dt;
-    recoil.x += recoil.vx * dt;
-    recoil.y += recoil.vy * dt;
+    // Мелкими шагами: при редких кадрах жёсткая пружина иначе разлетается
+    const steps = Math.ceil(dt / 0.012);
+    const h = dt / steps;
+    for (let i = 0; i < steps; i++) {
+      const ax = -recoil.x * 320 - recoil.vx * 11;
+      const ay = -recoil.y * 320 - recoil.vy * 11;
+      recoil.vx += ax * h;
+      recoil.vy += ay * h;
+      recoil.x += recoil.vx * h;
+      recoil.y += recoil.vy * h;
+    }
   }
 
   if (slingHero) {
@@ -1454,10 +1478,17 @@ function updateVisuals(dt) {
   perfTime += dt;
   perfFrames++;
   if (perfTime >= 1.2) {
-    if (perfTime / perfFrames > 0.026 && quality > 0) {
+    const frame = perfTime / perfFrames;
+    if (frame > 0.026 && quality > 0 && !lockQuality) {
       quality--;
       FX.max = quality === 0 ? 180 : 300;
       resize();
+    } else if (scene3d && quality === 0 && frame > 0.045 && !lockQuality) {
+      // Даже самые простые настройки не тянут: лучше плавная двумерная картинка
+      slowFrames3d++;
+      if (slowFrames3d >= 3) disable3D('слишком медленно');
+    } else {
+      slowFrames3d = 0;
     }
     perfTime = 0;
     perfFrames = 0;
@@ -1638,6 +1669,11 @@ function heroLook(h) {
 }
 
 function drawFlyingHero(h) {
+  drawFlyingBody(h);
+  drawHeroHint(h);
+}
+
+function drawFlyingBody(h) {
   const look = heroLook(h);
   const idleBlink = (time * 1000 + h.id * 733) % 2900 < 110;
   const o = {
@@ -1653,7 +1689,10 @@ function drawFlyingHero(h) {
     fuse: h.fuse > 0
   };
   drawHero(ctx, h.heroType, h.position.x, h.position.y, h.circleRadius, o);
-  // Кольцо-подсказка: способность ещё доступна
+}
+
+// Кольцо-подсказка: способность ещё доступна
+function drawHeroHint(h) {
   if (h === primary && abilityReady(h)) {
     const pulse = 0.5 + 0.5 * Math.sin(time * 9);
     const R = h.circleRadius + 9 + pulse * 7;
@@ -1808,6 +1847,30 @@ function render(dt) {
 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const gy = (GROUND_Y - cam.y) * zoom + vh / 2 + sy;
+  if (scene3d) {
+    try {
+      scene3d.draw({ x: cam.x, y: cam.y, zoom, sx, sy, tilt, vw, vh, dpr, quality, dt, time });
+    } catch (e) {
+      disable3D(e && e.message);
+      return;
+    }
+    ctx.clearRect(0, 0, vw, vh);
+    const ox3 = vw / 2 + sx;
+    const oy3 = vh / 2 + sy;
+    const cos3 = Math.cos(tilt) * zoom;
+    const sin3 = Math.sin(tilt) * zoom;
+    ctx.setTransform(dpr * cos3, dpr * sin3, -dpr * sin3, dpr * cos3, dpr * (ox3 - cos3 * cam.x + sin3 * cam.y), dpr * (oy3 - sin3 * cam.x - cos3 * cam.y));
+    flying.forEach(drawHeroHint);
+    bots.forEach((b) => {
+      if (b.isBoss) drawBossBar(ctx, b, cam.zoom);
+    });
+    drawAim();
+    FX.drawTexts(ctx, zoom);
+    drawTutorialHand();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    Background.drawAmbient(ctx, vw, vh, gy, dt, time, UI.pausesSim(), quality);
+    return;
+  }
   Background.drawSky(ctx, vw, vh, Math.round(gy / 6) * 6, cam.x, zoom, time, quality);
 
   const layerK = lerp(zoom, 1, 0.5);

@@ -48,6 +48,39 @@ html, body {
   touch-action: none;
 }
 
+#boot-loader {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  gap: 14px;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  pointer-events: none;
+}
+#boot-loader i {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #ff4d5e;
+  animation: boot-hop 0.9s ease-in-out infinite;
+}
+#boot-loader i:nth-child(2) { background: #ffcf1f; animation-delay: 0.15s; }
+#boot-loader i:nth-child(3) { background: #19c6f2; animation-delay: 0.3s; }
+@keyframes boot-hop {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-18px); }
+}
+body.booted #boot-loader { display: none; }
+canvas#gl {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+canvas#gl[hidden] { display: none; }
 canvas#game {
   position: fixed;
   inset: 0;

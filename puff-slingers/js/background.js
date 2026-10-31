@@ -750,6 +750,13 @@ const Background = {
   pxScale: 1.5,
 
   // Спрайты неба и фона строятся один раз на биом
+  // В 3D нужны только летающие в воздухе частицы
+  prepareAmbient(index) {
+    if (index === this.ambientIndex) return;
+    this.ambientIndex = index;
+    this.buildAmbient(BIOMES[index]);
+  },
+
   build(index, pxScale) {
     if (index === this.index && Math.abs(pxScale - this.pxScale) < 0.05) return;
     const b = BIOMES[index];
