@@ -14,4 +14,11 @@ const GAMES = [
     cover: "covers/puff-slingers.jpg",
     color: "#7c5cff",
   },
+  {
+    id: "domik",
+    title: "Домик на дереве",
+    url: "domik/",
+    cover: "covers/domik.jpg",
+    color: "#2fbf71",
+  },
 ];
