@@ -994,7 +994,7 @@ export class DriveView {
     }
     this.cam.lookAt(this.look);
     // Чем быстрее едем, тем шире кадр, а в поворотах камера чуть заваливается
-    const rush = T.MathUtils.clamp((game.speedNow - 500) / 430, 0, 1);
+    const rush = T.MathUtils.clamp((game.speedNow - 600) / 500, 0, 1);
     this.cam.fov = T.MathUtils.lerp(this.cam.fov, 51 + rush * 19, smooth);
     this.cam.updateProjectionMatrix();
     this.cam.rotateZ(

@@ -1,4 +1,4 @@
-const CACHE = "bibika-v17-portal";
+const CACHE = "bibika-v18-fast";
 const FILES = [
   "./",
   "./index.html",

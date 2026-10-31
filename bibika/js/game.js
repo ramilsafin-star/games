@@ -4,15 +4,15 @@ const $ = (id) => document.getElementById(id);
 const canvas = $("game");
 const TARGET_STARS = 92,
   // Скорость растёт весь заезд: чем дальше, тем быстрее
-  CRUISE_START = 500,
-  CRUISE_MAX = 660,
-  CRUISE_GAIN = 2.6,
+  CRUISE_START = 600,
+  CRUISE_MAX = 800,
+  CRUISE_GAIN = 3.2,
   LOOP_RATE = 2.5,
   BOOST_TIME = 1.7,
   BOOST_FACTOR = 1.5,
   ROAD_H = 900,
   CAR_Y = ROAD_H * 0.73,
-  SPAWN_AHEAD = 4000,
+  SPAWN_AHEAD = 4800,
   LANES = [176, 300, 424],
   AIR_TIME = 1.25,
   AIR_HEIGHT = 3.1,
@@ -796,10 +796,10 @@ function activatePower() {
     // Вплотную залп накрывает сразу, остальные преграды находят самонаводящиеся шары:
     // сначала ближние и на любой полосе, а не только дальние прямо по курсу
     const ahead = Game.entities
-      .filter((e) => isObstacle(e) && e.y < c.y + 60 && c.y - e.y < 1900)
+      .filter((e) => isObstacle(e) && e.y < c.y + 60 && c.y - e.y < 2300)
       .sort((a, b) => b.y - a.y);
     for (const e of ahead)
-      if (c.y - e.y < 320 && Math.abs(e.x - c.x) < 170) {
+      if (c.y - e.y < 380 && Math.abs(e.x - c.x) < 170) {
         confetti(e.x, e.y, 24);
         clearObstacle(e, true);
       }
@@ -809,7 +809,7 @@ function activatePower() {
         x: c.x + (i - 1) * 24,
         y: c.y - 60 - i * 8,
         vx: (i - 1) * 35,
-        vy: -1700,
+        vy: -2050,
         life: 2.3,
         target: rest[i] || rest[0] || null,
       });
@@ -1292,7 +1292,7 @@ function update(dt) {
   if (!done) {
     Game.heliIn -= dt;
     if (!Game.heli && Game.heliIn <= 0) {
-      Game.heli = { t: 0, x: -520, y: c.y - 720, alt: 11, vx: 0, drops: 2, dropIn: 2.6 };
+      Game.heli = { t: 0, x: -520, y: c.y - 860, alt: 11, vx: 0, drops: 2, dropIn: 2.6 };
       Sound.whoosh();
       if (!Game.spoken.has("heli")) {
         Game.spoken.add("heli");
@@ -1358,8 +1358,8 @@ function update(dt) {
   }
   const keys = Game.keys;
   if (keys.size) {
-    if (keys.has("left")) c.tx -= 450 * dt;
-    if (keys.has("right")) c.tx += 450 * dt;
+    if (keys.has("left")) c.tx -= 520 * dt;
+    if (keys.has("right")) c.tx += 520 * dt;
     if (keys.has("up")) c.ty -= 280 * dt;
     if (keys.has("down")) c.ty += 280 * dt;
     markSteered();
@@ -1372,7 +1372,7 @@ function update(dt) {
   const bounds = fx === "allterrain" ? [53, 547] : [145, 455];
   c.tx = clamp(c.tx, ...bounds);
   c.ty = clamp(c.ty, Game.h * 0.38, Game.h - 165);
-  const blend = 1 - Math.exp(-dt * 18),
+  const blend = 1 - Math.exp(-dt * 20),
     oldX = c.x;
   c.x = lerp(c.x, c.tx, blend);
   c.y = lerp(c.y, c.ty, blend);
@@ -1483,7 +1483,7 @@ function update(dt) {
     const ahead = c.y - e.y,
       dx = Math.abs(e.x - c.x);
     if (e.kind === "traffic") {
-      if (helping && ahead > 140 && ahead < 1500 && dx < 70) giveWay(e);
+      if (helping && ahead > 170 && ahead < 1800 && dx < 70) giveWay(e);
       if (e.tx !== undefined) {
         const before = e.x;
         e.x = lerp(e.x, e.tx, 1 - Math.exp(-dt * 3.2));
@@ -1502,8 +1502,8 @@ function update(dt) {
     if (e.kind === "gift") {
       e.alt = Math.max(0, e.alt + e.valt * dt);
       if (done) continue;
-      if (dx < reach && ahead > 0 && ahead < 520)
-        e.x = lerp(e.x, c.x, 1 - Math.exp(-dt * 3.6));
+      if (dx < reach && ahead > 0 && ahead < 640)
+        e.x = lerp(e.x, c.x, 1 - Math.exp(-dt * 4.4));
       if (
         Math.abs(e.x - c.x) < cw + 34 &&
         Math.abs(e.y - c.y) < ch + 32 &&
@@ -1520,8 +1520,8 @@ function update(dt) {
       continue;
     }
     if (["ramp", "boost", "star"].includes(e.kind)) {
-      if (helping && ahead > 300 && ahead < 2200)
-        e.x = lerp(e.x, c.x, 1 - Math.exp(-dt * 1.3));
+      if (helping && ahead > 360 && ahead < 2600)
+        e.x = lerp(e.x, c.x, 1 - Math.exp(-dt * 1.6));
     }
     if (e.kind === "ramp") {
       if (!done && !e.used && !airborne && dx < 62 && Math.abs(ahead) < 40)
@@ -1550,7 +1550,7 @@ function update(dt) {
       if (magnet || express || rescue) {
         e.x = lerp(e.x, c.x, 1 - Math.exp(-dt * 9));
         e.y = lerp(e.y, c.y, 1 - Math.exp(-dt * 9));
-      } else if (!e.air && dx < reach && ahead > 0 && ahead < 520)
+      } else if (!e.air && dx < reach && ahead > 0 && ahead < 640)
         // Лёгкий магнит прощает неточный палец и сильнее помогает после долгой неудачи
         e.x = lerp(e.x, c.x, 1 - Math.exp(-dt * (reach > 100 ? 7 : 3.6)));
       const reachable = !e.air || airborne || magnet || express || rescue;
@@ -1577,24 +1577,24 @@ function update(dt) {
       fx === "wind" ||
       (fx === "siren" && e.kind === "traffic" && dx < 95 && ahead > 0)
     ) {
-      if (ahead > -80 && ahead < 1300) {
+      if (ahead > -80 && ahead < 1550) {
         e.tx = undefined;
         e.x += (e.x < c.x ? -1 : 1) * dt * (fx === "megahorn" ? 420 : 320);
         e.drift = e.x < c.x ? -0.19 : 0.19;
         if (e.x < 65 || e.x > 535) e.dead = true;
       }
     }
-    if (fx === "tornado" && ahead > -60 && ahead < 1050) {
+    if (fx === "tornado" && ahead > -60 && ahead < 1250) {
       if (e.kind === "cone") launchCone(e);
       else clearObstacle(e, true);
       continue;
     }
-    if (fx === "vacuum" && ahead > -40 && ahead < 850 && dx < 175)
+    if (fx === "vacuum" && ahead > -40 && ahead < 1020 && dx < 175)
       clearObstacle(e, true);
     // Суперсилы действуют и вплотную, и с запасом на большой скорости
-    if (fx === "water" && ahead > -40 && ahead < 950 && dx < 105)
+    if (fx === "water" && ahead > -40 && ahead < 1150 && dx < 105)
       clearObstacle(e);
-    if (fx === "plow" && ahead > -40 && ahead < 380 && dx < 118)
+    if (fx === "plow" && ahead > -40 && ahead < 460 && dx < 118)
       clearObstacle(e, true);
     if (fx === "rescue" && Math.hypot(e.x - c.x, e.y - c.y) < 340)
       clearObstacle(e, true);

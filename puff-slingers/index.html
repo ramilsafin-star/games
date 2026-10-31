@@ -18,7 +18,7 @@
       <div class="chip chip-level"><span data-i18n="level"></span> <b id="hud-level">1</b></div>
       <div class="chip chip-score"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l3 6.6 7.2.8-5.4 4.8 1.5 7.1L12 17.7l-6.3 3.6 1.5-7.1L1.800 9.400 9 8.600z" fill="currentColor"/></svg><b id="hud-score">0</b></div>
     </div>
-    <div class="hud-right">
+    <div class="hud-right"><a class="icon-btn" href="../" aria-label="Все игры" style="display:grid;place-items:center;padding:0;font-size:26px;line-height:1;text-decoration:none">🎮</a>
       <button id="btn-restart" class="icon-btn" type="button" aria-label="Restart">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V1.500L6.500 6.500 12 11.500V8a6 6 0 1 1-6 6H3a9 9 0 1 0 9-9z" fill="currentColor"/></svg>
       </button>
@@ -54,7 +54,7 @@
         <button id="btn-pause-restart" class="btn secondary" type="button" data-i18n="restart"></button>
         <button id="btn-pause-levels" class="btn secondary" type="button" data-i18n="levels"></button>
       </div>
-      <div class="settings">
+      <a class="btn secondary" href="../" style="display:block;text-align:center;text-decoration:none">🎮 Все игры</a><div class="settings">
         <button id="tgl-music" class="toggle" type="button"><span data-i18n="music"></span><span class="state"></span></button>
         <button id="tgl-sfx" class="toggle" type="button"><span data-i18n="sfx"></span><span class="state"></span></button>
         <button id="tgl-shake" class="toggle" type="button"><span data-i18n="shake"></span><span class="state"></span></button>
@@ -64,7 +64,7 @@
   </section>
 
   <!-- Выбор уровня -->
-  <section id="screen-levels" class="screen">
+  <section id="screen-levels" class="screen"><a href="../" aria-label="Все игры" style="position:fixed;left:calc(12px + env(safe-area-inset-left,0px));top:calc(12px + env(safe-area-inset-top,0px));z-index:50;width:52px;height:52px;border-radius:50%;background:#fffffff0;box-shadow:0 4px 0 #0003;display:grid;place-items:center;font-size:27px;text-decoration:none">🎮</a>
     <div class="card card-wide">
       <h2 class="card-title" data-i18n="selectLevel"></h2>
       <div id="levels-grid" class="levels-grid"></div>
@@ -74,7 +74,7 @@
   </section>
 
   <!-- Итог уровня -->
-  <section id="screen-result" class="screen">
+  <section id="screen-result" class="screen"><a href="../" aria-label="Все игры" style="position:fixed;left:calc(12px + env(safe-area-inset-left,0px));top:calc(12px + env(safe-area-inset-top,0px));z-index:50;width:52px;height:52px;border-radius:50%;background:#fffffff0;box-shadow:0 4px 0 #0003;display:grid;place-items:center;font-size:27px;text-decoration:none">🎮</a>
     <div class="card" id="result-card">
       <h2 class="card-title" id="result-title"></h2>
       <div class="stars" id="result-stars">
@@ -96,7 +96,7 @@
   </section>
 
   <!-- Финал: игроку ясно, что контент закончился -->
-  <section id="screen-final" class="screen">
+  <section id="screen-final" class="screen"><a href="../" aria-label="Все игры" style="position:fixed;left:calc(12px + env(safe-area-inset-left,0px));top:calc(12px + env(safe-area-inset-top,0px));z-index:50;width:52px;height:52px;border-radius:50%;background:#fffffff0;box-shadow:0 4px 0 #0003;display:grid;place-items:center;font-size:27px;text-decoration:none">🎮</a>
     <div class="card">
       <h2 class="card-title gold" data-i18n="finalTitle"></h2>
       <p class="final-text" data-i18n="finalText"></p>
