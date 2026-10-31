@@ -655,6 +655,66 @@ function digger(p, paint) {
     box(arm, x, -0.56, -3.45, 0.13, 0.2, 0.13, alloy);
   bake(arm);
 }
+// Двухвальцовый каток: стальной барабан виден и спереди, и из камеры за машиной
+function rollDrum(p, paint, name, z) {
+  const dark = surface("#2a2e34", 0.35, 0.6),
+    roll = new T.Group();
+  roll.name = name;
+  roll.position.set(0, 0.92, z);
+  p.add(roll);
+  cyl(roll, 0, 0, 0, 0.92, 0.92, 2.34, surface("#b4bcc6", 0.85, 0.28), "x", 30);
+  for (const s of [-1, 1]) {
+    cyl(roll, s * 1.19, 0, 0, 0.96, 0.96, 0.06, dark, "x", 30);
+    cyl(roll, s * 1.23, 0, 0, 0.34, 0.34, 0.06, paint, "x", 18);
+    for (let i = 0; i < 6; i++) {
+      const a = (i * Math.PI) / 3;
+      cyl(roll, s * 1.26, Math.sin(a) * 0.22, Math.cos(a) * 0.22, 0.035, 0.035, 0.04, alloy, "x", 8);
+    }
+  }
+  // Поперечные полосы видно издалека: понятно, что барабан катится
+  for (let i = 0; i < 6; i++) {
+    const a = (i * Math.PI) / 3,
+      band = box(roll, 0, Math.sin(a) * 0.925, Math.cos(a) * 0.925, 2.3, 0.03, 0.12, dark);
+    band.rotation.x = Math.PI / 2 - a;
+  }
+  bake(roll);
+  // Вилка держит барабан с обеих сторон, сверху крыло
+  for (const s of [-1, 1]) {
+    box(p, s * 1.36, 1.1, z + (z < 0 ? 0.38 : -0.38), 0.14, 0.62, 1.62, paint, 0.05);
+    cyl(p, s * 1.36, 0.92, z, 0.22, 0.22, 0.2, dark, "x", 14);
+  }
+}
+function roller(p, paint) {
+  const dark = surface("#2a2e34", 0.35, 0.6),
+    amber = lamp("#ff9a1f", 1.1);
+  rollDrum(p, paint, "roll", -1.95);
+  rollDrum(p, paint, "rollRear", 1.95);
+  // Переднее крыло с фарами и полосатым краем
+  box(p, 0, 2.02, -1.72, 2.86, 0.16, 1.5, paint, 0.06);
+  box(p, 0, 1.88, -2.46, 2.86, 0.26, 0.1, paint, 0.03);
+  for (let i = -3; i <= 3; i++)
+    box(p, i * 0.38, 1.88, -2.52, 0.17, 0.2, 0.03, dark).rotation.z = 0.5;
+  for (const s of [-1, 1]) box(p, s * 1.02, 2.2, -2.34, 0.36, 0.2, 0.1, head, 0.03);
+  // Рама между вальцами и капот над задним барабаном
+  box(p, 0, 1.3, 0, 1.5, 0.9, 1.4, dark, 0.06);
+  box(p, 0, 2.2, 1.55, 2.5, 0.72, 1.62, paint, 0.16);
+  box(p, 0, 2.6, 1.6, 1.6, 0.12, 1.1, surface("#e09a0a", 0.1, 0.5), 0.05);
+  box(p, 0, 2.2, 2.37, 2.16, 0.52, 0.04, dark, 0.02);
+  for (let i = 0; i < 4; i++) box(p, 0, 2.02 + i * 0.12, 2.4, 2.04, 0.04, 0.03, alloy);
+  for (const s of [-1, 1]) box(p, s * 1.2, 1.98, 2.36, 0.2, 0.14, 0.05, tail, 0.02);
+  cyl(p, 0.82, 3.1, 1.2, 0.07, 0.09, 0.8, trim, "y", 10);
+  cyl(p, 0.82, 3.52, 1.2, 0.1, 0.07, 0.08, alloy, "y", 10);
+  // Кабина оператора с большими стёклами
+  box(p, 0, 1.86, 0.02, 2.4, 0.14, 1.4, dark, 0.04);
+  box(p, 0, 2.3, 0.3, 0.7, 0.7, 0.14, dark, 0.05);
+  for (const [x, z] of [[-0.82, -0.56], [0.82, -0.56], [-0.82, 0.62], [0.82, 0.62]])
+    rod(p, [x, 1.92, z], [x * 0.92, 3.34, z], 0.045, trim);
+  box(p, 0, 2.66, -0.56, 1.54, 1.3, 0.03, glass, 0.01);
+  box(p, 0, 2.66, 0.62, 1.54, 1.3, 0.03, glass, 0.01);
+  for (const s of [-1, 1]) box(p, s * 0.8, 2.66, 0.03, 0.03, 1.3, 1.14, glass, 0.01);
+  box(p, 0, 3.4, 0.03, 1.96, 0.13, 1.62, paint, 0.05);
+  cyl(p, 0, 3.54, 0.03, 0.1, 0.13, 0.16, amber, "y", 12);
+}
 function garbage(p, paint) {
   const white = surface("#f4f6f8", 0.2, 0.45);
   box(p, 0, 0.66, 0.2, 2.0, 0.3, 6.3, trim, 0.05);
@@ -948,6 +1008,7 @@ const SPECIAL = {
   mixer,
   dump,
   digger,
+  roller,
   garbage,
   train,
   ufo,
@@ -1089,19 +1150,23 @@ function carDetails(p, o, body, paint, style = {}) {
     box(p, s * hw * 0.62, frontY - 0.06, nose + 0.19, hw * 0.5, 0.018, 0.3, lamp("#dff6ff", 1.2));
     cyl(p, s * hw * 0.74, frontY - 0.34, nose + 0.1, 0.05, 0.05, 0.2, head, "z", 10);
   }
-  // Решётка и нижний воздухозаборник
-  box(p, 0, frontY - 0.1, nose + 0.07, body.width(-half + 0.1) * 0.82, 0.17, 0.16, trim, 0.03);
-  box(p, 0, frontY - 0.32, nose + 0.06, body.width(-half + 0.1) * 1.05, 0.16, 0.16, trim, 0.03);
-  for (let i = -3; i <= 3; i++)
-    box(p, (i * body.width(-half + 0.1)) / 8, frontY - 0.1, nose + 0.0, 0.02, 0.13, 0.03, style.grille || alloy);
+  // У электромобиля закрытый нос и узкая нижняя щель.
+  if (!style.electric) {
+    box(p, 0, frontY - 0.1, nose + 0.07, body.width(-half + 0.1) * 0.82, 0.17, 0.16, trim, 0.03);
+    for (let i = -3; i <= 3; i++)
+      box(p, (i * body.width(-half + 0.1)) / 8, frontY - 0.1, nose, 0.02, 0.13, 0.03, style.grille || alloy);
+  }
+  box(p, 0, frontY - 0.32, nose + 0.06, body.width(-half + 0.1) * 1.05, style.electric ? 0.07 : 0.16, 0.16, trim, 0.03);
   box(p, 0, frontY - 0.22, nose + 0.0, 0.42, 0.1, 0.03, surface("#eef0ea", 0.2, 0.5), 0.01);
   // Сквозная светодиодная полоса сзади
   const rw = body.width(half - 0.3);
   box(p, 0, rearY, rear - 0.14, rw * 1.82, 0.075, 0.24, tail, 0.02);
   box(p, 0, rearY - 0.2, rear - 0.1, 0.46, 0.13, 0.2, surface("#eef0ea", 0.2, 0.5), 0.01);
   box(p, 0, rearY - 0.42, rear - 0.1, rw * 1.65, 0.2, 0.2, trim, 0.05);
-  for (const s of [-1, 1])
-    cyl(p, s * rw * 0.62, 0.42, rear - 0.02, 0.055, 0.06, 0.2, chrome, "z", 12);
+  if (!style.electric) {
+    for (const s of [-1, 1])
+      cyl(p, s * rw * 0.62, 0.42, rear - 0.02, 0.055, 0.06, 0.2, chrome, "z", 12);
+  }
   const beltAt = (z) => body.belt(z),
     sides = o.doors || [-0.55, 0.45, 1.25];
   for (const s of [-1, 1]) {
@@ -1189,15 +1254,26 @@ ROAD_SPECS.limo = {
 ROAD_SPECS.monster = { ...ROAD_SPECS.suv };
 ROAD_SPECS.tow = { ...ROAD_SPECS.pickup };
 ROAD_SPECS.taxi = ROAD_SPECS.sedan;
-ROAD_SPECS.police = ROAD_SPECS.suv;
+ROAD_SPECS.police = {
+  ...ROAD_SPECS.suv,
+  glass: { ...ROAD_SPECS.suv.glass, roof: surface("#224e79", 0.55, 0.32) },
+};
+ROAD_SPECS.ev = {
+  ...ROAD_SPECS.compact, r: 0.38, bottom: 0.27,
+  glass: {
+    ...ROAD_SPECS.compact.glass, z0: -1.19, z1: -0.43, z2: 0.69, z3: 1.67,
+    top: 1.50, roof: surface("#172832", 0.8, 0.17),
+  },
+};
 function roadCar(p, type, paint) {
   const kind = CARS[type].kind,
-    o = (type === "ev" ? ROAD_SPECS.compact : ROAD_SPECS[kind]) || ROAD_SPECS.sedan,
+    o = (type === "ev" ? ROAD_SPECS.ev : ROAD_SPECS[kind]) || ROAD_SPECS.sedan,
     monster = kind === "monster",
     tyre = monster ? 0.84 : o.r,
     body = shell(p, o, paint);
   if (o.glass) glasshouse(p, o.glass, paint);
   carDetails(p, o, body, paint, {
+    electric: type === "ev",
     handle: kind === "retro" ? chrome : paint,
     grille: kind === "retro" ? chrome : alloy,
   });
@@ -1235,9 +1311,14 @@ function roadCar(p, type, paint) {
         rod(p, [side * 0.82, 0.99, z], [side * 0.66, 1.46, z], 0.022, trim);
     }
   if (type === "police") {
+    const stripe = surface("#165385", 0.38, 0.33);
     for (const side of [-1, 1]) {
-      box(p, side * (body.width(0) + 0.012), 0.84, 0.06, 0.024, 0.56, o.L * 0.52, surface("#e7eff5", 0.34, 0.32), 0.015);
-      box(p, side * (body.width(0) + 0.033), 0.80, 0.06, 0.022, 0.15, o.L * 0.59, surface("#164988", 0.3, 0.4));
+      // Разметка следует поясу кузова и заканчивается над задней аркой.
+      for (const [z0,z1] of [[-1.26,-0.53],[-0.53,0.13],[0.13,0.77],[0.77,1.33]]) {
+        const low = (z) => body.belt(z) - 0.12 + Math.max(0,z-0.65) * 0.16;
+        const point = (z,y) => [side * (body.width(z) + 0.005), y, z];
+        patch(p, [point(z0,low(z0)),point(z1,low(z1)),point(z1,low(z1)+0.12),point(z0,low(z0)+0.12)], stripe);
+      }
     }
     lightbar(p, 1.94, 0.22);
     for (const side of [-1, 1]) {
@@ -1246,8 +1327,14 @@ function roadCar(p, type, paint) {
     }
   }
   if (type === "ev") {
-    box(p, 0, 0.89, o.L / 2, 1.55, 0.066, 0.06, tail, 0.025);
-    box(p, 0, 0.78, -o.L / 2, 1.34, 0.05, 0.06, head, 0.02);
+    // Тонкая световая подпись продолжается на крыльях.
+    const front = -o.L / 2, rear = o.L / 2;
+    box(p, 0, body.belt(front)-0.02, front+0.012, 1.04, 0.045, 0.085, head, 0.02);
+    for (const side of [-1,1]) {
+      rod(p,[side*0.50,body.belt(front)-0.02,front+0.015],[side*0.78,body.belt(front+0.25),front+0.23],0.023,head);
+      rod(p,[side*0.59,body.belt(rear),rear-0.015],[side*0.83,body.belt(rear-0.3),rear-0.29],0.031,tail);
+    }
+    box(p, 0, o.glass.top+0.015, o.glass.z2+0.08, 1.34, 0.05, 0.22, glass, 0.025);
   }
   if (type === "taxi") {
     box(p, 0, 1.58, 0.32, 0.6, 0.2, 0.26, lamp("#ffe7a1", 0.7), 0.05);
@@ -1406,6 +1493,18 @@ function commercial(p, type, paint) {
     for (let z = -2.1; z < 3.05; z += 0.32)
       rod(p, [-0.42, 3.08, z], [0.42, 3.08, z], 0.028, alloy);
     for (const z of [-1.4, 2.4]) box(p, 0, 2.92, z, 1.2, 0.24, 0.2, trim, 0.03);
+    const monitor = new T.Group();
+    monitor.name = "waterMonitor";
+    monitor.position.set(0.62, 3.13, -1.12);
+    monitor.rotation.y = Math.PI;
+    p.add(monitor);
+    rod(monitor, [0,0,0], [0,0,0.75], 0.13, paint);
+    rod(monitor, [0,0,0.74], [0,0,1.12], 0.105, chrome);
+    const tip = new T.Object3D();
+    tip.name = "monitorTip";
+    tip.position.z = 1.13;
+    monitor.add(tip);
+    bake(monitor);
     lightbar(p, 2.98, -2.0);
   }
   if (type === "icecream") {
@@ -2306,6 +2405,7 @@ export function pose(model, type, time, travel, ability, steer, recoil, stroke =
     part.blade.rotation.x = -0.05 + 0.19 * Math.sin(stroke * Math.PI) * extend;
   }
   if (part.gun) part.gun.position.z = recoil * 0.022;
+  if (part.roll) part.roll.rotation.x = part.rollRear.rotation.x = -travel / 0.92;
   if (part.drum) part.drum.rotation.z = time * (ability === "tornado" ? 9 : 1.6);
   if (part.reel) part.reel.rotation.x = -time * (ability === "harvest" ? 9 : 2.5);
   if (part.bed)

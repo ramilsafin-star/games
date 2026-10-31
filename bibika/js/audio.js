@@ -229,6 +229,9 @@ const Sound = {
     if (effect === "cannon") {
       this.pop();
       this.gift();
+    } else if (effect === "steamroll") {
+      this.tone({ type: "sawtooth", f0: 70, f1: 260, dur: 1.4, vol: 0.12 });
+      this.noise({ f0: 300, f1: 1100, dur: 1.2, vol: 0.1 });
     } else if (effect === "water" || effect === "wave") {
       this.noise({
         f0: 1800,
@@ -316,6 +319,47 @@ const Sound = {
   land() {
     if (!this.ready()) return;
     this.tone({ type: "sine", f0: 170, f1: 74, dur: 0.15, vol: 0.32 });
+  },
+
+  // Каток раскатал машину: глухой удар и смешной писк
+  crush() {
+    if (!this.ready()) return;
+    this.tone({ type: "sine", f0: 150, f1: 45, dur: 0.24, vol: 0.34 });
+    this.noise({ f0: 700, f1: 160, dur: 0.18, vol: 0.2 });
+    this.tone({ type: "triangle", f0: 1250, f1: 420, dur: 0.22, vol: 0.14, at: 0.05 });
+  },
+
+  // Свой звук выстрела у каждого снаряда
+  shot(kind) {
+    if (!this.ready()) return;
+    if (kind === "boom") {
+      this.tone({ type: "sine", f0: 180, f1: 60, dur: 0.22, vol: 0.32 });
+      this.noise({ f0: 900, f1: 200, dur: 0.16, vol: 0.2 });
+    } else if (kind === "whoosh") {
+      this.noise({ f0: 900, f1: 3200, dur: 0.14, vol: 0.14, filter: "bandpass" });
+    } else if (kind === "honk") {
+      this.tone({ type: "sawtooth", f0: 240, f1: 220, dur: 0.14, vol: 0.13 });
+    } else if (kind === "laser") {
+      this.tone({ type: "square", f0: 1400, f1: 380, dur: 0.12, vol: 0.09 });
+    } else if (kind === "water") {
+      this.noise({ f0: 1600, f1: 700, dur: 0.09, vol: 0.14, filter: "bandpass" });
+      this.tone({ type: "sine", f0: 500, f1: 900, dur: 0.06, vol: 0.09 });
+    } else if (kind === "ding") {
+      this.tone({ type: "triangle", f0: 1320, f1: 1320, dur: 0.16, vol: 0.14 });
+    } else if (kind === "note") {
+      const f = [523, 587, 659, 784, 880][Math.floor(Math.random() * 5)];
+      this.tone({ type: "triangle", f0: f, f1: f, dur: 0.2, vol: 0.17 });
+    } else if (kind === "clank") {
+      this.tone({ type: "square", f0: 1040, f1: 760, dur: 0.07, vol: 0.08 });
+      this.tone({ type: "triangle", f0: 2100, f1: 1800, dur: 0.1, vol: 0.08, at: 0.02 });
+    } else if (kind === "thud") {
+      this.tone({ type: "sine", f0: 240, f1: 110, dur: 0.12, vol: 0.27 });
+    } else if (kind === "siren") {
+      const up = (this.sirenUp = !this.sirenUp);
+      this.tone({ type: "square", f0: up ? 900 : 620, f1: up ? 620 : 900, dur: 0.13, vol: 0.07 });
+    } else if (kind === "bubble") {
+      this.tone({ type: "sine", f0: 340, f1: 1100, dur: 0.1, vol: 0.2 });
+    } else this.pop();
   },
 
   pop() {

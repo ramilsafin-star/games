@@ -39,6 +39,9 @@ import {
   UNITS_PER_METRE,
 } from "./scenery.js";
 
+const TOOL_CAMERA_OFFSET = { whistle: 4.5, harvest: 6, scoop: 4.8, water: 3.3 };
+const SHOT_LIMIT = 32;
+
 const gold = new T.MeshStandardMaterial({
   color: "#ffc23b",
   metalness: 0.53,
@@ -217,8 +220,81 @@ const WORLD_ANIMALS = [
 ];
 const MOOD_TIME = 75,
   SHIP_WORLDS = [0, 1, 3, 4, 5];
+// Снаряды всех машин: по заготовке на форму, цвет у каждого снаряда свой
+function shotMeshes() {
+  const solid = new T.MeshStandardMaterial({ roughness: 0.42, metalness: 0.05 }),
+    bright = new T.MeshBasicMaterial({ toneMapped: false }),
+    airy = new T.MeshBasicMaterial({ transparent: true, opacity: 0.62, depthWrite: false, toneMapped: false }),
+    heart = new T.Shape();
+  heart.moveTo(0, -1);
+  heart.bezierCurveTo(-1.6, -0.2, -0.9, 1.1, 0, 0.42);
+  heart.bezierCurveTo(0.9, 1.1, 1.6, -0.2, 0, -1);
+  const heartGeometry = new T.ExtrudeGeometry(heart, { depth: 0.5, bevelEnabled: false, curveSegments: 10 }).center(),
+    drop = new T.LatheGeometry(
+      [[0, -1], [0.62, -0.82], [0.95, -0.3], [0.8, 0.3], [0.42, 0.95], [0, 1.7]].map(([x, y]) => new T.Vector2(x, y)),
+      14,
+    ),
+    kinds = {
+      ball: [sphere, bright],
+      star: [star, bright],
+      heart: [heartGeometry, solid],
+      drop: [drop, bright],
+      cube: [new T.BoxGeometry(1.5, 1.5, 1.5), solid],
+      card: [new T.BoxGeometry(2, 1.3, 0.16), solid],
+      ring: [new T.TorusGeometry(1, 0.26, 8, 22), bright],
+      coin: [new T.CylinderGeometry(1, 1, 0.24, 18).rotateX(Math.PI / 2), solid],
+      flake: [new T.OctahedronGeometry(1.1), bright],
+      rock: [new T.IcosahedronGeometry(1, 0), solid],
+      puff: [sphere, airy],
+      bubble: [sphere, airy],
+    },
+    meshes = {};
+  for (const [name, [geometry, material]] of Object.entries(kinds)) {
+    const mesh = new T.InstancedMesh(geometry, material, SHOT_LIMIT);
+    // Цветовой буфер заводим сразу: первый выстрел не должен подвисать
+    mesh.setColorAt(0, new T.Color("#ffffff"));
+    mesh.count = 0;
+    mesh.frustumCulled = false;
+    meshes[name] = mesh;
+  }
+  return meshes;
+}
 function marker(kind) {
   if (kind === "star") return new T.Mesh(star, gold);
+  if (kind === "brazier") {
+    const group = new T.Group(), flames = new T.Group();
+    const drum = new T.Mesh(new T.CylinderGeometry(0.74,0.62,1.15,16), standard("#565c66"));
+    drum.position.y = 0.58;
+    group.add(drum);
+    const rim = new T.Mesh(new T.TorusGeometry(0.72,0.06,5,20), standard("#9babb3"));
+    rim.rotation.x = Math.PI/2;
+    rim.position.y = 1.16;
+    group.add(rim);
+    flames.position.y = 1.07;
+    for (const [x,z,h,r,color] of [[0,0,1.55,0.56,"#ff7b19"],[-0.29,0.19,0.9,0.30,"#ffc242"],[0.23,0.24,1.05,0.22,"#ffde60"]]) {
+      const flame = new T.Mesh(new T.ConeGeometry(r,h,7),new T.MeshBasicMaterial({color}));
+      flame.position.set(x,h/2,z);
+      flames.add(flame);
+    }
+    group.add(flames);
+    group.userData.flames = flames;
+    return group;
+  }
+  if (kind === "crop") {
+    const group = new T.Group(), count = 12, dummy = new T.Object3D();
+    const stems = new T.InstancedMesh(new T.CylinderGeometry(0.035,0.05,1.2,5),standard("#ba963e"),count);
+    const ears = new T.InstancedMesh(new T.SphereGeometry(1,6,6),standard("#f3c04d"),count);
+    for (let i=0; i<count; i++) {
+      const x = (i%4 - 1.5)*0.64, z = (Math.floor(i/4) - 1)*0.63 + Math.sin(i)*0.13;
+      dummy.position.set(x,0.6,z); dummy.scale.set(1,1,1); dummy.rotation.z = Math.sin(i)*0.08;
+      dummy.updateMatrix(); stems.setMatrixAt(i,dummy.matrix);
+      dummy.position.y = 1.26; dummy.scale.set(0.12,0.31,0.12);
+      dummy.updateMatrix(); ears.setMatrixAt(i,dummy.matrix);
+    }
+    group.add(stems,ears);
+    group.userData.stems = stems; group.userData.ears = ears;
+    return group;
+  }
   if (kind === "wagon") {
     const wagon = new T.Group();
     for (const [w,h,l,x,y,z,color] of [
@@ -391,11 +467,8 @@ export class DriveView {
     this.color = new T.Color();
     this.look = new T.Vector3();
     this.point = new T.Vector3();
-    this.shotMesh = new T.InstancedMesh(
-      sphere,
-      new T.MeshBasicMaterial(),
-      16,
-    );
+    this.shotMeshes = shotMeshes();
+    this.scene.add(...Object.values(this.shotMeshes));
     this.birds = new T.InstancedMesh(
       birdGeometry(),
       new T.MeshBasicMaterial({ color: "#ffffff", side: T.DoubleSide }),
@@ -409,8 +482,8 @@ export class DriveView {
       new T.MeshBasicMaterial({ toneMapped: false }),
       300,
     );
-    this.shotMesh.frustumCulled = this.sparks.frustumCulled = false;
-    this.scene.add(this.shotMesh, this.sparks);
+    this.sparks.frustumCulled = false;
+    this.scene.add(this.sparks);
     // Полосы скорости по краям кадра
     this.streaks = new T.InstancedMesh(
       new T.BoxGeometry(0.035, 0.035, 1),
@@ -465,7 +538,7 @@ export class DriveView {
       }),
     );
     this.water = new T.Mesh(
-      new T.ConeGeometry(1.7, 32, 16),
+      new T.CylinderGeometry(0.27, 0.12, 1, 12),
       new T.MeshBasicMaterial({
         color: "#98edff",
         transparent: true,
@@ -473,8 +546,14 @@ export class DriveView {
         depthWrite: false,
       }),
     );
-    this.water.rotation.x = Math.PI / 2;
-    this.scene.add(this.aura, this.water);
+    this.streamTip = new T.Vector3();
+    this.streamEnd = new T.Vector3();
+    this.streamDir = new T.Vector3();
+    this.streamAxis = new T.Vector3(0,1,0);
+    this.spray = new T.InstancedMesh(new T.SphereGeometry(0.085,6,5),
+      new T.MeshBasicMaterial({color:"#d9ffff"}),18);
+    this.spray.frustumCulled = false;
+    this.scene.add(this.aura, this.water, this.spray);
     this.pullOverBay = new T.Mesh(new T.PlaneGeometry(3.8, 13),
       new T.MeshBasicMaterial({color: "#57edb7", transparent: true, opacity: 0.64, depthWrite: false}));
     this.pullOverBay.rotation.x = -Math.PI / 2;
@@ -820,6 +899,10 @@ export class DriveView {
     for (const [e, node] of this.nodes) this.recycle(e, node);
   }
   recycle(e, node) {
+    if (node.userData.squashed) {
+      node.userData.squashed = false;
+      node.scale.setScalar(1);
+    }
     node.removeFromParent();
     this.nodes.delete(e);
     const key = node.userData.poolKey;
@@ -977,10 +1060,15 @@ export class DriveView {
       this.playerHeight = box.y;
       this.playerLength = box.z;
       this.playerWidth = box.x;
-      this.playerTail = new T.Box3().setFromObject(player).max.z;
+      const bounds = new T.Box3().setFromObject(player);
+      this.playerTail = bounds.max.z;
+      // Снаряд вылетает из носа машины на высоте её кузова, у танка из дула
+      this.muzzleAhead = (-bounds.min.z + 0.1) * UNITS_PER_METRE;
+      this.muzzleAlt = car.type === "tank" ? 1.77 : T.MathUtils.clamp(bounds.max.y * 0.5, 0.75, 1.9);
     }
+    car.muzzleAhead = this.muzzleAhead;
     this.exhaust.visible =
-      (["nitro", "comet", "wind"].includes(fx) || car.boost > 0) && !game.loop;
+      (["nitro", "comet", "wind", "steamroll"].includes(fx) || car.boost > 0) && !game.loop;
     this.exhaust.position.set(px, 0.4 + lift, this.playerTail + 0.1);
     this.exhaust.scale.z = 1 + Math.sin(game.time * 30) * 0.18;
     const stroke = fx === "plow" ? 1 - game.active / CARS.tractor.duration : 0;
@@ -1030,12 +1118,29 @@ export class DriveView {
             : heading(d - z) - (e.drift || 0),
           e.kind === "bale" ? 0 : (e.spin || 0) * 0.6 + (e.kick || 0) * (e.pushSide || 0) * 0.15,
         );
+      // Блин после катка: плоский, чуть шире самой машины, летит вращаясь, как тарелка
+      if (e.squash) {
+        const k = Math.min(1, e.squash / 0.08);
+        node.scale.set(1 + 0.16 * k, 1 - 0.86 * k, 1 + 0.1 * k);
+        node.rotation.set(0.2 * k, heading(d - z) + e.spin, 0.3 * Math.sign(e.vx) * Math.min(1, e.alt));
+        node.userData.squashed = true;
+      }
+      if (e.kind === "brazier") {
+        const flame = node.userData.flames;
+        flame.visible = !e.spent;
+        flame.scale.setScalar(e.heat);
+        flame.scale.y *= 1 + 0.09 * Math.sin(game.time * 13);
+      }
+      if (e.kind === "crop") {
+        node.userData.ears.visible = !e.spent;
+        node.userData.stems.scale.y = e.spent ? 0.14 : 1;
+      }
       if (e.kind === "hayCart") node.userData.load.visible = !!e.loaded;
       if (e.kind === "gift") node.userData.chute.visible = (e.alt || 0) > 0.4;
       if (carLike(e)) {
         pose(node, e.type, game.time, d * 0.28, e.kind === "patrolActor" && e.type === "police" ? "siren" : "", 0, 0);
         if (node.userData.parts.blob)
-          node.userData.parts.blob.visible = !leapAt(d - z);
+          node.userData.parts.blob.visible = !leapAt(d - z) && !e.alt;
         node.visible = z < 13;
       } else node.visible = true;
     }
@@ -1060,7 +1165,7 @@ export class DriveView {
     const patrolX = pullOver ? (game.city.npc.x - 300) / 30 : px;
     const followX = pullOver ? (px + patrolX) / 2 : px * 0.76;
     this.smoothX = T.MathUtils.lerp(this.smoothX, followX, smooth);
-    const shoulder = car.type === "tractor" ? 3.6 + 4.2 * bladeExtension(stroke) : fx === "whistle" ? 4.5 : 0;
+    const shoulder = car.type === "tractor" ? 3.6 + 4.2 * bladeExtension(stroke) : TOOL_CAMERA_OFFSET[fx] || 0;
     const cameraZ = (distance + (pullOver ? 3.5 : 0)) * (1 - loopK);
     this.point.set(
       this.roadPosition(300, cameraZ, d) +
@@ -1309,22 +1414,40 @@ export class DriveView {
   drawEffects(game, fx, d) {
     const c = game.car,
       x = (c.x - 300) / 30;
-    this.shotMesh.count = Math.min(game.shots.length, 16);
-    game.shots.slice(0, 16).forEach((shot, i) => {
-      const z = (shot.y - c.y) / UNITS_PER_METRE;
-      this.temp.position.set(
-        this.roadPosition(shot.x, z, d),
-        1.77 + this.roadLift(z, d),
-        z,
-      );
-      this.temp.scale.setScalar(0.3);
+    const shots = this.shotMeshes;
+    for (const name in shots) shots[name].count = 0;
+    for (const shot of game.shots) {
+      const mesh = shots[shot.ammo.shape],
+        i = mesh.count;
+      if (i >= SHOT_LIMIT) continue;
+      mesh.count++;
+      const z = (shot.y - c.y) / UNITS_PER_METRE,
+        flown = (shot.y0 - shot.y) / UNITS_PER_METRE,
+        size = shot.ammo.size;
+      // Вылетает с высоты машины и опускается к середине преграды
+      shot.alt ??= this.player.position.y + this.muzzleAlt;
+      const alt = shot.ammo.bounce
+        ? 0.32 + size + Math.abs(Math.sin(flown * 0.42)) * 1.7
+        : 1 + (shot.alt - 1) * Math.exp(-flown / 8);
+      this.temp.position.set(this.roadPosition(shot.x, z, d), alt + this.roadLift(z, d), z);
+      const name = shot.ammo.shape;
+      if (name === "drop") this.temp.rotation.set(Math.PI / 2, 0, 0);
+      else if (name === "ring") this.temp.rotation.set(0, 0, flown);
+      else if (name === "coin" || name === "star") this.temp.rotation.set(0, flown * 0.9, 0);
+      else if (name === "heart") this.temp.rotation.set(0, Math.sin(flown * 0.5) * 0.6, 0);
+      else this.temp.rotation.set(flown * 0.7, flown * 0.45, 0);
+      // Звуковая волна и пар расходятся в полёте
+      const grow = name === "ring" || name === "puff" ? 1 + flown * 0.035 : 1;
+      this.temp.scale.setScalar(size * grow);
       this.temp.updateMatrix();
-      this.shotMesh.setMatrixAt(i, this.temp.matrix);
-      this.shotMesh.setColorAt(i, this.color.set(CONFETTI[i % 5]));
-    });
-    this.shotMesh.instanceMatrix.needsUpdate = true;
-    if (this.shotMesh.instanceColor)
-      this.shotMesh.instanceColor.needsUpdate = true;
+      mesh.setMatrixAt(i, this.temp.matrix);
+      mesh.setColorAt(i, this.color.set(shot.color));
+    }
+    this.temp.rotation.set(0, 0, 0);
+    for (const name in shots) {
+      shots[name].instanceMatrix.needsUpdate = true;
+      shots[name].instanceColor.needsUpdate = true;
+    }
     this.birds.count = Math.min(game.birds.length, 24);
     game.birds.slice(0, 24).forEach((b, i) => {
       const z = (b.y - c.y) / UNITS_PER_METRE;
@@ -1380,13 +1503,35 @@ export class DriveView {
         fx === "rescue" ? "#ffb8ba" : fx === "double" ? "#ffe898" : "#8defff",
       );
     }
-    this.flash.visible = c.type === "tank" && c.recoil > 3;
+    this.flash.visible = c.recoil > 3;
     if (this.flash.visible) {
-      this.flash.position.set(x, 1.77, -3.52);
+      const z = -this.muzzleAhead / UNITS_PER_METRE;
+      this.flash.position.set(this.roadPosition(c.x, z, d), this.player.position.y + this.muzzleAlt + this.roadLift(z, d), z);
       this.flash.scale.setScalar(c.recoil * 0.045);
+      this.flash.material.color.set(AMMO[c.type].colors[0]);
     }
-    this.water.visible = fx === "water";
-    this.water.position.set(x, 1.9, -18);
+    this.water.visible = this.spray.visible = fx === "water";
+    const parts = this.player.userData.parts;
+    if (this.water.visible && parts.waterMonitor) {
+      const target = game.waterTarget, z = target ? (target.y-c.y)/UNITS_PER_METRE : -27;
+      this.streamEnd.set(this.roadPosition(target?.x ?? c.x,z,d),1.1+this.roadLift(z,d),z);
+      parts.waterMonitor.lookAt(this.streamEnd);
+      parts.monitorTip.getWorldPosition(this.streamTip);
+      this.streamDir.subVectors(this.streamEnd,this.streamTip);
+      this.water.scale.y = this.streamDir.length();
+      this.water.position.copy(this.streamTip).lerp(this.streamEnd,0.5);
+      this.water.quaternion.setFromUnitVectors(this.streamAxis,this.streamDir.normalize());
+      for (let i = 0; i < this.spray.count; i++) {
+        const t = (game.time * 1.45 + i / this.spray.count) % 1;
+        this.temp.position.copy(this.streamTip).lerp(this.streamEnd,t);
+        this.temp.position.x += Math.sin(t*15 + i*2.1) * t * 0.34;
+        this.temp.position.y += Math.cos(t*11 + i) * t * 0.28;
+        this.temp.scale.setScalar(0.8 + t * 1.15);
+        this.temp.updateMatrix();
+        this.spray.setMatrixAt(i,this.temp.matrix);
+      }
+      this.spray.instanceMatrix.needsUpdate = true;
+    } else if (parts.waterMonitor) parts.waterMonitor.rotation.set(0,Math.PI,0);
     for (let i = 0; i < game.rings.length; i++) {
       if (!this.rings[i]) {
         this.rings[i] = new T.Mesh(

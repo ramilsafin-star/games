@@ -1,4 +1,4 @@
-const CACHE = "bibika-v19-patrol";
+const CACHE = "bibika-v24-roller";
 const FILES = [
   "./",
   "./index.html",

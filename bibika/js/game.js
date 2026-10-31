@@ -53,7 +53,7 @@ const MOOD_ORDER = [
 const CONFETTI_COLORS = ["#ff4f7e", "#ffd23f", "#3fd1ff", "#7be04f", "#b57bff"];
 const EVENTS = ["row", "zig", "ramp", "boost", "big", "wave", "ramp", "row", "boost", "zig", "big", "wave"];
 // Длинные машины взлетают ровно: бочка с прицепом выглядит как авария
-const NO_SPIN = ["truck", "bus", "fire", "mixer", "dump", "garbage", "train", "harvester", "limo"];
+const NO_SPIN = ["truck", "bus", "fire", "mixer", "dump", "garbage", "train", "harvester", "limo", "roller"];
 const save = {
   version: 3,
   stars: 0,
@@ -140,6 +140,10 @@ const Game = {
   entities: [],
   particles: [],
   shots: [],
+  fireInputs: new Set(),
+  nextShotAt: 0,
+  shotCount: 0,
+  usedFire: false,
   rings: [],
   hooks: [],
   birds: [],
@@ -459,6 +463,11 @@ function syncWorldChips() {
 }
 function clearInput() {
   Game.keys.clear();
+  for (const id of Game.fireInputs) {
+    if (typeof id === "number" && $("btn-fire").hasPointerCapture(id))
+      $("btn-fire").releasePointerCapture(id);
+  }
+  Game.fireInputs.clear();
   if (Game.pointer !== null) {
     try {
       canvas.releasePointerCapture(Game.pointer);
@@ -528,9 +537,11 @@ function startDrive(mode) {
   Game.spawnCount = 0;
   Game.cooldown = 0;
   Game.active = 0;
+  Game.waterTarget = null;
   Game.steered = false;
   Game.idle = 0;
   Game.usedPower = false;
+  Game.usedFire = false;
   Game.spoken = new Set();
   Game.newPaints = [];
   clearInput();
@@ -560,9 +571,15 @@ function startDrive(mode) {
   }
   Game.previousWorld = Game.world;
   Game.worldFade = 1;
-  showToast(WORLDS[Game.world].icon);
+  if (Game.demo) {
+    Game.toast = 0;
+    $("world-toast").classList.remove("show");
+  } else showToast(WORLDS[Game.world].icon);
   syncCameraButton();
   $("star-end").textContent = Game.farm ? "🌾" : "★";
+  $("fire-ammo").textContent = AMMO[save.car].icon;
+  $("btn-fire").setAttribute("aria-label", "Стрелять: " + AMMO[save.car].name);
+  $("btn-fire").classList.remove("call");
   $("power-icon").textContent = CARS[save.car].icon;
   $("btn-power").setAttribute(
     "aria-label",
@@ -766,7 +783,7 @@ function clearObstacle(e, bonus = false) {
   Sound.pop();
 }
 function isObstacle(e) {
-  return ["traffic", "cone"].includes(e.kind) && !e.dead;
+  return ["traffic", "cone"].includes(e.kind) && !e.dead && !e.squash;
 }
 function addRing(x, y, color, max = 220) {
   Game.rings.push({ x, y, r: 12, max, life: 1, color });
@@ -776,6 +793,51 @@ function nopePower() {
   b.classList.remove("nope");
   void b.offsetWidth;
   b.classList.add("nope");
+}
+function launchShot(x, y, vx = 0, target = null) {
+  const ammo = AMMO[Game.car.type];
+  Game.shots.push({
+    x, y, y0: y, vx, vy: -2050, life: 2.3, target, ammo,
+    color: ammo.colors[Game.shotCount++ % ammo.colors.length],
+  });
+}
+// Во что попадает снаряд этой машины
+function shotHits(e, ammo) {
+  return isObstacle(e) || (e.kind === ammo.douses && !e.spent);
+}
+// Снаряд сам немного доводится: ребёнку достаточно ехать по той же полосе
+function laneTarget(c, ammo) {
+  let best = null;
+  for (const e of Game.entities) {
+    const ahead = c.y - e.y;
+    if (ahead > 40 && ahead < 1700 && Math.abs(e.x - c.x) < 95 && shotHits(e, ammo) && (!best || e.y > best.y)) best = e;
+  }
+  return best;
+}
+function fireShot() {
+  if (Game.mode !== "drive" || Game.paused || Game.finished) return;
+  const c = Game.car,
+    ammo = AMMO[c.type],
+    y = c.y - (c.muzzleAhead || 60),
+    target = laneTarget(c, ammo);
+  if (ammo.twin) for (const side of [-1, 1]) launchShot(c.x + side * 24, y, 0, target);
+  else launchShot(c.x, y, 0, target);
+  c.recoil = 8;
+  Game.nextShotAt = Game.runTime + ammo.rate;
+  Game.usedFire = true;
+  $("btn-fire").classList.remove("call");
+  Sound.shot(ammo.sound);
+}
+function shotBurst(x, y, ammo, n = 24) {
+  for (const color of ammo.colors) burst(x, y, color, Math.ceil(n / ammo.colors.length));
+}
+function holdFire(source) {
+  if (Game.mode !== "drive" || Game.paused || Game.finished) return;
+  if (!Game.fireInputs.size) {
+    Sound.unlock();
+    fireShot();
+  }
+  Game.fireInputs.add(source);
 }
 function activatePower() {
   if (
@@ -811,14 +873,7 @@ function activatePower() {
       }
     const rest = ahead.filter((e) => !e.dead);
     for (let i = 0; i < 3; i++)
-      Game.shots.push({
-        x: c.x + (i - 1) * 24,
-        y: c.y - 60 - i * 8,
-        vx: (i - 1) * 35,
-        vy: -2050,
-        life: 2.3,
-        target: rest[i] || rest[0] || null,
-      });
+      launchShot(c.x + (i - 1) * 24, c.y - 60 - i * 8, (i - 1) * 35, rest[i] || rest[0]);
     c.recoil = 12;
     confetti(c.x, c.y - 85, 30);
   }
@@ -1081,6 +1136,10 @@ function spawnHazard() {
   for (let i = 0; i < 3 && busy(x); i++) x = LANES[(start + i + 1) % 3];
   Game.nextHazard = s + v * (1.9 + Math.random() * 0.7);
   if (busy(x) || window.driveView?.nearLeap(s / 22)) return;
+  if (n % 4 === 0 && ["fire", "harvester"].includes(Game.car.type)) {
+    addWorkTarget(Game.car.type, x, y);
+    return;
+  }
   if (n % 7 === 6) {
     addRamp(s, x);
     return;
@@ -1184,7 +1243,8 @@ function update(dt) {
   Game.runTime += dt;
   Game.sinceStar += dt;
   Game.cooldown = Math.max(0, Game.cooldown - dt);
-  Game.active = Math.max(0, Game.active - dt);
+  // Каток не теряет разгон, пока ждёт зелёный: иначе блинчики достанутся светофору
+  if (!(Game.city?.phase === "waiting" && effect() === "steamroll")) Game.active = Math.max(0, Game.active - dt);
   Game.worldFade = Math.min(1, Game.worldFade + dt * 0.8);
   Game.shake = Math.max(0, Game.shake - dt * 2.2);
   Game.cruise = Math.min(CRUISE_MAX, CRUISE_START + Game.runTime * CRUISE_GAIN);
@@ -1193,10 +1253,11 @@ function update(dt) {
     fx = done ? "" : effect(),
     boost = ["nitro", "wind", "comet"].includes(fx) || c.boost > 0,
     // Слоу-мо замедляет всю сцену: дорога и предметы всегда едут вместе
-    speed = Game.cruise * (boost ? BOOST_FACTOR : fx === "slow" ? 0.5 : 1);
+    speed = Game.cruise * (boost ? BOOST_FACTOR : fx === "slow" ? 0.5 : fx === "steamroll" ? rollFactor() : 1);
   c.bump = Math.max(0, c.bump - dt);
   c.boost = Math.max(0, c.boost - dt);
   c.recoil = Math.max(0, c.recoil - dt * 55);
+  if (Game.fireInputs.size && Game.runTime >= Game.nextShotAt) fireShot();
   if (c.air > 0) {
     c.air = Math.max(0, c.air - dt);
     if (c.air === 0) {
@@ -1261,10 +1322,11 @@ function update(dt) {
   const roadSpeed = episodeSpeed(dt, Game.loop ? 0 : speed * (c.bump > 0 ? 0.62 : 1) * (washing ? 0.48 : 1));
   Game.speedNow = Game.loop ? Game.cruise : roadSpeed;
   Game.distance += roadSpeed * dt;
-  // На гребне горки машина слегка взлетает
+  // На гребне горки машина слегка взлетает, а каток на разгоне прижат к дороге: в прыжке он не давит
   const slope = window.driveView?.slope(metres) ?? 0;
   if (
     !done &&
+    fx !== "steamroll" &&
     c.air === 0 &&
     !Game.loop &&
     Game.lastSlope > 0.05 &&
@@ -1377,7 +1439,8 @@ function update(dt) {
     c.tx = lerp(c.tx, nearestLane(c.tx), 1 - Math.exp(-dt * 3.5));
   const bounds = fx === "allterrain" ? [53, 547] : [145, 455];
   c.tx = Game.city?.phase === "pullOver" ? 483 : clamp(c.tx, ...bounds);
-  c.ty = clamp(c.ty, Game.h * 0.38, Game.h - 165);
+  // На уборке держим ковш на фиксированной глубине, пока игрок выбирает полосу.
+  c.ty = Game.farm ? CAR_Y : clamp(c.ty, Game.h * 0.38, Game.h - 165);
   const blend = 1 - Math.exp(-dt * 20),
     oldX = c.x;
   c.x = lerp(c.x, c.tx, blend);
@@ -1421,6 +1484,7 @@ function update(dt) {
   if (Math.abs(sideways) > 200 && c.air === 0)
     trail(c.x + (Math.random() < 0.5 ? -30 : 30), c.y + ch, "#e8ecef", 7, 0.4);
   if (fx === "comet") trail(c.x, c.y + ch, Math.random() < 0.5 ? "#ffd23f" : "#ff9a3c", 9, 0.7);
+  if (fx === "steamroll") trail(c.x + (Math.random() - 0.5) * 70, c.y + ch, "#d8d0bc", 8, 0.5);
   if (fx === "rainbow")
     for (let i = 0; i < 3; i++)
       trail(c.x + (i - 1) * 24, c.y + ch, RAINBOW[Math.floor(Game.time * 12 + i) % 6], 9, 0.8);
@@ -1476,6 +1540,7 @@ function update(dt) {
       });
     }
   }
+  Game.waterTarget = fx === "water" ? closestInFront("brazier", 930, 150) : null;
   for (const e of Game.entities) {
     if (e.dead) continue;
     if (e.kind === "patrolActor") continue;
@@ -1501,6 +1566,10 @@ function update(dt) {
       moveRival(e, dt);
       continue;
     }
+    if (e.squash) {
+      updateCrushed(e, dt, roadSpeed);
+      continue;
+    }
     // Своя скорость есть только у машин, остальное лежит на дороге
     const pace =
       e.kind === "traffic" && fx !== "freeze" ? (e.pace ?? 0.72) : 1;
@@ -1509,6 +1578,10 @@ function update(dt) {
       dx = Math.abs(e.x - c.x);
     if (!done && !airborne && fx === "plow" && (isObstacle(e) || e.kind === "bale") &&
         pushWithBlade(e, ahead, dx)) continue;
+    if (e.kind === "brazier" || e.kind === "crop") {
+      updateWorkTarget(e, dt, fx, ahead, dx, airborne);
+      continue;
+    }
     if (e.kind === "bale" || e.kind === "hayCart") continue;
     if (e.kind === "traffic") {
       if (helping && ahead > 170 && ahead < 1800 && dx < 70) giveWay(e);
@@ -1600,6 +1673,10 @@ function update(dt) {
       if (hit && !airborne && !e.used && fx !== "wheelie") splash(e);
       continue;
     }
+    if (fx === "steamroll" && hit && !airborne && isObstacle(e)) {
+      crush(e);
+      continue;
+    }
     if (
       fx === "megahorn" ||
       fx === "wind" ||
@@ -1648,8 +1725,7 @@ function update(dt) {
       if (["nitro", "comet", "monster", "rainbow", "freeze", "shield"].includes(fx) || c.boost > 0) {
         clearObstacle(e, fx === "freeze");
         if (fx === "shield") Game.active = 0;
-      }
-      else if (c.bump <= 0) {
+      } else if (c.bump <= 0) {
         c.bump = 0.9;
         Game.shake = Math.max(Game.shake, 0.7);
         giveWay(e);
@@ -1664,23 +1740,42 @@ function update(dt) {
     p.life -= dt;
     if (p.target && !p.target.dead)
       p.x = lerp(p.x, p.target.x, 1 - Math.exp(-dt * 16));
-    Game.particles.push({
-      x: p.x,
-      y: p.y,
-      vx: (Math.random() - 0.5) * 60,
-      vy: (Math.random() - 0.5) * 60,
-      life: 0.55,
-      max: 0.55,
-      color: CONFETTI_COLORS[Math.floor(Math.random() * 5)],
-      size: 4 + Math.random() * 3,
-    });
+    // Хвост редкий и мелкий: при очереди он не должен закрывать машину и дорогу
+    p.trail = (p.trail || 0) + dt;
+    if (p.trail > 0.035) {
+      p.trail = 0;
+      Game.particles.push({
+        x: p.x,
+        y: p.y,
+        vx: (Math.random() - 0.5) * 60,
+        vy: (Math.random() - 0.5) * 60,
+        alt: 1.05,
+        valt: 0,
+        life: 0.4,
+        max: 0.4,
+        color: p.ammo.colors[Math.floor(Math.random() * p.ammo.colors.length)],
+        size: 2.4 + Math.random() * 2,
+      });
+    }
     const hit = Game.entities.find(
       (e) =>
-        isObstacle(e) && Math.abs(e.x - p.x) < 62 && Math.abs(e.y - p.y) < 110,
+        shotHits(e, p.ammo) && Math.abs(e.x - p.x) < 62 && Math.abs(e.y - p.y) < 110,
     );
     if (hit && p.life > 0) {
-      confetti(hit.x, hit.y, 24);
-      clearObstacle(hit, true);
+      if (!isObstacle(hit)) shootWorkTarget(hit);
+      else {
+        shotBurst(hit.x, hit.y, p.ammo);
+        clearObstacle(hit, true);
+        // Большой снаряд задевает и то, что стоит рядом
+        if (p.ammo.blast) {
+          addRing(hit.x, hit.y, "#fff4b0", 190);
+          for (const e of Game.entities.filter(isObstacle))
+            if (Math.abs(e.x - hit.x) < 170 && Math.abs(e.y - hit.y) < 260) {
+              shotBurst(e.x, e.y, p.ammo, 12);
+              clearObstacle(e, true);
+            }
+        }
+      }
       p.life = 0;
     }
   }
@@ -1723,11 +1818,17 @@ function update(dt) {
     Game.spoken.add("power");
     Voice.say("Нажми волшебную кнопку!");
   }
+  // Первая преграда на своей полосе подсказывает про кнопку выстрела
+  if (!done && !Game.demo && !Game.usedFire && Game.runTime > 5 && !Game.spoken.has("fire") && laneTarget(c, AMMO[c.type])) {
+    Game.spoken.add("fire");
+    $("btn-fire").classList.add("call");
+    Voice.say("Стреляй!");
+  }
   updateHUD();
   if (!done)
     Sound.engine(
       c.type,
-      boost,
+      boost || fx === "steamroll",
       true,
       (roadSpeed / CRUISE_START) * (c.bump > 0 ? 0.8 : 1),
       WORLDS[Game.world].id,
@@ -1794,6 +1895,19 @@ function pressButton(id, action) {
   });
 }
 pressButton("btn-power", activatePower);
+const fireButton = $("btn-fire");
+fireButton.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  fireButton.setPointerCapture(e.pointerId);
+  holdFire(e.pointerId);
+});
+for (const event of ["pointerup", "pointercancel", "lostpointercapture"])
+  fireButton.addEventListener(event, (e) => Game.fireInputs.delete(e.pointerId));
+fireButton.addEventListener("contextmenu", (e) => e.preventDefault());
+fireButton.addEventListener("click", (e) => {
+  if (e.detail === 0) fireShot();
+});
 pressButton("btn-horn", honk);
 pressButton("btn-pause", pause);
 // Домой можно в любой момент: собранные звёзды уже записаны в копилку
@@ -1896,6 +2010,11 @@ window.addEventListener("keydown", (e) => {
     return;
   }
   if (Game.finished) return;
+  if (e.code === "KeyF" || (e.code === "Space" && e.target === fireButton)) {
+    e.preventDefault();
+    if (!e.repeat) holdFire(e.code);
+    return;
+  }
   if (e.code === "KeyB") {
     if (!e.repeat) episodeAction();
     return;
@@ -1929,6 +2048,7 @@ window.addEventListener("keydown", (e) => {
   }
 });
 window.addEventListener("keyup", (e) => {
+  if (e.code === "KeyF" || e.code === "Space") Game.fireInputs.delete(e.code);
   if (DIRS[e.code]) Game.keys.delete(DIRS[e.code]);
 });
 window.addEventListener("blur", () => {
@@ -2045,7 +2165,7 @@ window.addEventListener("bibika-ready", () => {
   driveView.rimOf = rimColor;
   driveView.beaconOf = (type) => !!save.beacon[type];
   syncTune();
-  $("btn-play").disabled = false;
+  $("btn-play").disabled = $("btn-mission").disabled = $("hero-power").disabled = false;
   $("btn-play").style.setProperty("--load", "100%");
   $("load-status").hidden = true;
   paintCards();

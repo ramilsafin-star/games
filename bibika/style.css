@@ -649,13 +649,48 @@ body[data-mode="drive"] #drive {
   justify-content: space-between;
   pointer-events: none;
 }
+.drive-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: clamp(6px, 1.6vw, 16px);
+}
 .drive-bottom .icon-button {
+  max-width: max(16vw, 56px);
+  max-height: max(16vw, 56px);
   width: 92px;
   height: 92px;
   border-radius: 50%;
   background: #fffffff0;
   box-shadow: 0 6px 0 #1a42443d;
   font-size: 46px;
+}
+/* Мишень значит «стрелять», рядом маленький снаряд этой машины */
+#btn-fire {
+  position: relative;
+  background: #fff4d8;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+#fire-ammo {
+  position: absolute;
+  right: -6px;
+  top: -8px;
+  display: grid;
+  place-items: center;
+  width: 1.05em;
+  height: 1.05em;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 0 #1a42443d;
+  font-size: 0.62em;
+  line-height: 1;
+}
+#btn-fire.call {
+  animation: pulse 1.1s ease-in-out infinite;
+}
+#btn-fire:active {
+  transform: translateY(3px);
 }
 #btn-power {
   position: relative;
@@ -1210,3 +1245,10 @@ body[data-finished="yes"] .drive-bottom {
   border: 3px solid #283943; border-radius: 4px; box-shadow: 0 2px 6px #18354070;
   pointer-events: none;
 }
+
+#hero-power::after {
+  content: "▶"; position: absolute; right: -2px; bottom: 0;
+  display: grid; place-items: center; width: 21px; height: 21px;
+  border-radius: 50%; background: #236d5c; color: white; font: 700 11px/1 system-ui;
+}
+#hero-power:disabled, #btn-mission:disabled { cursor: wait; opacity: 0.65; }

@@ -50,7 +50,7 @@
             aria-label="Выбранная машина"
           ></canvas>
           <div id="bubbles" aria-hidden="true"></div>
-          <button id="hero-power" type="button" aria-label="Показать суперсилу"></button>
+          <button id="hero-power" type="button" title="Посмотреть суперсилу" aria-label="Показать суперсилу" disabled></button>
           <div id="tune-list">
             <button id="tune-wheels" class="tune-button" type="button" aria-label="Цвет дисков"></button>
             <button id="tune-beacon" class="tune-button" type="button" aria-label="Мигалка" aria-pressed="false">
@@ -67,7 +67,7 @@
       </section>
       <section class="picker">
         <div id="world-list" class="world-list" aria-label="Выбор мира"></div>
-        <button id="btn-mission" type="button" hidden></button>
+        <button id="btn-mission" type="button" disabled hidden></button>
         <div id="car-list" class="car-grid" aria-label="Выбор машины"></div>
         <footer>
           <a href="./assets/models/CREDITS.md" target="_blank" rel="noopener"
@@ -107,10 +107,16 @@
             <span aria-hidden="true">📢</span>
           </button>
           <button id="btn-brake" class="icon-button" aria-label="Остановиться" hidden>🛑</button>
-          <button id="btn-power" aria-label="Суперспособность">
-            <span id="power-fill"></span>
-            <span id="power-icon" aria-hidden="true">🔥</span>
-          </button>
+          <div class="drive-actions">
+            <button id="btn-fire" type="button" class="icon-button" aria-label="Стрелять" aria-keyshortcuts="F" title="Стрелять · F. Удерживай для очереди.">
+              <span aria-hidden="true">🎯</span>
+              <span id="fire-ammo" aria-hidden="true"></span>
+            </button>
+            <button id="btn-power" aria-label="Суперспособность">
+              <span id="power-fill"></span>
+              <span id="power-icon" aria-hidden="true">🔥</span>
+            </button>
+          </div>
         </div>
         <div id="finish" hidden>
           <section class="finish-card" role="dialog" aria-label="Все звёзды собраны!">

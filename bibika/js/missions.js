@@ -199,11 +199,20 @@ function episodeSpeed(dt, base) {
   if (Game.demo) {
     if (!Game.usedPower && Game.runTime >= 0.7) {
       const fx = CARS[Game.car.type].effect;
-      Game.entities.push({kind: "traffic", type: "van", x: Game.car.x + (fx === "scoop" ? 124 : 0),
-        y: Game.car.y - (fx === "plow" ? 135 : 380), pace: 0.62, drift: 0, phase: 0});
-      if (["wheelie", "harvest", "monster", "vacuum"].includes(fx))
-        Game.entities.push({kind:"cone", x:Game.car.x, y:Game.car.y-255, phase:0});
-      Game.entities.push({kind: "star", x: 424, y: Game.car.y - 230, phase: 0});
+      if (fx === "water" || fx === "harvest") {
+        const ahead = fx === "water" ? 530 : 310;
+        addWorkTarget(Game.car.type, Game.car.x, Game.car.y - ahead);
+      } else {
+        Game.entities.push({
+          kind: "traffic", type: "van", x: Game.car.x + (fx === "scoop" ? 124 : 0),
+          y: Game.car.y - (fx === "plow" ? 135 : 380), pace: 0.62, drift: 0, phase: 0,
+        });
+        if (fx === "steamroll")
+          Game.entities.push({kind:"traffic", type:"taxi", x:Game.car.x, y:Game.car.y-1000, pace:0.62, drift:0, phase:1});
+        if (["wheelie", "monster", "vacuum"].includes(fx))
+          Game.entities.push({kind:"cone", x:Game.car.x, y:Game.car.y-255, phase:0});
+        Game.entities.push({kind:"star", x:424, y:Game.car.y-230, phase:0});
+      }
       activatePower();
     }
     return base * 0.62;
