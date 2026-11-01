@@ -262,7 +262,7 @@ export class Blocks {
       m.position.set(b.position.x, GROUND_Y - b.position.y, 0);
       m.rotation.z = -b.angle;
       m.material.userData.damage.value = 1 - b.hp / b.maxHp;
-      m.material.userData.flash.value = b.hitFlash * 0.9;
+      m.material.userData.flash.value = b.hitFlash * 0.3;
       if (b.mat === 'boom' && particles) {
         const pulse = 0.1 + 0.07 * Math.sin(time * 5 + b.id);
         particles.glow(m.position.x, m.position.y, BLOCK_DEPTH / 2 + 4, Math.max(b.w, b.h) * 2.2, '#ff7a1a', pulse);
@@ -348,6 +348,13 @@ export class LevelProps {
     this.gemMat = new T.MeshStandardMaterial({ color: '#46dcff', metalness: 0.3, roughness: 0.05, emissive: '#1a9dff', emissiveIntensity: 0.55, envMapIntensity: 2.2, flatShading: true });
     this.orbMat = new T.MeshBasicMaterial({ color: new T.Color(3.2, 3.6, 4.4), toneMapped: false });
     this.orbGeo = new T.SphereGeometry(1, 18, 14);
+    this.stickGeo = merge([
+      paint(new T.CylinderGeometry(0.62, 0.62, 2.5, 14), '#d62a18'),
+      paint(new T.CylinderGeometry(0.64, 0.64, 0.14, 14), '#f2e6c9', new T.Matrix4().makeTranslation(0, 1.25, 0)),
+      paint(new T.CylinderGeometry(0.64, 0.64, 0.14, 14), '#f2e6c9', new T.Matrix4().makeTranslation(0, -1.25, 0)),
+      paint(new T.CylinderGeometry(0.1, 0.1, 0.7, 6), '#23180f', new T.Matrix4().makeTranslation(0, 1.6, 0))
+    ]);
+    this.stickMat = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.5 });
     this.ringMetal = new T.MeshStandardMaterial({ color: '#d7deea', metalness: 0.95, roughness: 0.2 });
     this.gemMeshes = [];
     this.orbMeshes = new Map();
@@ -497,13 +504,24 @@ export class LevelProps {
     for (const o of orbList) {
       let m = this.orbMeshes.get(o);
       if (!m) {
-        m = new T.Mesh(this.orbGeo, this.orbMat);
+        m = o.stick ? new T.Mesh(this.stickGeo, this.stickMat) : new T.Mesh(this.orbGeo, this.orbMat);
         this.stage.add(m);
         this.orbMeshes.set(o, m);
       }
       seen.add(o);
       const r = o.circleRadius;
       m.position.set(o.position.x, GROUND_Y - o.position.y, 0);
+      if (o.stick) {
+        // Шашка кувыркается, на запале горит искра
+        m.scale.setScalar(r);
+        m.rotation.set(0.3, 0, o.turn + time * 7);
+        const a = o.turn + time * 7;
+        const sx = m.position.x - Math.sin(a) * r * 2;
+        const sy = m.position.y + Math.cos(a) * r * 2;
+        particles.glow(sx, sy, 12, r * 4, '#ff9a2e', 0.9);
+        particles.sprite(sx, sy, 13, r * 2.4, time * 9, '#ffe9a8', 1, 9, 2.4);
+        continue;
+      }
       m.scale.setScalar(r * 0.72);
       particles.glow(m.position.x, m.position.y, 6, r * 7, '#7a5cff', 0.85);
       particles.glow(m.position.x, m.position.y, 7, r * 4, '#6fe8ff', 0.85);

@@ -64,7 +64,7 @@ void main(){
   #include <colorspace_fragment>
 }`;
 
-const FUR_LENGTH = { rocky: 0.26, zip: 0.3, trio: 0.24, nimbus: 0.4, magma: 0.17, drill: 0.2, frost: 0.28 };
+const FUR_LENGTH = { rocky: 0.26, zip: 0.3, trio: 0.24, nimbus: 0.4, magma: 0.17, drill: 0.2, frost: 0.28, dyna: 0.22 };
 
 let furGeometry = null;
 function makeFurGeometry(maxShells) {
@@ -202,7 +202,8 @@ function buildMouths(H, cache) {
   return cache.mouths;
 }
 
-// Украшения каждого героя: рога, хохолок, ушки, тучка, шипы, сверло, кристаллы
+const SPARK = new T.MeshBasicMaterial({ color: new T.Color(3.4, 2, 0.6), toneMapped: false });
+// Украшения каждого героя: рога, хохолок, ушки, тучка, шипы, сверло, кристаллы, шашки
 function buildDecor(type, H) {
   const out = [];
   const add = (geo, mat, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = sx, sz = sx) => {
@@ -250,6 +251,21 @@ function buildDecor(type, H) {
     const spike = new T.MeshStandardMaterial({ color: '#2a1140', roughness: 0.4, metalness: 0.3, emissive: '#ff6a1f', emissiveIntensity: 0.55 });
     const cone = new T.ConeGeometry(0.2, 0.62, 10);
     [[-0.68, 0.7, -0.5], [-0.24, 0.95, -0.14], [0.24, 0.96, 0.14], [0.68, 0.72, 0.5]].forEach(([x, y, tilt]) => add(cone, spike, x, y + 0.14, 0, 0, 0, -tilt));
+  } else if (type === 'dyna') {
+    // Связка шашек на макушке, чёрная лента и тлеющий запал
+    const red = new T.MeshStandardMaterial({ color: '#d62a18', roughness: 0.5 });
+    const band = new T.MeshStandardMaterial({ color: '#23180f', roughness: 0.7 });
+    const cap = new T.MeshStandardMaterial({ color: '#f2e6c9', roughness: 0.7 });
+    const stick = new T.CylinderGeometry(0.2, 0.2, 0.96, 14);
+    const end = new T.CylinderGeometry(0.205, 0.205, 0.05, 14);
+    [[-0.42, -0.04, -0.14, 0.14], [0, 0.1, 0.06, 0], [0.42, -0.04, -0.14, -0.14], [0.2, 0.2, -0.16, -0.06], [-0.2, 0.2, -0.16, 0.06]].forEach(([x, z, dy, tilt]) => {
+      const y = 1.22 + dy;
+      add(stick, red, x, y, z, 0, 0, tilt);
+      add(end, cap, x - Math.sin(tilt) * 0.48, y + Math.cos(tilt) * 0.48, z, 0, 0, tilt);
+    });
+    add(new T.CylinderGeometry(0.72, 0.72, 0.13, 22), band, 0, 1.12, 0.04, 0, 0, 0, 1, 1, 0.56);
+    add(tube([[0, 1.62, 0.12], [0.08, 1.92, 0.14], [0.3, 2.04, 0.14]], 0.035, 10, 6), band);
+    add(new T.SphereGeometry(0.12, 10, 8), SPARK, 0.34, 2.06, 0.14);
   } else if (type === 'drill') {
     const steel = new T.MeshStandardMaterial({ color: '#d7deea', metalness: 0.92, roughness: 0.22 });
     const dark = new T.MeshStandardMaterial({ color: '#5a6478', metalness: 0.7, roughness: 0.35 });

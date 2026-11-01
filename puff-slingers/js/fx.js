@@ -123,6 +123,12 @@ const FX = {
   },
 
   text(x, y, text, color, size, ttl) {
+    // Надпись поднимается выше уже видимых, чтобы при цепочке взрывов слова не слипались
+    for (let tries = 0; tries < 5; tries++) {
+      const busy = this.texts.find((q) => q.life < 0.5 && Math.abs(q.y - y) < (q.size + (size || 24)) * 0.62 && Math.abs(q.x - x) < 120);
+      if (!busy) break;
+      y = busy.y - (busy.size + (size || 24)) * 0.66;
+    }
     this.texts.push({ x, y, text, color, size: size || 24, life: 0, ttl: ttl || 1.1, vy: -46 });
     if (this.texts.length > 16) this.texts.shift();
   },

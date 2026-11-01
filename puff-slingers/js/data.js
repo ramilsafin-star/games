@@ -6,12 +6,12 @@ const GROUND_Y = 650;
 const SLING_X = 240;
 const SLING_Y = GROUND_Y - 140;
 const MAX_PULL = 115;
-const LAUNCH_POWER = 0.2;
+const LAUNCH_POWER = 0.22;
 const STEP_MS = 1000 / 60;
 const PORTAL_R = 34;
 const GEM_R = 20;
 // Как высоко над землёй долетает пуф на этом расстоянии (x, высота)
-const REACH_TOP = [[450, 615], [600, 572], [700, 528], [800, 471], [900, 401], [1000, 318], [1100, 216], [1150, 160], [1200, 99]];
+const REACH_TOP = [[450, 723], [600, 687], [700, 649], [800, 602], [900, 543], [1000, 474], [1100, 392], [1150, 346], [1200, 295]];
 
 // Пуфы — герои игры. vs: множитель урона по материалу (кто что лучше ломает).
 const HEROES = {
@@ -49,15 +49,20 @@ const HEROES = {
     r: 21, density: 0.0038, restitution: 0.36, ability: 'frost',
     fur: ['#f4fffd', '#a8f0e8', '#2fa8a8'], line: '#0b4f5a', iris: '#ff6a3d',
     trail: '#c8fff6', lumps: 16, vs: { wood: 1, ice: 1.6, stone: 1 }
+  },
+  dyna: {
+    r: 24, density: 0.005, restitution: 0.2, ability: 'bomb',
+    fur: ['#ffd08a', '#ff8a1f', '#c24a08'], line: '#5a2200', iris: '#0a8cff',
+    trail: '#ff9a2e', lumps: 13, vs: { wood: 1, ice: 1, stone: 1 }
   }
 };
 
 const MATERIALS = {
-  ice:   { hp: 20,  density: 0.0014, pts: 50,  chips: ['#d9fbff', '#7fe3ff', '#ffffff'], sound: 'ice' },
-  wood:  { hp: 40,  density: 0.0022, pts: 80,  chips: ['#ffc46b', '#e8893a', '#8a4a1c'], sound: 'wood' },
-  stone: { hp: 85, density: 0.0040, pts: 150, chips: ['#c9d2f2', '#8b95c7', '#565e96'], sound: 'stone' },
-  steel: { hp: 300, density: 0.0062, pts: 300, chips: ['#f2f5ff', '#a3aec9', '#515b7a'], sound: 'stone' },
-  boom:  { hp: 12,  density: 0.0020, pts: 200, chips: ['#ff5a3c', '#ffd23f', '#6d0f24'], sound: 'wood' }
+  ice:   { hp: 14,  density: 0.0014, pts: 50,  chips: ['#d9fbff', '#7fe3ff', '#ffffff'], sound: 'ice' },
+  wood:  { hp: 26,  density: 0.0022, pts: 80,  chips: ['#ffc46b', '#e8893a', '#8a4a1c'], sound: 'wood' },
+  stone: { hp: 52, density: 0.0040, pts: 150, chips: ['#c9d2f2', '#8b95c7', '#565e96'], sound: 'stone' },
+  steel: { hp: 130, density: 0.0062, pts: 300, chips: ['#f2f5ff', '#a3aec9', '#515b7a'], sound: 'stone' },
+  boom:  { hp: 10,  density: 0.0020, pts: 200, chips: ['#ff5a3c', '#ffd23f', '#6d0f24'], sound: 'wood' }
 };
 
 // Шесть разных миров: у каждого своя палитра, рельеф и атмосфера
@@ -82,356 +87,407 @@ const BIOMES = [
     grass: ['#ff9a2e', '#d13f12', '#5a1208'], dirt: ['#3d1420', '#240a15', '#10040a'], ambient: 'embers', music: 5 }
 ];
 
+// Строитель крупных построек: всё считается снизу вверх, base — высота опоры над землёй.
+// Функции возвращают высоту, на которой можно строить дальше
+const G = GROUND_Y;
+function fort(addB, addP) {
+  const F = {
+    post(x, base, h, mat, t = 34) {
+      addB(x, G - base - h / 2, t, h, mat);
+      return base + h;
+    },
+    slab(x, base, w, mat, t = 30) {
+      addB(x, G - base - t / 2, w, t, mat);
+      return base + t;
+    },
+    // Где стоит столб зала и где середина его пролёта
+    pillar: (x, span, bays, i, t = 34) => x - span / 2 + t / 2 + ((span - t) * i) / bays,
+    mid: (x, span, bays, i, t = 34) => F.pillar(x, span, bays, i + 0.5, t),
+    // Зал: столбы и над каждым пролётом своя балка. Рухнет столб, просядет только его часть.
+    // post — материал столбов или список материалов по одному на столб
+    hall(x, base, span, bays, h, post, beam = post, t = 34, bt = 30) {
+      for (let i = 0; i <= bays; i++) F.post(F.pillar(x, span, bays, i, t), base, h, Array.isArray(post) ? post[i] : post, t);
+      for (let i = 0; i < bays; i++) {
+        const left = i === 0 ? x - span / 2 : F.pillar(x, span, bays, i, t) + 0.5;
+        const right = i === bays - 1 ? x + span / 2 : F.pillar(x, span, bays, i + 1, t) - 0.5;
+        addB((left + right) / 2, G - base - h - bt / 2, right - left, bt, Array.isArray(beam) ? beam[i] : beam);
+      }
+      return base + h + bt;
+    },
+    crate(x, base, s = 48) {
+      addB(x, G - base - s / 2, s, s, 'boom');
+      return base + s;
+    },
+    // Кладка из кубов одним столбиком
+    cubes(x, base, count, mat, s = 44) {
+      for (let i = 0; i < count; i++) addB(x, G - base - s * (i + 0.5), s, s, mat);
+      return base + s * count;
+    },
+    // Зубцы поверх стены
+    teeth(x, base, span, count, mat, s = 38) {
+      for (let i = 0; i < count; i++) addB(x - span / 2 + (span * i) / (count - 1), G - base - s / 2, s, s, mat);
+      return base + s;
+    },
+    bot(x, base, r = 24, opts) {
+      addP(x, G - base - r, r, r >= 28, opts);
+    }
+  };
+  return F;
+}
+
 // Уровни. par — сколько пуфов нужно потратить на 3 звезды.
 // В третьем аргументе build набор из скал, батутов, порталов, вихрей и кристаллов.
-const G = GROUND_Y;
 const LEVELS = [
-  // 1. Знакомство: рогатка и ящик-бум
+  // 1. Знакомство: большой деревянный дом и ящик-бум посередине
   {
-    biome: 0, par: 1, heroes: ['rocky', 'zip', 'rocky', 'rocky'],
+    biome: 0, par: 2, heroes: ['rocky', 'rocky', 'zip', 'rocky'],
     build(addB, addP) {
-      const x = 840;
-      addB(x - 65, G - 60, 24, 120, 'wood');
-      addB(x + 65, G - 60, 24, 120, 'wood');
-      addP(x, G - 25, 25, false);
-      addB(x, G - 132, 170, 24, 'wood');
-      addB(x - 45, G - 166, 44, 44, 'boom');
-      addP(x + 35, G - 166, 22, false);
+      const F = fort(addB, addP);
+      const x = 930;
+      const first = F.hall(x, 0, 440, 3, 130, 'wood');
+      F.bot(F.mid(x, 440, 3, 0), 0, 26);
+      F.crate(x, 0);
+      F.cubes(F.mid(x, 440, 3, 2), 0, 2, 'wood');
+      const second = F.hall(x, first, 270, 2, 110, 'wood');
+      F.bot(F.mid(x, 270, 2, 0), first, 24);
+      F.cubes(F.mid(x, 270, 2, 1), first, 1, 'wood', 46);
+      F.hall(x, second, 150, 1, 80, 'wood', 'wood', 30, 26);
     }
   },
-  // 2. Ледяная башня и первый Мегабот
+  // 2. Ледяная башня и деревянная крепость с первым Мегаботом
   {
-    biome: 1, par: 2, heroes: ['trio', 'nimbus', 'zip', 'rocky'],
+    biome: 1, par: 3, heroes: ['trio', 'nimbus', 'zip', 'rocky', 'rocky'],
     build(addB, addP) {
-      const a = 720, b = 950;
-      addB(a - 50, G - 55, 22, 110, 'ice');
-      addB(a + 50, G - 55, 22, 110, 'ice');
-      addP(a, G - 24, 24, false);
-      addB(a, G - 121, 140, 22, 'ice');
-      addP(a, G - 152, 20, false);
+      const F = fort(addB, addP);
+      const a = 725;
+      const b = 1035;
+      let top = F.hall(a, 0, 200, 1, 135, 'ice');
+      F.bot(a, 0, 24);
+      top = F.hall(a, top, 150, 1, 105, 'ice', 'ice', 30, 26);
+      F.teeth(a, top, 100, 2, 'ice', 32);
 
-      addB(b - 60, G - 60, 24, 120, 'wood');
-      addB(b + 60, G - 60, 24, 120, 'wood');
-      addB(b, G - 23, 46, 46, 'boom');
-      addB(b, G - 132, 160, 24, 'wood');
-      addP(b, G - 172, 28, true);
+      top = F.hall(b, 0, 340, 2, 130, 'wood');
+      F.crate(F.mid(b, 340, 2, 0), 0);
+      F.bot(F.mid(b, 340, 2, 1), 0, 24);
+      const roof = F.hall(b, top, 210, 1, 125, 'wood');
+      F.bot(b, top, 28);
+      F.crate(b, roof, 46);
     }
   },
-  // 3. Каньон: цепная реакция
+  // 3. Каньон: цепная реакция, знакомство с Динамитом
   {
-    biome: 2, par: 2, heroes: ['zip', 'nimbus', 'magma', 'rocky', 'rocky'],
+    biome: 2, par: 3, heroes: ['dyna', 'zip', 'nimbus', 'rocky', 'rocky'],
     build(addB, addP) {
-      const x = 850;
-      addB(x - 110, G - 65, 26, 130, 'stone');
-      addB(x, G - 65, 26, 130, 'wood');
-      addB(x + 110, G - 65, 26, 130, 'stone');
-      addP(x - 55, G - 24, 24, false);
-      addB(x + 55, G - 23, 46, 46, 'boom');
-      addB(x, G - 142, 260, 24, 'stone');
-
-      addB(x - 65, G - 204, 24, 100, 'wood');
-      addB(x + 65, G - 204, 24, 100, 'wood');
-      addP(x, G - 184, 30, true);
-      addB(x, G - 266, 170, 24, 'wood');
+      const F = fort(addB, addP);
+      const x = 945;
+      const first = F.hall(x, 0, 500, 3, 135, ['stone', 'wood', 'wood', 'stone'], 'stone');
+      F.bot(F.mid(x, 500, 3, 0), 0, 24);
+      F.crate(x, 0);
+      F.bot(F.mid(x, 500, 3, 2), 0, 24);
+      const second = F.hall(x, first, 320, 2, 115, 'wood', 'stone');
+      F.bot(F.mid(x, 320, 2, 0), first, 28);
+      F.crate(F.mid(x, 320, 2, 1), first, 46);
+      const third = F.hall(x, second, 160, 1, 90, 'wood', 'wood', 30, 26);
+      F.crate(x, third, 42);
     }
   },
-  // 4. Ледник: двойной бункер
+  // 4. Ледник: две высокие башни и мост между ними
   {
-    biome: 3, par: 3, heroes: ['nimbus', 'trio', 'magma', 'zip', 'rocky'],
+    biome: 3, par: 4, heroes: ['nimbus', 'trio', 'dyna', 'zip', 'rocky', 'dyna', 'rocky'],
     build(addB, addP) {
-      [730, 990].forEach((x, i) => {
-        addB(x - 65, G - 60, 26, 120, i ? 'stone' : 'ice');
-        addB(x + 65, G - 60, 26, 120, i ? 'stone' : 'ice');
-        addP(x, G - (i ? 30 : 24), i ? 30 : 24, i === 1);
-        addB(x, G - 132, 170, 24, 'wood');
-        addB(x, G - 166, 44, 44, 'boom');
+      const F = fort(addB, addP);
+      [765, 1080].forEach((x, i) => {
+        const mat = i ? 'stone' : 'ice';
+        const first = F.hall(x, 0, i ? 250 : 240, 1, 130, mat, 'wood');
+        F.bot(x, 0, i ? 30 : 24);
+        const second = F.hall(x, first, 170, 1, 100, mat, 'wood', 30, 26);
+        F.crate(x, first, 44);
+        F.bot(x, second, 22);
       });
-      addP(860, G - 24, 24, false);
+      const bridge = F.slab(922, 160, 143, 'wood', 24);
+      F.bot(922, bridge, 22);
     }
   },
-  // 5. Неоновая крепость
+  // 5. Неоновая крепость: четыре пролёта, галерея и зубцы
   {
-    biome: 4, par: 2, heroes: ['trio', 'nimbus', 'magma', 'zip', 'rocky'],
+    biome: 4, par: 4, heroes: ['trio', 'dyna', 'nimbus', 'zip', 'rocky', 'rocky'],
     build(addB, addP) {
-      const x = 870;
-      addB(x - 140, G - 60, 26, 120, 'ice');
-      addB(x - 50, G - 60, 26, 120, 'stone');
-      addB(x + 50, G - 60, 26, 120, 'stone');
-      addB(x + 140, G - 60, 26, 120, 'ice');
-
-      addB(x - 95, G - 22, 44, 44, 'boom');
-      addP(x, G - 32, 32, true);
-      addB(x + 95, G - 22, 44, 44, 'boom');
-
-      addB(x - 95, G - 132, 120, 24, 'wood');
-      addB(x + 95, G - 132, 120, 24, 'wood');
-      addB(x, G - 156, 150, 24, 'stone');
-      addP(x - 45, G - 190, 22, false);
-      addP(x + 45, G - 190, 22, false);
+      const F = fort(addB, addP);
+      const x = 945;
+      const first = F.hall(x, 0, 520, 4, 130, ['ice', 'stone', 'stone', 'stone', 'ice'], 'stone');
+      F.crate(F.mid(x, 520, 4, 0), 0);
+      F.bot(F.mid(x, 520, 4, 1), 0, 32);
+      F.bot(F.mid(x, 520, 4, 2), 0, 24);
+      F.crate(F.mid(x, 520, 4, 3), 0);
+      const second = F.hall(x, first, 340, 2, 105, 'wood', 'stone');
+      F.bot(F.mid(x, 340, 2, 0), first, 22);
+      F.bot(F.mid(x, 340, 2, 1), first, 22);
+      F.teeth(x, second, 270, 4, 'ice');
     }
   },
-  // 6. Финальная цитадель в жерле вулкана
+  // 6. Цитадель в жерле вулкана: три этажа и ящик на вершине
   {
-    biome: 5, par: 3, heroes: ['trio', 'zip', 'nimbus', 'magma', 'magma', 'rocky'],
+    biome: 5, par: 3, heroes: ['trio', 'zip', 'dyna', 'nimbus', 'magma', 'rocky'],
     build(addB, addP) {
-      const x = 880;
-      addB(x - 170, G - 65, 26, 130, 'stone');
-      addB(x - 75, G - 65, 26, 130, 'wood');
-      addB(x + 75, G - 65, 26, 130, 'wood');
-      addB(x + 170, G - 65, 26, 130, 'stone');
-
-      addP(x - 122, G - 23, 23, false);
-      addB(x - 30, G - 22, 44, 44, 'boom');
-      addP(x + 25, G - 25, 25, false);
-      addP(x + 122, G - 23, 23, false);
-
-      addB(x - 123, G - 142, 94, 24, 'stone');
-      addB(x, G - 142, 148, 24, 'wood');
-      addB(x + 123, G - 142, 94, 24, 'stone');
-
-      addB(x - 55, G - 209, 24, 110, 'ice');
-      addB(x + 55, G - 209, 24, 110, 'ice');
-      addP(x, G - 188, 34, true);
-      addB(x, G - 276, 150, 24, 'stone');
-      addB(x, G - 310, 44, 44, 'boom');
+      const F = fort(addB, addP);
+      const x = 945;
+      const first = F.hall(x, 0, 500, 3, 130, ['stone', 'wood', 'wood', 'stone'], 'stone');
+      F.bot(F.mid(x, 500, 3, 0), 0, 23);
+      F.crate(x, 0);
+      F.bot(F.mid(x, 500, 3, 2), 0, 23);
+      const second = F.hall(x, first, 340, 2, 110, 'ice', 'stone');
+      F.bot(F.mid(x, 340, 2, 0), first, 30);
+      F.crate(F.mid(x, 340, 2, 1), first);
+      const third = F.hall(x, second, 190, 1, 90, 'wood', 'stone');
+      F.bot(x, second, 22);
+      F.crate(x, third, 44);
     }
   },
   // 7. Силовые щиты: первый удар только снимает щит
   {
-    biome: 0, par: 3, name: 0, gems: 2, heroes: ['rocky', 'trio', 'zip', 'rocky', 'magma'],
+    biome: 0, par: 5, name: 0, gems: 2, heroes: ['rocky', 'trio', 'zip', 'dyna', 'rocky', 'magma', 'rocky'],
     build(addB, addP, L) {
-      const a = 770, b = 1020;
-      addB(a - 55, G - 60, 24, 120, 'wood');
-      addB(a + 55, G - 60, 24, 120, 'wood');
-      addB(a, G - 132, 150, 24, 'wood');
-      addP(a, G - 24, 24, false, { shield: true });
-      addP(a, G - 168, 24, false, { shield: true });
+      const F = fort(addB, addP);
+      const a = 770;
+      const b = 1070;
+      let top = F.hall(a, 0, 240, 1, 130, 'wood');
+      F.bot(a, 0, 24, { shield: true });
+      const roof = F.hall(a, top, 170, 1, 100, 'wood');
+      F.bot(a, top, 22);
+      F.teeth(a, roof, 100, 2, 'wood', 32);
 
-      addB(b - 60, G - 60, 26, 120, 'stone');
-      addB(b + 60, G - 60, 26, 120, 'stone');
-      addB(b, G - 132, 170, 24, 'wood');
-      addB(b - 45, G - 166, 44, 44, 'boom');
-      addP(b, G - 28, 28, true, { shield: true });
-      addP(b + 40, G - 168, 24, false);
+      top = F.hall(b, 0, 300, 2, 130, 'stone', 'wood');
+      F.bot(F.mid(b, 300, 2, 0), 0, 28, { shield: true });
+      F.crate(F.mid(b, 300, 2, 1), 0);
+      F.crate(b - 60, top, 44);
+      F.bot(b + 55, top, 24);
 
       L.gem(640, G - 330);
-      L.gem(895, G - 250);
+      L.gem(895, G - 420);
     }
   },
-  // 8. Дроны: цели в воздухе, под ними нечего обрушить
+  // 8. Дроны: две цели летают над большой крепостью
   {
-    biome: 1, par: 3, name: 1, gems: 2, heroes: ['trio', 'zip', 'trio', 'rocky', 'nimbus'],
+    biome: 1, par: 4, name: 1, gems: 2, heroes: ['trio', 'zip', 'dyna', 'rocky', 'nimbus', 'trio', 'rocky'],
     build(addB, addP, L) {
-      addP(780, G - 340, 22, false, { hover: { ax: 90, speed: 1.1 } });
-      addP(960, G - 230, 22, false, { hover: { ay: 70, speed: 1.4, phase: 1 } });
-      addP(860, G - 370, 22, false, { hover: { ax: 50, ay: 25, speed: 0.9, phase: 2 } });
-      const x = 900;
-      addB(x - 55, G - 50, 22, 100, 'ice');
-      addB(x + 55, G - 50, 22, 100, 'ice');
-      addB(x, G - 111, 140, 22, 'wood');
-      addP(x, G - 24, 24, false);
+      const F = fort(addB, addP);
+      addP(790, G - 350, 26, false, { hover: { ax: 40, speed: 0.7 } });
+      addP(1010, G - 365, 26, false, { hover: { ay: 26, speed: 0.7, phase: 1 } });
+      const x = 960;
+      const first = F.hall(x, 0, 440, 2, 125, 'ice', 'wood');
+      F.bot(F.mid(x, 440, 2, 0), 0, 24);
+      F.crate(F.mid(x, 440, 2, 1), 0);
+      const second = F.hall(x, first, 220, 1, 95, 'wood');
+      F.crate(x, first, 44);
+      F.teeth(x, second, 130, 2, 'wood', 32);
 
-      L.gem(690, G - 230);
-      L.gem(930, G - 340);
+      L.gem(690, G - 260);
+      L.gem(920, G - 470);
     }
   },
-  // 9. Батут: стена закрывает ботов, зато можно перепрыгнуть
+  // 9. Батут: стенка невысокая, поверх неё тоже можно перекинуть
   {
-    biome: 2, par: 3, name: 2, gems: 2, heroes: ['zip', 'rocky', 'nimbus', 'trio', 'rocky'],
+    biome: 2, par: 3, name: 2, gems: 2, heroes: ['dyna', 'zip', 'rocky', 'nimbus', 'trio', 'rocky'],
     build(addB, addP, L) {
-      L.rock(790, G - 160, 60, 320);
+      const F = fort(addB, addP);
+      L.rock(760, G - 80, 60, 160);
       L.jelly(590, G - 10, 210, 20);
-      L.jelly(1170, G - 130, 24, 260);
-      addB(950, G - 50, 24, 100, 'wood');
-      addB(1070, G - 50, 24, 100, 'wood');
-      addB(1010, G - 112, 170, 24, 'wood');
-      addP(1010, G - 22, 22, false);
-      addP(880, G - 24, 24, false, { shield: true });
-      addP(1010, G - 146, 22, false);
+      F.bot(850, 0, 24);
+      const x = 1050;
+      const first = F.hall(x, 0, 310, 1, 125, 'wood');
+      F.crate(x - 62, 0, 44);
+      F.bot(x + 55, 0, 24);
+      const second = F.hall(x, first, 220, 1, 100, 'wood');
+      F.bot(x, first, 22);
+      F.teeth(x, second, 130, 2, 'wood', 32);
 
-      L.gem(590, G - 230);
-      L.gem(790, G - 400);
+      L.gem(590, G - 240);
+      L.gem(790, G - 340);
     }
   },
-  // 10. Бур: сквозь стальные стены проходит только он
+  // 10. Бур: стальной бункер проще всего пройти насквозь, но ящики взрываются и так
   {
-    biome: 3, par: 3, name: 3, gems: 1, heroes: ['drill', 'rocky', 'drill', 'magma'],
+    biome: 3, par: 3, name: 3, gems: 1, heroes: ['drill', 'dyna', 'rocky', 'drill', 'magma', 'rocky'],
     build(addB, addP, L) {
-      const x = 900;
-      addB(x - 150, G - 70, 44, 140, 'steel');
-      addB(x - 105, G - 70, 44, 140, 'stone');
-      addB(x + 150, G - 70, 44, 140, 'steel');
-      addB(x, G - 153, 360, 26, 'steel');
-      addP(x - 25, G - 28, 28, true);
-      addP(x + 70, G - 22, 22, false);
-      addP(x + 60, G - 188, 22, false, { shield: true });
-      addB(x - 60, G - 196, 44, 60, 'stone');
+      const F = fort(addB, addP);
+      const x = 950;
+      F.post(x - 228, 0, 150, 'steel', 44);
+      F.post(x, 0, 150, 'stone', 38);
+      F.post(x + 228, 0, 150, 'steel', 44);
+      F.slab(x - 125, 150, 250, 'stone');
+      const first = F.slab(x + 125, 150, 250, 'stone');
+      F.bot(x - 115, 0, 28);
+      F.crate(x + 70, 0);
+      F.bot(x + 150, 0, 24);
+      F.hall(x, first, 280, 2, 100, 'wood');
+      F.bot(F.mid(x, 280, 2, 0), first, 24);
+      F.crate(F.mid(x, 280, 2, 1), first, 46);
 
-      L.gem(590, G - 150);
+      L.gem(590, G - 170);
     }
   },
-  // 11. Портал: влетел здесь, вылетел за стеной
+  // 11. Портал: влетел здесь, вылетел за стеной. Стену можно и перекинуть
   {
-    biome: 4, par: 3, name: 4, gems: 2, heroes: ['rocky', 'zip', 'trio', 'nimbus', 'magma', 'rocky'],
+    biome: 4, par: 5, name: 4, gems: 2, heroes: ['rocky', 'dyna', 'zip', 'dyna', 'trio', 'nimbus', 'magma', 'rocky'],
     build(addB, addP, L) {
-      L.rock(740, G - 240, 50, 480);
-      L.portal(500, G - 330, 830, G - 300);
-      addB(930, G - 60, 26, 120, 'ice');
-      addB(1040, G - 60, 26, 120, 'ice');
-      addB(985, G - 132, 150, 24, 'wood');
-      addP(985, G - 28, 28, true, { shield: true });
-      addP(985, G - 168, 24, false);
-      addB(1130, G - 50, 26, 100, 'wood');
-      addB(1130, G - 112, 90, 24, 'wood');
-      addP(1130, G - 148, 24, false);
+      const F = fort(addB, addP);
+      L.rock(700, G - 65, 50, 130);
+      L.portal(500, G - 330, 830, G - 330);
+      const x = 1010;
+      const first = F.hall(x, 0, 400, 2, 125, 'ice', 'wood');
+      F.bot(F.mid(x, 400, 2, 0), 0, 28);
+      F.crate(F.mid(x, 400, 2, 1), 0);
+      const second = F.hall(x - 40, first, 240, 1, 100, 'wood');
+      F.bot(x - 40, first, 24);
+      F.teeth(x - 40, second, 140, 2, 'ice', 32);
+      F.bot(x + 150, first, 22);
 
       L.gem(830, G - 180);
-      L.gem(1100, G - 310);
+      L.gem(1140, G - 340);
     }
   },
-  // 12. Гигабот: первый босс
+  // 12. Гигабот: первый босс парит над каменным залом с ящиками
   {
-    biome: 5, par: 5, name: 5, gems: 2, boss: true, heroes: ['magma', 'rocky', 'zip', 'nimbus', 'magma', 'trio', 'rocky'],
+    biome: 5, par: 6, name: 5, gems: 2, boss: true, heroes: ['dyna', 'magma', 'rocky', 'zip', 'nimbus', 'dyna', 'trio'],
     build(addB, addP, L) {
-      L.rock(780, G - 90, 90, 180);
-      addB(780, G - 202, 44, 44, 'boom');
-      L.rock(1100, G - 70, 80, 140);
-      addB(1100, G - 162, 44, 44, 'boom');
-      addB(880, G - 40, 24, 80, 'stone');
-      addB(1020, G - 40, 24, 80, 'stone');
-      addP(950, G - 24, 24, false, { shield: true });
-      addP(950, G - 280, 56, true, { boss: true, hp: 300, phases: [0.5], hover: { ax: 40, ay: 70, speed: 0.8 } });
+      const F = fort(addB, addP);
+      L.rock(745, G - 60, 80, 120);
+      F.crate(745, 120);
+      const x = 1000;
+      const first = F.hall(x, 0, 400, 2, 125, 'stone', 'wood');
+      F.bot(F.mid(x, 400, 2, 0), 0, 24);
+      F.crate(F.mid(x, 400, 2, 1), 0);
+      F.hall(x, first, 240, 1, 85, 'wood');
+      addP(930, G - 400, 56, true, { boss: true, hp: 150, hover: { ax: 30, ay: 28, speed: 0.55 } });
 
       L.gem(620, G - 360);
-      L.gem(860, G - 420);
+      L.gem(860, G - 460);
     }
   },
-  // 13. Снежок: сталь почти ничего не берёт, пока её не заморозить
+  // 13. Снежок: стальные балки хрупкие на морозе, но взрыв их тоже берёт
   {
-    biome: 3, par: 4, name: 6, gems: 1, heroes: ['frost', 'rocky', 'frost', 'rocky', 'zip'],
+    biome: 3, par: 5, name: 6, gems: 1, heroes: ['frost', 'dyna', 'rocky', 'frost', 'dyna', 'rocky', 'zip'],
     build(addB, addP, L) {
-      [760, 1040].forEach((x, i) => {
-        addB(x - 72, G - 60, 34, 120, 'steel');
-        addB(x + 72, G - 60, 34, 120, 'steel');
-        addB(x, G - 132, 190, 24, 'steel');
-        addP(x, G - 26, 26, i === 1);
-        addP(x, G - 168, 24, false);
+      const F = fort(addB, addP);
+      [[775, 250], [1070, 270]].forEach(([x, span], i) => {
+        const first = F.hall(x, 0, span, 1, 130, 'stone', 'steel');
+        F.bot(x, 0, i ? 28 : 25);
+        F.crate(x - 62, first, 44);
+        const second = F.hall(x + 42, first, 130, 1, 90, 'ice', 'ice', 28, 24);
+        F.bot(x + 42, first, 20);
+        F.teeth(x + 42, second, 70, 2, 'ice', 28);
       });
 
-      L.gem(900, G - 300);
+      L.gem(925, G - 360);
     }
   },
-  // 14. Вихрь: полёт изгибается, прямых путей больше нет
+  // 14. Вихрь: полёт изгибается, а постройки стоят открыто
   {
-    biome: 4, par: 3, name: 7, gems: 3, heroes: ['trio', 'zip', 'rocky', 'nimbus'],
+    biome: 4, par: 4, name: 7, gems: 3, heroes: ['trio', 'dyna', 'zip', 'rocky', 'nimbus', 'rocky'],
     build(addB, addP, L) {
-      L.well(640, G - 290, 240, 0.6);
-      L.rock(800, G - 80, 44, 160);
-      addB(860, G - 40, 20, 80, 'ice');
-      addB(940, G - 40, 20, 80, 'ice');
-      addB(900, G - 91, 110, 22, 'ice');
-      addP(900, G - 24, 24, false);
-      L.rock(1040, G - 170, 170, 28);
-      addB(1000, G - 214, 22, 60, 'wood');
-      addB(1080, G - 214, 22, 60, 'wood');
-      addB(1040, G - 255, 120, 22, 'wood');
-      addP(1040, G - 208, 24, false, { shield: true });
-      addP(1040, G - 288, 22, false, { shield: true });
-      addP(780, G - 410, 22, false, { hover: { ax: 50, ay: 30, speed: 1 } });
+      const F = fort(addB, addP);
+      L.well(600, G - 320, 170, 0.35);
+      const x = 850;
+      const first = F.hall(x, 0, 230, 1, 120, 'ice', 'wood');
+      F.bot(x, 0, 24);
+      F.crate(x, first, 46);
+      L.rock(1095, G - 150, 240, 28);
+      const top = F.hall(1095, 164, 210, 1, 90, 'wood');
+      F.bot(1095, 164, 24);
+      F.crate(1045, top, 40);
+      F.bot(1145, top, 22);
 
-      L.gem(640, G - 440);
-      L.gem(540, G - 230);
-      L.gem(760, G - 330);
+      L.gem(640, G - 470);
+      L.gem(540, G - 240);
+      L.gem(760, G - 340);
     }
   },
   // 15. Бомботы: один взрыв тянет за собой другой
   {
-    biome: 2, par: 2, name: 8, gems: 1, heroes: ['rocky', 'zip', 'trio', 'rocky'],
+    biome: 2, par: 4, name: 8, gems: 1, heroes: ['rocky', 'zip', 'trio', 'dyna', 'rocky', 'rocky'],
     build(addB, addP, L) {
-      [740, 920, 1100].forEach((x, i) => {
-        addB(x - 50, G - 45, 26, 90, 'stone');
-        addB(x + 50, G - 45, 26, 90, 'stone');
-        addB(x, G - 101, 150, 22, 'wood');
-        addP(x, G - 24, 24, false, i === 2 ? { shield: true } : { volatile: true });
-        addP(x - 40, G - 136, 24, false, { volatile: true });
-        addP(x + 40, G - 136, 24, false, i === 2 ? { shield: true } : { volatile: true });
+      const F = fort(addB, addP);
+      [750, 945, 1130].forEach((x) => {
+        const first = F.hall(x, 0, 180, 1, 130, 'stone', 'wood');
+        F.bot(x, 0, 24, { volatile: true });
+        F.bot(x - 45, first, 22, { volatile: true });
+        F.bot(x + 45, first, 22, { volatile: true });
       });
 
-      L.gem(920, G - 330);
+      L.gem(945, G - 370);
     }
   },
-  // 16. Небесные острова: у каждого острова свой подход
+  // 16. Небесные острова: у каждого острова свой подход, портал только помогает
   {
-    biome: 1, par: 4, name: 9, gems: 3, heroes: ['trio', 'zip', 'nimbus', 'magma', 'rocky', 'drill', 'rocky'],
+    biome: 1, par: 5, name: 9, gems: 3, heroes: ['dyna', 'trio', 'zip', 'dyna', 'nimbus', 'rocky', 'drill', 'rocky'],
     build(addB, addP, L) {
-      L.rock(760, G - 230, 170, 28);
-      addB(715, G - 274, 22, 60, 'wood');
-      addB(805, G - 274, 22, 60, 'wood');
-      addB(760, G - 315, 130, 22, 'wood');
-      addP(760, G - 266, 22, false);
-      addP(760, G - 348, 22, false);
+      const F = fort(addB, addP);
+      // Острова лесенкой вверх: ближние низкие, дальние высокие, траектория идёт над всеми
+      L.rock(745, G - 90, 210, 28);
+      const a = F.hall(745, 104, 180, 1, 90, 'wood');
+      F.bot(745, 104, 24);
+      F.teeth(745, a, 100, 2, 'wood', 32);
 
-      L.rock(950, G - 270, 160, 28);
-      addB(910, G - 314, 20, 60, 'ice');
-      addB(990, G - 314, 20, 60, 'ice');
-      addB(950, G - 355, 120, 22, 'stone');
-      addP(950, G - 308, 24, false, { shield: true });
+      L.rock(935, G - 190, 170, 28);
+      F.crate(890, 204, 44);
+      F.bot(960, 204, 26);
 
-      L.rock(1120, G - 100, 140, 28);
-      addP(1120, G - 144, 30, true);
+      L.rock(1105, G - 280, 170, 28);
+      F.bot(1105, 294, 26);
+      F.teeth(1105, 294, 110, 2, 'wood', 30);
 
-      addP(880, G - 130, 20, false, { hover: { ay: 60, speed: 1.3 } });
-      L.portal(500, G - 110, 880, G - 500);
+      L.portal(500, G - 110, 880, G - 480);
       L.jelly(1000, G - 10, 220, 20);
 
       L.gem(630, G - 400);
-      L.gem(880, G - 420);
-      L.gem(1060, G - 230);
+      L.gem(960, G - 400);
+      L.gem(1040, G - 130);
     }
   },
-  // 17. Хитрый лабиринт: три этажа, в каждый свой ключ
+  // 17. Лабиринт: три этажа с открытым входом, в каждый можно попасть сверху или сбоку
   {
-    biome: 0, par: 5, name: 10, gems: 3, heroes: ['drill', 'frost', 'zip', 'magma', 'trio', 'rocky'],
+    biome: 0, par: 5, name: 10, gems: 3, heroes: ['dyna', 'drill', 'dyna', 'frost', 'zip', 'magma', 'trio', 'rocky'],
     build(addB, addP, L) {
-      L.rock(1000, G - 130, 300, 24);
-      L.rock(1000, G - 262, 300, 24);
-      L.rock(1165, G - 170, 30, 340);
-      addB(865, G - 59, 30, 118, 'steel');
-      addP(950, G - 24, 24, false);
-      addP(1060, G - 24, 24, false, { shield: true });
-      addB(865, G - 196, 30, 108, 'stone');
-      addP(960, G - 166, 24, false, { volatile: true });
-      addP(1060, G - 166, 24, false);
-      addB(930, G - 309, 22, 70, 'ice');
-      addB(1070, G - 309, 22, 70, 'ice');
-      addB(1000, G - 355, 170, 22, 'wood');
-      addP(1000, G - 302, 28, true);
-      L.jelly(1143, G - 59, 14, 118);
-      L.portal(560, G - 430, 930, G - 196);
+      const F = fort(addB, addP);
+      L.rock(1010, G - 140, 300, 24);
+      L.rock(1010, G - 280, 300, 24);
+      L.rock(1172, G - 175, 30, 350);
+      F.post(872, 0, 128, 'wood');
+      F.bot(960, 0, 24);
+      F.crate(1030, 0, 46);
+      F.bot(1100, 0, 24);
+      F.post(872, 152, 116, 'ice');
+      F.bot(1000, 152, 24, { volatile: true });
+      const top = F.hall(1010, 292, 200, 1, 85, 'wood');
+      F.bot(1010, 292, 26);
+      F.teeth(1010, top, 120, 2, 'wood', 32);
+      L.jelly(1147, G - 64, 14, 118);
+      L.portal(560, G - 430, 930, G - 220);
 
       L.gem(700, G - 200);
       L.gem(560, G - 280);
-      L.gem(900, G - 380);
+      L.gem(900, G - 440);
     }
   },
-  // 18. Гигабот возвращается: щит, бомботы-помощники и ярость
+  // 18. Гигабот возвращается: ярость и бомботы-помощники, зато взрывчатки хватает
   {
-    biome: 5, par: 6, name: 11, gems: 3, boss: true, heroes: ['magma', 'frost', 'drill', 'rocky', 'magma', 'nimbus', 'zip', 'rocky'],
+    biome: 5, par: 6, name: 11, gems: 3, boss: true, heroes: ['dyna', 'magma', 'dyna', 'frost', 'rocky', 'dyna', 'nimbus', 'zip'],
     build(addB, addP, L) {
-      L.rock(760, G - 60, 60, 120);
-      addB(760, G - 142, 44, 44, 'boom');
-      L.rock(1120, G - 70, 60, 140);
-      addB(1120, G - 162, 44, 44, 'boom');
-      addB(880, G - 50, 26, 100, 'stone');
-      addB(1040, G - 50, 26, 100, 'stone');
-      addB(960, G - 112, 190, 24, 'steel');
-      addP(960, G - 24, 24, false);
+      const F = fort(addB, addP);
+      L.rock(735, G - 50, 60, 100);
+      F.crate(735, 100);
+      const x = 1000;
+      const first = F.hall(x, 0, 420, 3, 125, 'stone', 'wood');
+      F.crate(F.mid(x, 420, 3, 0), 0);
+      F.crate(x, 0);
+      F.cubes(F.mid(x, 420, 3, 2), 0, 2, 'stone');
+      F.hall(x, first, 260, 1, 85, 'wood');
       L.portal(520, G - 90, 800, G - 470);
-      addP(930, G - 290, 60, true, { boss: true, hp: 360, shield: true, phases: [0.5], bombs: true, hover: { ax: 90, ay: 70, speed: 0.7 } });
+      addP(925, G - 410, 60, true, { boss: true, hp: 210, phases: [0.5], bombs: true, hover: { ax: 40, ay: 26, speed: 0.5 } });
 
       L.gem(630, G - 300);
-      L.gem(800, G - 330);
-      L.gem(1040, G - 260);
+      L.gem(800, G - 340);
+      L.gem(1040, G - 280);
     }
   }
 ];

@@ -97,7 +97,7 @@ const bounds = { left: 100, right: 1100, top: 300 };
 // =====================================================
 // ПОСТРОЕНИЕ УРОВНЯ
 // =====================================================
-function addBlock(x, y, w, h, mat) {
+function addBlock(x, y, w, h, mat, piece) {
   const m = MATERIALS[mat];
   const rng = seeded(blocks.length * 13 + level * 7 + 1);
   const b = Bodies.rectangle(x + levelShift, y, w, h, {
@@ -110,13 +110,16 @@ function addBlock(x, y, w, h, mat) {
   b.maxHp = m.hp;
   b.hitFlash = 0;
   b.cracks = makeCracks(w, h, rng);
+  b.piece = !!piece;
+  b.kick = null;
   blocks.push(b);
   World.add(world, b);
+  return b;
 }
 
 function addBot(x, y, r, isMega, opts) {
   opts = opts || {};
-  const hp = opts.hp || (isMega ? 60 : 20);
+  const hp = opts.hp || (isMega ? 35 : 20);
   const b = Bodies.circle(x + levelShift, y, r, {
     label: 'bot', density: opts.hover ? 0.004 : 0.002, friction: 0.5, restitution: 0.3, sleepThreshold: opts.hover ? Infinity : 50
   });
@@ -309,7 +312,7 @@ function computeBounds() {
 }
 
 function heroHint(type) {
-  const key = { rocky: 'heroRocky', zip: 'heroZip', trio: 'heroTrio', nimbus: 'heroNimbus', magma: 'heroMagma', drill: 'heroDrill', frost: 'heroFrost' }[type];
+  const key = { rocky: 'heroRocky', zip: 'heroZip', trio: 'heroTrio', nimbus: 'heroNimbus', magma: 'heroMagma', drill: 'heroDrill', frost: 'heroFrost', dyna: 'heroDyna' }[type];
   return t(key);
 }
 
@@ -463,6 +466,22 @@ function useAbility() {
     FX.text(x, y - 42, t('wordOrb'), '#bff4ff', 28);
   } else if (H.ability === 'blast') {
     detonateHero(h, 190);
+  } else if (H.ability === 'bomb') {
+    // Шашки летят веером вперёд и вниз, сам пуф взорвётся при ударе
+    Sound.ability('bomb');
+    [0.5, 0.74, 0.98].forEach((k, i) => {
+      const stick = Bodies.circle(x - 6 + i * 6, y + 12, 11, {
+        label: 'orb', density: 0.005, restitution: 0.1, collisionFilter: { group: -1 }, sleepThreshold: Infinity
+      });
+      stick.dead = false;
+      stick.stick = true;
+      stick.turn = (i - 1) * 0.3 + 0.2;
+      World.add(world, stick);
+      Body.setVelocity(stick, { x: v.x * k, y: Math.max(v.y, -2) * 0.5 + 5 + i * 2 });
+      orbs.push(stick);
+    });
+    FX.sparks(x, y - 20, '#ffb347', 14, 300, 0.4);
+    FX.text(x, y - 42, t('wordDyna'), '#ffb347', 28);
   } else if (H.ability === 'drill') {
     Sound.ability('drill');
     const a = Math.atan2(v.y, v.x);
@@ -549,10 +568,13 @@ function blastBodies(x, y, radius, kick, dmg, source) {
       x: v.x + (dx / dist) * kick * k * heavy,
       y: v.y + ((dy / dist) * kick - 4) * k * heavy
     });
+    b.kick = { x: (dx / dist) * kick * k, y: (dy / dist) * kick * k - 3, burnt: true };
     Body.setAngularVelocity(b, b.angularVelocity + (Math.random() - 0.5) * 0.3 * k);
     damage(b, dmg * k, source);
   });
 }
+
+let boomWordT = 0;
 
 function explode(x, y, radius, kick, dmg) {
   Sound.explosion();
@@ -561,15 +583,25 @@ function explode(x, y, radius, kick, dmg) {
   hitStopMs = Math.max(hitStopMs, 55);
   UI.screenFlash();
 
-  FX.flash(x, y, radius * 1.05, '#ffffff', 0.15);
-  FX.flash(x, y, radius * 1.5, '#ff9a1f', 0.28);
-  FX.fire(x, y, radius * 0.42, quality > 0 ? 26 : 13);
-  FX.smoke(x, y, '#3b2240', quality > 0 ? 12 : 6, 120, 1.15, radius * 0.45);
+  if (scene3d) {
+    // В 3D огонь и дым объёмные, вспышка лишь подсвечивает кадр
+    scene3d.fireballs.blast(x, GROUND_Y - y, radius);
+    FX.flash(x, y, radius * 0.8, '#fff0c8', 0.09);
+    FX.flash(x, y, radius * 1.25, '#ff9a1f', 0.2);
+  } else {
+    FX.flash(x, y, radius * 1.05, '#ffffff', 0.15);
+    FX.flash(x, y, radius * 1.5, '#ff9a1f', 0.28);
+    FX.fire(x, y, radius * 0.42, quality > 0 ? 26 : 13);
+    FX.smoke(x, y, '#3b2240', quality > 0 ? 12 : 6, 120, 1.15, radius * 0.45);
+  }
   FX.sparks(x, y, '#ffd23f', 26, 760, 0.65);
   FX.sparks(x, y, '#ff7a1a', 14, 560, 0.5);
-  FX.ring(x, y, radius, '#ffe9a8', 16, 0.42);
-  FX.ring(x, y, radius * 0.62, '#ff7a1a', 11, 0.32);
-  FX.text(x, y - 74, t('wordBoom'), '#ffd23f', 36, 1.0);
+  FX.ring(x, y, radius, '#ffe9a8', scene3d ? 8 : 16, 0.36);
+  // Надпись одна на всю цепочку взрывов, иначе за словами не видно самого обрушения
+  if (boomWordT <= 0) {
+    FX.text(x, y - 74, t('wordBoom'), '#ffd23f', 36, 1.0);
+    boomWordT = 0.7;
+  }
   if (y > GROUND_Y - 80) FX.scorch(x, GROUND_Y, radius * 1.1);
   if (phase === 'flight' || phase === 'settle') cam.focus = { x, y, zoom: overview.flightZoom, t: 0.8 };
 
@@ -577,7 +609,7 @@ function explode(x, y, radius, kick, dmg) {
 }
 
 function damage(b, dmg, attacker) {
-  if (b.dead || presettling) return;
+  if (b.dead || presettling || b.safeUntil > simSteps) return;
   if (attacker && attacker.label === 'hero' && b.mat) {
     dmg *= HEROES[attacker.heroType].vs[b.mat] || 1;
   }
@@ -621,17 +653,19 @@ function bossRage(b) {
   addTrauma(0.5);
   FX.ring(x, y, b.circleRadius * 3, '#ff5470', 12, 0.45);
   FX.text(x, y - b.circleRadius * 2.3, t('wordRage'), '#ff7a9a', 34, 1.2);
-  [-1, 1].forEach((s) => {
-    // Помощник появляется там, куда пуф ещё долетит
-    const hx = clamp(x - levelShift + s * 150, 640, 1060);
-    const hy = Math.max(y - 40, GROUND_Y - reachTop(hx) + 110);
-    const helper = addBot(hx, hy, 21, false, {
-      volatile: b.bombs, hover: { ax: 40, ay: 40, speed: 1.3, phase: s }
-    });
-    helper.hitFlash = 1;
-    FX.flash(helper.position.x, helper.position.y, 70, '#ffffff');
+  // Помощник один и с ближней стороны: туда, куда пуф легко долетит
+  const hx = clamp(x - levelShift - 150, 640, 1060);
+  const hy = Math.max(y + 60, GROUND_Y - reachTop(hx) + 110);
+  const helper = addBot(hx, hy, 24, false, {
+    volatile: b.bombs, hover: { ax: 30, ay: 24, speed: 0.9 }
   });
+  helper.hitFlash = 1;
+  FX.flash(helper.position.x, helper.position.y, 70, '#ffffff');
 }
+
+let collapseCount = 0;
+let collapseT = 0;
+let simSteps = 0;
 
 function killBlock(b) {
   b.dead = true;
@@ -639,14 +673,57 @@ function killBlock(b) {
   removals.push(b);
   const m = MATERIALS[b.mat];
   const { x, y } = b.position;
+  const size = Math.max(b.w, b.h);
   Sound.shatter(m.sound);
-  FX.chips(x, y, m.chips, b.mat === 'stone' ? 14 : 11, 340);
-  FX.smoke(x, y, b.mat === 'ice' ? '#e8fbff' : '#d9c7b8', 3, 60, 0.6, 22);
-  if (b.mat === 'ice') FX.sparks(x, y, '#d9fbff', 12, 340, 0.4);
-  addScore(m.pts, x, y - 8, m.chips[0], 18);
+  // Дальше всего обломки летят туда, куда их толкнули
+  if (scene3d) {
+    scene3d.shards.burst(b, b.kick);
+    FX.chips(x, y, m.chips, 4, 260);
+  } else {
+    FX.chips(x, y, m.chips, b.mat === 'stone' ? 14 : 11, 340);
+  }
+  const dust = b.mat === 'ice' ? '#e8fbff' : b.mat === 'stone' ? '#c8c2ba' : b.mat === 'steel' ? '#5d6470' : '#d9c7a4';
+  FX.smoke(x, y, dust, Math.round(clamp(size / 28, 3, 7)), 90, 0.75, clamp(size * 0.34, 20, 46));
+  FX.flash(x, y, size * 0.9, b.mat === 'ice' ? '#d9fbff' : '#fff0c8', 0.1);
+  if (b.mat === 'ice') FX.sparks(x, y, '#d9fbff', 14, 380, 0.45);
+  if (b.mat === 'steel') FX.sparks(x, y, '#ffd38a', 18, 460, 0.5);
+  addTrauma(clamp(size / 900, 0.04, 0.14));
+  // Очки за блоки считаются молча: при обрушении цифры закрывали бы всё действие
+  addScore(b.piece ? Math.round(m.pts / 3) : m.pts);
   if (b.mat === 'boom') {
     later(55 + Math.random() * 60, () => explode(x, y, 175, 17, 85));
+  } else if (!b.piece && size >= 110 && b.mat !== 'steel') {
+    later(0, () => snapBlock(b));
   }
+  // Сломалось сразу много: короткое замедление и надпись
+  collapseCount = collapseT > 0 ? collapseCount + 1 : 1;
+  collapseT = 0.45;
+  if (collapseCount === 5 && !levelOver) {
+    FX.text(x, y - 60, t('wordCollapse'), '#ffe9a8', 34, 1.1);
+    if (slowmoT <= 0) slowmo(0.42, 0.55);
+    addTrauma(0.3);
+  }
+}
+
+// Длинная балка ломается пополам: половины падают дальше и бьют то, что под ними
+function snapBlock(b) {
+  const along = b.w >= b.h;
+  const half = Math.max(b.w, b.h) / 2;
+  const c = Math.cos(b.angle);
+  const s = Math.sin(b.angle);
+  const v = Body.getVelocity(b);
+  [-1, 1].forEach((side) => {
+    const off = side * half * 0.5;
+    const px = b.position.x + (along ? c : -s) * off;
+    const py = b.position.y + (along ? s : c) * off;
+    const q = addBlock(px - levelShift, py, along ? half : b.w, along ? b.h : half, b.mat, true);
+    q.hp = q.maxHp = MATERIALS[b.mat].hp * 0.6;
+    // Половинки сперва целы: иначе разобьются о соседей ещё в момент появления
+    q.safeUntil = simSteps + 16;
+    Body.setAngle(q, b.angle + side * 0.1);
+    Body.setVelocity(q, { x: v.x + (along ? c : -s) * side * 1.6, y: v.y + (along ? s : c) * side * 1.6 - 1 });
+    Body.setAngularVelocity(q, b.angularVelocity + side * 0.05);
+  });
 }
 
 function bodyHas(q, x, y, r) {
@@ -733,6 +810,10 @@ Events.on(engine, 'collisionStart', (event) => {
         orbs = orbs.filter((q) => q !== o);
         const { x, y } = o.position;
         later(0, () => {
+          if (o.stick) {
+            explode(x, y, 140, 14, 80);
+            return;
+          }
           explode(x, y, 165, 16, 100);
           FX.lightning(x, y, 150, 9);
         });
@@ -764,6 +845,16 @@ Events.on(engine, 'collisionStart', (event) => {
         hero.frictionAir = 0.018;
       }
       if (hero.heroType === 'magma' && !hero.fuse && flying.includes(hero)) hero.fuse = 70;
+      // Динамит взрывается от первого настоящего удара
+      if (hero.heroType === 'dyna' && other.label !== 'jelly' && !hero.blown && flying.includes(hero)) {
+        hero.blown = true;
+        later(0, () => {
+          if (flying.includes(hero)) {
+            abilityUsed = true;
+            detonateHero(hero, 185);
+          }
+        });
+      }
       if (rel > 3) {
         hero.squish = Math.min(0.38, 0.1 + rel * 0.012);
         hero.hurtT = 0.32;
@@ -777,9 +868,22 @@ Events.on(engine, 'collisionStart', (event) => {
 
     [[a, b], [b, a]].forEach(([target, source]) => {
       if (target.label === 'block' || target.label === 'bot') {
+        // Обломки полетят по направлению удара
+        if (target.label === 'block') {
+          const sv = source === a ? va : vb;
+          target.kick = { x: sv.x * 0.6, y: sv.y * 0.6 - 2 };
+        }
         damage(target, rel * 4.3, source);
       }
     });
+
+    // Пуф пробивает сломанное насквозь и летит дальше
+    if (hero && other.dead && (other.label === 'block' || other.label === 'bot') && hero.drillT <= 0) {
+      const heroV = hero === a ? va : vb;
+      later(0, () => {
+        if (flying.includes(hero)) Body.setVelocity(hero, { x: heroV.x * 0.72, y: heroV.y * 0.72 });
+      });
+    }
 
     const pad = a.label === 'jelly' ? a : b.label === 'jelly' ? b : null;
     if (pad) {
@@ -877,6 +981,7 @@ function updateHover() {
 Events.on(engine, 'beforeUpdate', updateHover);
 
 function stepSim() {
+  simSteps++;
   engine.timing.timeScale = slowmoT > 0 ? slowmoScale : 1;
   Engine.update(engine, STEP_MS);
   flushRemovals();
@@ -1387,6 +1492,8 @@ function updateVisuals(dt) {
   FX.update(dt);
 
   comboTimer = Math.max(0, comboTimer - dt);
+  collapseT = Math.max(0, collapseT - dt);
+  boomWordT = Math.max(0, boomWordT - dt);
   cheerT = Math.max(0, cheerT - dt);
   aimIdle = phase === 'aim' && !pull ? aimIdle + dt : 0;
   if (tapPrompt > 0) tapPrompt = Math.max(0, tapPrompt - dt);
@@ -1431,6 +1538,9 @@ function updateVisuals(dt) {
     h.dashT = Math.max(0, h.dashT - dt);
     if (!h.hasHit && Math.random() < dt * 28) {
       FX.star(h.position.x - 6, h.position.y, HEROES[h.heroType].trail);
+    }
+    if (h.heroType === 'dyna' && !h.hasHit && Math.random() < dt * 30) {
+      FX.sparks(h.position.x, h.position.y - h.circleRadius * 1.9, '#ffb347', 1, 130, 0.26);
     }
     if (h.fuse > 0 && Math.random() < dt * 40) {
       FX.sparks(h.position.x, h.position.y - h.circleRadius, '#ffb347', 1, 160, 0.3);

@@ -154,7 +154,7 @@ const Sound = {
   // Голос каждого пуфа при вылете
   voice(type) {
     if (!this.canPlay('voice', 60)) return;
-    const pitch = { rocky: 330, zip: 620, trio: 880, nimbus: 480, magma: 210, drill: 260, frost: 740 }[type] || 400;
+    const pitch = { rocky: 330, zip: 620, trio: 880, nimbus: 480, magma: 210, drill: 260, frost: 740, dyna: 170 }[type] || 400;
     this.tone({ type: 'square', f0: pitch, f1: pitch * 1.7, dur: 0.11, vol: 0.05, at: 0.03 });
     this.tone({ type: 'sine', f0: pitch * 1.7, f1: pitch * 1.2, dur: 0.2, vol: 0.1, at: 0.13 });
   },
@@ -174,6 +174,10 @@ const Sound = {
     } else if (kind === 'drop') {
       this.tone({ type: 'square', f0: 1200, f1: 180, dur: 0.24, vol: 0.09 });
       this.noise({ f0: 3000, f1: 700, dur: 0.14, vol: 0.13, filter: 'bandpass', q: 3 });
+    } else if (kind === 'bomb') {
+      // Шипение запала и падающие шашки
+      this.noise({ f0: 5200, f1: 2600, dur: 0.5, vol: 0.13, filter: 'highpass' });
+      this.tone({ type: 'triangle', f0: 900, f1: 240, dur: 0.34, vol: 0.13 });
     } else if (kind === 'drill') {
       this.tone({ type: 'sawtooth', f0: 90, f1: 420, dur: 0.42, vol: 0.13 });
       this.noise({ f0: 1800, f1: 4200, dur: 0.42, vol: 0.12, filter: 'bandpass', q: 2 });

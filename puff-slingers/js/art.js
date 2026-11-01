@@ -181,6 +181,29 @@ function heroDecorBack(g, type, r, H) {
       g.closePath();
       outlined(g, H.line, lw, '#ff7a1a');
     });
+  } else if (type === 'dyna') {
+    // Связка шашек на макушке и запал
+    [[-0.42, -0.14], [0, 0], [0.42, 0.14]].forEach(([x, tilt]) => {
+      g.save();
+      g.translate(r * x, -r * 0.82);
+      g.rotate(tilt);
+      g.beginPath();
+      g.roundRect(-r * 0.2, -r * 0.92, r * 0.4, r * 0.98, r * 0.08);
+      outlined(g, H.line, lw, '#e8321f');
+      g.restore();
+    });
+    g.fillStyle = '#2a1b12';
+    g.fillRect(-r * 0.66, -r * 1.2, r * 1.32, r * 0.16);
+    g.strokeStyle = '#2a1b12';
+    g.lineWidth = Math.max(1.4, r * 0.08);
+    g.beginPath();
+    g.moveTo(0, -r * 1.72);
+    g.quadraticCurveTo(r * 0.14, -r * 2.05, r * 0.32, -r * 2.05);
+    g.stroke();
+    g.beginPath();
+    g.arc(r * 0.34, -r * 2.05, r * 0.12, 0, TAU);
+    g.fillStyle = '#ffb347';
+    g.fill();
   } else if (type === 'drill') {
     // Сверло на макушке
     g.beginPath();
@@ -1105,6 +1128,23 @@ function drawOrb(ctx, o, time) {
   const r = o.circleRadius;
   ctx.save();
   ctx.translate(o.position.x, o.position.y);
+  if (o.stick) {
+    // Шашка динамита с искрой на запале
+    ctx.rotate(o.turn + time * 7);
+    ctx.fillStyle = '#e8321f';
+    ctx.strokeStyle = '#5a2200';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(-r * 0.6, -r * 1.25, r * 1.2, r * 2.5, r * 0.25);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#ffb347';
+    ctx.beginPath();
+    ctx.arc(0, -r * 1.6, r * 0.42 + Math.sin(time * 40) * r * 0.1, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
   ctx.globalCompositeOperation = 'lighter';
   const gs = r * 5;
   ctx.drawImage(softSprite('#7a5cff'), -gs / 2, -gs / 2, gs, gs);

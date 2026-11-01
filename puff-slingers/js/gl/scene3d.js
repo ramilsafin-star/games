@@ -5,6 +5,8 @@ import { Post } from './post.js';
 import { Puffs } from './puffs.js';
 import { Bots } from './bots.js';
 import { Blocks, LevelProps, Sling } from './blocks.js';
+import { Shards } from './shards.js';
+import { Fireballs } from './fireballs.js';
 import { Particles } from './particles.js';
 import { buildWorld, lookOf, makeSky, setSkyFor, windowsTexture } from './worlds.js';
 
@@ -130,6 +132,8 @@ class Scene3D {
     this.contacts = new Contacts(this.stage);
     this.particles = new Particles(this.stage, tex.sprites);
     this.blocks = new Blocks(this.stage, tex);
+    this.shards = new Shards(this.stage, this.blocks.base);
+    this.fireballs = new Fireballs(this.stage);
     this.props = new LevelProps(this.stage, tex);
     this.bots = new Bots(this.stage, tex.cracks);
     this.sling = new Sling(this.stage, tex);
@@ -219,6 +223,7 @@ class Scene3D {
     this.post.final.uniforms.uExposure.value = look.exposure;
     this.post.final.uniforms.uBloom.value = look.bloom;
     this.puffs.setGlint(look.bloom);
+    this.fireballs.setLight(look.sunI > 2.5 ? 1 : 0.72);
     this.post.final.uniforms.uSaturation.value = look.sat;
     this.post.extract.uniforms.uThreshold.value = 1.05;
   }
@@ -242,6 +247,8 @@ class Scene3D {
     if (q === this.quality && this.sun.shadow.map) return;
     this.quality = q;
     this.puffs.setShells(SHELLS[q]);
+    this.fireballs.quality = q;
+    this.shards.setQuality(q);
     const size = q >= 2 ? 2048 : q === 1 ? 1536 : 1024;
     if (this.sun.shadow.mapSize.x !== size) {
       this.sun.shadow.mapSize.set(size, size);
@@ -301,6 +308,7 @@ class Scene3D {
       const hop = cheerT > 0 ? Math.abs(Math.sin(t * 11 + i)) * 15 : Math.abs(Math.sin(t * 2.2 + i * 1.3)) * 2.6;
       const blink = (t * 1000 + i * 941) % 3300 < 120;
       P.draw(q.type, q.x, r + hop + 2, r, { lookX: 0.8, lookY: -0.1, blink, mood: cheerT > 0 ? 'happy' : 'angry', squish: hop > 8 ? -0.05 : 0 });
+      if (q.type === 'dyna') this.fuseGlow(q.x, r + hop + 2, r, t);
     }
     // На рогатке
     const s = slingHero;
@@ -330,6 +338,7 @@ class Scene3D {
       const breath = Math.sin(t * 3) * 0.018;
       const blink = (t * 1000) % 2600 < 110;
       P.draw(s.type, x, G - y, s.r, { lookX: look.x, lookY: look.y, blink: blink && !pull, mood: 'angry', squish: s.squish + breath + tension * 0.07 });
+      if (s.type === 'dyna') this.fuseGlow(x, G - y, s.r, t);
     }
     const pouch = pouchPos();
     this.sling.update(pouch.x, pouch.y, heroR);
@@ -369,6 +378,12 @@ class Scene3D {
     }
   }
 
+  // Искра на запале Динамита
+  fuseGlow(x, y, r, t) {
+    const pulse = 0.5 + 0.35 * Math.sin(t * 31 + x);
+    this.particles.glow(x + r * 0.34, y + r * 2.06, 14, r * 1.6, '#ff9a2e', pulse);
+  }
+
   // Мягкое затемнение там, где предмет стоит на земле
   drawContacts() {
     const C = this.contacts;
@@ -402,6 +417,8 @@ class Scene3D {
     this.setBiome(cfg.biome);
     if (rocks !== this.lastRocks) {
       this.lastRocks = rocks;
+      this.shards.clear();
+      this.fireballs.clear();
       this.props.rebuild(cfg.biome, rocks, portals, wells, gems);
     }
     this.resize(v.vw, v.vh, v.dpr, v.quality);
@@ -411,6 +428,8 @@ class Scene3D {
     this.world.update(t);
     this.drawHeroes(t);
     this.blocks.draw(blocks, t, this.particles);
+    this.shards.update(t);
+    this.fireballs.update(t);
     this.bots.draw(bots, t, this.particles);
     this.props.draw(t, this.particles, orbs);
     this.drawContacts();
