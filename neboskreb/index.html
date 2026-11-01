@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"
+    />
+    <title>Небоскрёб</title>
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Небоскрёб" />
+    <meta name="theme-color" content="#7cc4f2" />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <canvas id="game" aria-label="Стройка: башенный кран и будущий небоскрёб"></canvas>
+    <div id="hud" aria-hidden="true">
+      <span id="stars" class="pill">⭐ 0</span>
+      <span id="floors" class="pill">🏢 0</span>
+    </div>
+    <button id="btn-sound" class="round" type="button" aria-label="Выключить звук">🔊</button>
+    <button id="btn-roof" class="round big" type="button" aria-label="Поставить крышу" hidden>🏁</button>
+    <button id="btn-next" type="button" aria-label="Строить следующий дом" hidden>▶</button>
+    <div id="tray"></div>
+    <div id="hand" aria-hidden="true" hidden>👆</div>
+    <div id="toast" aria-hidden="true"></div>
+    <div id="fade" aria-hidden="true"></div>
+    <p id="load" role="status">🏗️</p>
+    <script>
+      // Простой синтаксис намеренно: сообщение покажется и там, где браузер не прочитает игру
+      window.neboskrebFail = function () {
+        var box = document.getElementById("load");
+        box.hidden = false;
+        box.className = "fail";
+        box.textContent =
+          "Этот браузер не тянет 3D-графику игры. Обновите систему устройства или откройте игру в свежем Safari или Chrome.";
+      };
+      window.addEventListener("error", function () {
+        if (!window.Neboskreb || !window.Neboskreb.ready) window.neboskrebFail();
+      });
+      setTimeout(function () {
+        if (!window.Neboskreb || !window.Neboskreb.ready) window.neboskrebFail();
+      }, 30000);
+    </script>
+    <script src="./js/audio.js"></script>
+    <script type="module" src="./js/game.js" onerror="window.neboskrebFail()"></script>
+  <a href="../" aria-label="Все игры" style="position:fixed;left:calc(12px + env(safe-area-inset-left,0px));top:calc(12px + env(safe-area-inset-top,0px));z-index:50;width:52px;height:52px;border-radius:50%;background:#fffffff0;box-shadow:0 4px 0 #0003;display:grid;place-items:center;font-size:27px;text-decoration:none">🎮</a></body>
+</html>

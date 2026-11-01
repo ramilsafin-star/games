@@ -21,4 +21,11 @@ const GAMES = [
     cover: "covers/domik.jpg",
     color: "#2fbf71",
   },
+  {
+    id: "neboskreb",
+    title: "Небоскрёб",
+    url: "neboskreb/",
+    cover: "covers/neboskreb.jpg",
+    color: "#2a9df4",
+  },
 ];
