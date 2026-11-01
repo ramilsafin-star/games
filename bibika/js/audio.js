@@ -1,6 +1,8 @@
 // =====================================================
 // ЗВУК: всё синтезируется кодом, файлов и чужой музыки нет
 // =====================================================
+// Музыка играет фоном всю поездку: голоса в игре больше нет
+const MUSIC_GAIN = 0.85;
 const Sound = {
   ctx: null,
   master: null,
@@ -10,6 +12,7 @@ const Sound = {
   on: true,
   starStep: 0,
   starAt: 0,
+  boomAt: -1,
   musicLevel: 0.52,
   effectsLevel: 0.82,
 
@@ -26,7 +29,7 @@ const Sound = {
       this.master = c.createGain();
       this.sfxBus = c.createGain();
       this.musicBus = c.createGain();
-      this.musicBus.gain.value = this.musicLevel * 0.6;
+      this.musicBus.gain.value = this.musicLevel * MUSIC_GAIN;
       this.sfxBus.gain.value = this.effectsLevel;
       this.sfxBus.connect(comp);
       this.musicBus.connect(comp);
@@ -50,7 +53,7 @@ const Sound = {
     if (this.ctx) {
       this.musicBus.gain.cancelScheduledValues(this.ctx.currentTime);
       this.musicBus.gain.setTargetAtTime(
-        music * 0.6,
+        music * MUSIC_GAIN,
         this.ctx.currentTime,
         0.06,
       );
@@ -85,7 +88,7 @@ const Sound = {
     osc.stop(t0 + o.dur + 0.02);
   },
 
-  noise(o) {
+  noise(o, bus) {
     const c = this.ctx;
     const t0 = c.currentTime + (o.at || 0);
     const src = c.createBufferSource();
@@ -102,7 +105,7 @@ const Sound = {
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + o.dur);
     src.connect(f);
     f.connect(g);
-    g.connect(this.sfxBus);
+    g.connect(bus || this.sfxBus);
     src.start(t0, Math.random() * 0.8);
     src.stop(t0 + o.dur + 0.02);
   },
@@ -158,7 +161,8 @@ const Sound = {
     this.tone({ type: "sawtooth", f0: 170, f1: 520, dur: 0.3, vol: 0.06 });
   },
 
-  // Тихий непрерывный двигатель, разный у тяжёлой техники и легковых машин.
+  // Двигатель слышно всю поездку: рокот, верхняя нота и глухие толчки цилиндров.
+  // С разгоном он забирается выше, у тяжёлой техники ниже, у электромобиля только гул.
   engine(type, boosting, moving = true, rate = 1, biome = "city") {
     if (!this.ctx) return;
     if (!moving) {
@@ -170,20 +174,41 @@ const Sound = {
       return;
     }
     if (!this.motor) {
-      const osc = this.ctx.createOscillator();
-      const filter = this.ctx.createBiquadFilter();
-      const gain = this.ctx.createGain();
+      const c = this.ctx,
+        osc = c.createOscillator(),
+        upper = c.createOscillator(),
+        upperGain = c.createGain(),
+        filter = c.createBiquadFilter(),
+        gain = c.createGain(),
+        pulse = c.createOscillator(),
+        pulseDepth = c.createGain(),
+        pulseGain = c.createGain();
       osc.type = "sawtooth";
+      upper.type = "square";
+      upperGain.gain.value = 0.28;
       filter.type = "lowpass";
-      filter.frequency.value = 260;
+      filter.frequency.value = 600;
+      filter.Q.value = 1.6;
       gain.gain.value = 0;
+      // Толчки цилиндров: громкость дрожит с частотой оборотов
+      pulse.type = "sine";
+      pulse.frequency.value = 18;
+      pulseDepth.gain.value = 0.34;
+      pulseGain.gain.value = 0.66;
+      pulse.connect(pulseDepth);
+      pulseDepth.connect(pulseGain.gain);
       osc.connect(filter);
-      filter.connect(gain);
+      upper.connect(upperGain);
+      upperGain.connect(filter);
+      filter.connect(pulseGain);
+      pulseGain.connect(gain);
       gain.connect(this.sfxBus);
       osc.start();
-      const road = this.ctx.createBufferSource(),
-        roadFilter = this.ctx.createBiquadFilter(),
-        roadGain = this.ctx.createGain();
+      upper.start();
+      pulse.start();
+      const road = c.createBufferSource(),
+        roadFilter = c.createBiquadFilter(),
+        roadGain = c.createGain();
       road.buffer = this.noiseBuf;
       road.loop = true;
       roadFilter.type = "bandpass";
@@ -193,35 +218,73 @@ const Sound = {
       roadFilter.connect(roadGain);
       roadGain.connect(this.sfxBus);
       road.start();
-      this.motor = { osc, gain, filter, roadGain, roadFilter, last: -1 };
+      this.motor = { osc, upper, upperGain, pulse, gain, filter, roadGain, roadFilter, last: -1 };
     }
-    if (this.ctx.currentTime - this.motor.last < 0.12) return;
-    this.motor.last = this.ctx.currentTime;
-    const heavy = ["tank", "truck", "tractor", "bus", "fire"].includes(type);
+    const now = this.ctx.currentTime,
+      m = this.motor;
+    if (now - m.last < 0.12) return;
+    m.last = now;
+    const heavy = ["tank", "truck", "tractor", "bus", "fire", "mixer", "dump", "garbage", "roller", "harvester", "train"].includes(type);
     const electric = type === "ev";
-    this.motor.osc.type = electric ? "sine" : "sawtooth";
-    this.motor.osc.frequency.setTargetAtTime(
-      (electric ? 105 : heavy ? 42 : 67) *
-        (boosting ? 1.6 : 1) *
-        (0.64 + 0.36 * rate),
-      this.ctx.currentTime,
-      0.15,
-    );
-    this.motor.roadFilter.frequency.setTargetAtTime(
-      biome === "snow" ? 1550 : biome === "desert" ? 730 : 420,
-      this.ctx.currentTime,
-      0.15,
-    );
-    this.motor.roadGain.gain.setTargetAtTime(
-      (biome === "snow" ? 0.048 : 0.03) * rate,
-      this.ctx.currentTime,
-      0.13,
-    );
-    this.motor.gain.gain.setTargetAtTime(
-      electric ? 0.025 : heavy ? 0.065 : 0.045,
-      this.ctx.currentTime,
-      0.12,
-    );
+    const revs = (boosting ? 1.45 : 1) * (0.68 + 0.42 * Math.min(rate, 1.6));
+    const f = (electric ? 120 : heavy ? 52 : 82) * revs;
+    m.osc.type = electric ? "sine" : "sawtooth";
+    m.upperGain.gain.setTargetAtTime(electric ? 0.06 : 0.28, now, 0.1);
+    m.osc.frequency.setTargetAtTime(f, now, 0.14);
+    m.upper.frequency.setTargetAtTime(f * 2.01, now, 0.14);
+    m.pulse.frequency.setTargetAtTime(f * 0.25, now, 0.14);
+    m.filter.frequency.setTargetAtTime(electric ? 900 : 380 + 420 * revs, now, 0.14);
+    m.roadFilter.frequency.setTargetAtTime(biome === "snow" ? 1550 : biome === "desert" ? 730 : 420, now, 0.15);
+    m.roadGain.gain.setTargetAtTime((biome === "snow" ? 0.06 : 0.04) * rate, now, 0.13);
+    m.gain.gain.setTargetAtTime(electric ? 0.09 : heavy ? 0.2 : 0.16, now, 0.12);
+  },
+
+  // Сирена погони: протяжный вой, вплотную частый. Громкость задаёт расстояние до полиции
+  siren(level, close = false) {
+    if (!this.ctx) return;
+    const c = this.ctx;
+    if (!this.wail) {
+      const sweep = c.createOscillator(),
+        depth = c.createGain(),
+        horn = c.createOscillator(),
+        edge = c.createOscillator(),
+        filter = c.createBiquadFilter(),
+        gain = c.createGain();
+      sweep.type = "triangle";
+      sweep.frequency.value = 0.7;
+      depth.gain.value = 330;
+      horn.type = "sawtooth";
+      horn.frequency.value = 960;
+      edge.type = "square";
+      edge.frequency.value = 966;
+      filter.type = "bandpass";
+      filter.frequency.value = 1150;
+      filter.Q.value = 0.7;
+      gain.gain.value = 0;
+      sweep.connect(depth);
+      depth.connect(horn.frequency);
+      depth.connect(edge.frequency);
+      horn.connect(filter);
+      edge.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.sfxBus);
+      sweep.start();
+      horn.start();
+      edge.start();
+      this.wail = { sweep, gain, last: -1 };
+    }
+    const now = c.currentTime;
+    if (now - this.wail.last < 0.09 && level > 0) return;
+    this.wail.last = now;
+    this.wail.sweep.frequency.setTargetAtTime(close ? 3 : 0.7, now, 0.2);
+    this.wail.gain.gain.setTargetAtTime(level, now, 0.1);
+  },
+
+  // Визг шин: полиция ушла в занос
+  screech() {
+    if (!this.ready()) return;
+    this.noise({ f0: 2700, f1: 1500, dur: 0.85, vol: 0.2, filter: "bandpass" });
+    this.tone({ type: "sawtooth", f0: 1250, f1: 780, dur: 0.75, vol: 0.05 });
   },
 
   power(effect) {
@@ -329,9 +392,28 @@ const Sound = {
     this.tone({ type: "triangle", f0: 1250, f1: 420, dur: 0.22, vol: 0.14, at: 0.05 });
   },
 
+  // Взрыв машины: удар, рёв огня и звон обломков. Издалека тише, очередь не складывается в грохот
+  boom(k = 1) {
+    if (!this.ready()) return;
+    const now = this.ctx.currentTime;
+    if (now - this.boomAt < 0.1) return;
+    this.boomAt = now;
+    this.tone({ type: "sine", f0: 170, f1: 40, dur: 1, vol: 1.1 * k });
+    this.tone({ type: "triangle", f0: 110, f1: 44, dur: 1.3, vol: 0.55 * k, at: 0.02 });
+    this.noise({ f0: 3600, f1: 170, dur: 1.3, vol: 1 * k });
+    this.noise({ f0: 1000, f1: 120, dur: 1.8, vol: 0.55 * k, at: 0.06 });
+    for (let i = 0; i < 4; i++) {
+      const f = 1500 + Math.random() * 2400;
+      this.tone({ type: "square", f0: f, f1: f * 0.7, dur: 0.05 + Math.random() * 0.06, vol: 0.035 * k, at: 0.22 + i * 0.13 + Math.random() * 0.08 });
+    }
+  },
+
   // Свой звук выстрела у каждого снаряда
   shot(kind) {
     if (!this.ready()) return;
+    // Общий щелчок отдачи: у любого снаряда слышно, что это выстрел
+    this.tone({ type: "square", f0: 520, f1: 110, dur: 0.1, vol: 0.34 });
+    this.noise({ f0: 3200, f1: 800, dur: 0.08, vol: 0.5, filter: "bandpass" });
     if (kind === "boom") {
       this.tone({ type: "sine", f0: 180, f1: 60, dur: 0.22, vol: 0.32 });
       this.noise({ f0: 900, f1: 200, dur: 0.16, vol: 0.2 });
@@ -423,56 +505,56 @@ const Sound = {
   },
 };
 
-// Весёлая музыка: своя мелодия у каждого мира
+// Фоновая музыка: своя мелодия у каждого мира, ударные и бас задают темп
 const Music = {
   track: 0,
   step: 0,
   next: 0,
   TRACKS: [
     {
-      bpm: 124,
+      bpm: 138,
       root: 261.63,
       prog: [0, 5, 7, 0],
       lead: [0, 2, 4, 2, 5, 4, 2, 0],
       wave: "triangle",
     },
     {
-      bpm: 112,
+      bpm: 126,
       root: 293.66,
       prog: [0, 9, 5, 7],
       lead: [4, 2, 0, 2, 4, 5, 4, 2],
       wave: "sine",
     },
     {
-      bpm: 132,
+      bpm: 146,
       root: 329.63,
       prog: [0, 5, 0, 7],
       lead: [0, 4, 2, 5, 4, 2, 4, 0],
       wave: "triangle",
     },
     {
-      bpm: 104,
+      bpm: 118,
       root: 349.23,
       prog: [0, 7, 9, 5],
       lead: [5, 4, 2, 0, 2, 4, 2, 0],
       wave: "sine",
     },
     {
-      bpm: 118,
+      bpm: 132,
       root: 220.0,
       prog: [0, 3, 5, 7],
       lead: [0, 2, 3, 5, 3, 2, 5, 4],
       wave: "triangle",
     },
     {
-      bpm: 116,
+      bpm: 130,
       root: 246.94,
       prog: [0, 5, 2, 7],
       lead: [2, 4, 5, 4, 0, 2, 4, 0],
       wave: "triangle",
     },
     {
-      bpm: 98,
+      bpm: 112,
       root: 220,
       prog: [0, 3, 7, 5],
       lead: [0, 2, 5, 4, 2, 4, 2, 0],
@@ -490,7 +572,7 @@ const Music = {
         const gain = Sound.musicBus.gain;
         gain.cancelScheduledValues(now);
         gain.setTargetAtTime(0.001, now, 0.045);
-        gain.setTargetAtTime(Sound.musicLevel * 0.6, now + 0.15, 0.18);
+        gain.setTargetAtTime(Sound.musicLevel * MUSIC_GAIN, now + 0.15, 0.18);
       }
     }
   },
@@ -501,7 +583,7 @@ const Music = {
     const g = Sound.musicBus.gain;
     g.cancelScheduledValues(now);
     g.setTargetAtTime(Sound.musicLevel * 0.16, now, 0.05);
-    g.setTargetAtTime(Sound.musicLevel * 0.6, now + seconds, 0.5);
+    g.setTargetAtTime(Sound.musicLevel * MUSIC_GAIN, now + seconds, 0.5);
   },
 
   tick() {
@@ -523,11 +605,16 @@ const Music = {
     const s = step % 8;
     const root = tr.root * Math.pow(2, tr.prog[bar] / 12);
     const major = [1, 1.122, 1.26, 1.335, 1.498, 1.682, 2];
+    // Ударные и быстрый бас держат темп погони
     if (s === 0 || s === 4)
-      Sound.tone(
-        { type: "triangle", f0: root / 2, dur: dur * 1.7, vol: 0.34, at },
-        bus,
-      );
+      Sound.tone({ type: "sine", f0: 150, f1: 48, dur: 0.17, vol: 0.5, at, attack: 0.002 }, bus);
+    if (s === 2 || s === 6)
+      Sound.noise({ f0: 1800, dur: 0.13, vol: 0.2, filter: "highpass", at }, bus);
+    Sound.noise({ f0: 7600, dur: 0.035, vol: s % 2 ? 0.08 : 0.04, filter: "highpass", at }, bus);
+    Sound.tone(
+      { type: "triangle", f0: (root / 2) * (s % 2 ? 2 : 1), dur: dur * 0.85, vol: 0.24, at },
+      bus,
+    );
     if (s === 2 || s === 6) {
       Sound.tone(
         { type: "sine", f0: root * 1.26, dur: dur * 0.8, vol: 0.11, at },
@@ -565,28 +652,3 @@ const Music = {
   },
 };
 
-// Голосовые подсказки вместо текста: игрок ещё не читает.
-// Если русского голоса нет, просто молчим: чужой голос читает русский непонятно.
-const Voice = {
-  say(text) {
-    if (!Sound.on || !("speechSynthesis" in window)) return;
-    try {
-      const voices = speechSynthesis.getVoices(),
-        russian = voices.find((v) => /^ru/i.test(v.lang));
-      if (voices.length && !russian) return;
-      speechSynthesis.cancel();
-      const phrase = new SpeechSynthesisUtterance(text);
-      phrase.lang = "ru-RU";
-      if (russian) phrase.voice = russian;
-      phrase.rate = 1;
-      phrase.pitch = 1.2;
-      phrase.volume = Math.min(1, Sound.effectsLevel + 0.15);
-      speechSynthesis.speak(phrase);
-    } catch (_) {}
-  },
-  stop() {
-    try {
-      if ("speechSynthesis" in window) speechSynthesis.cancel();
-    } catch (_) {}
-  },
-};

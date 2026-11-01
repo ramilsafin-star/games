@@ -38,6 +38,7 @@ import {
   LOOP_RADIUS,
   UNITS_PER_METRE,
 } from "./scenery.js";
+import { Blasts } from "./blasts.js";
 
 const TOOL_CAMERA_OFFSET = { whistle: 4.5, harvest: 6, scoop: 4.8, water: 3.3 };
 const SHOT_LIMIT = 32;
@@ -484,6 +485,7 @@ export class DriveView {
     );
     this.sparks.frustumCulled = false;
     this.scene.add(this.sparks);
+    this.blasts = new Blasts(this.scene);
     // Полосы скорости по краям кадра
     this.streaks = new T.InstancedMesh(
       new T.BoxGeometry(0.035, 0.035, 1),
@@ -893,6 +895,7 @@ export class DriveView {
     this.player = null;
     this.showCar = null;
     this.clearObjects();
+    this.blasts.clear();
     this.lastTravel = 0;
   }
   clearObjects() {
@@ -1068,7 +1071,7 @@ export class DriveView {
     }
     car.muzzleAhead = this.muzzleAhead;
     this.exhaust.visible =
-      (["nitro", "comet", "wind", "steamroll"].includes(fx) || car.boost > 0) && !game.loop;
+      (["nitro", "comet", "wind", "steamroll"].includes(fx) || car.boost > 0 || (car.flare > 0 && !car.air)) && !game.loop;
     this.exhaust.position.set(px, 0.4 + lift, this.playerTail + 0.1);
     this.exhaust.scale.z = 1 + Math.sin(game.time * 30) * 0.18;
     const stroke = fx === "plow" ? 1 - game.active / CARS.tractor.duration : 0;
@@ -1145,6 +1148,8 @@ export class DriveView {
       } else node.visible = true;
     }
     this.drawEffects(game, fx, d);
+    // Дым ночью и в туннеле темнее, огонь светит сам
+    this.blasts.update(game, d, dt, (1 - 0.62 * mood.night) * (1 - 0.5 * dark), this.quality < 1);
     this.drawLights(game, player, px, lift, lamps, d);
     this.drawRain(game, d, mood.rain * (1 - dark));
     this.drawMovers(game, d);
@@ -1205,22 +1210,29 @@ export class DriveView {
     this.cameraInitialized = true;
     this.renderer.shadowMap.needsUpdate =
       this.shadowFrame++ % (this.quality < 1 ? 5 : 2) === 0;
+    // Вспышка взрыва на мгновение осветляет весь кадр
+    this.renderer.toneMappingExposure = 1 + this.blasts.flash;
     this.renderer.render(this.scene, this.cam);
+    this.renderer.toneMappingExposure = 1;
     this.drawMirror(game, px, d, screen);
   }
   drawMirror(game, px, d, screen) {
     const frame = document.getElementById("patrol-mirror");
-    const rear = !game.finished && game.city?.phase === "chase" && game.city.npc.y - game.car.y > 68;
+    // В зеркале видно патруль задания или полицию, которая гонится за стрелком
+    const chaser = game.chase?.car || (game.city?.phase === "chase" ? game.city.npc : null),
+      behind = chaser ? chaser.y - game.car.y : 0;
+    const npc = chaser && this.nodes.get(chaser),
+      rear = npc && !game.finished && !game.loop && behind > 68 && behind < 1700;
     frame.hidden = !rear;
+    frame.classList.toggle("alarm", !!game.chase);
     if (!rear) return;
     const box = frame.getBoundingClientRect(), cam = this.mirrorCam;
     cam.aspect = box.width / box.height;
     cam.position.set(px, 2.65, 2.95);
-    const z = (game.city.npc.y - game.car.y) / UNITS_PER_METRE;
-    cam.lookAt(this.roadPosition(game.city.npc.x, z, d), this.roadLift(z,d) + 1, z);
+    const z = behind / UNITS_PER_METRE;
+    cam.lookAt(this.roadPosition(chaser.x, z, d), this.roadLift(z,d) + 1, z);
     cam.updateProjectionMatrix();
     const x = box.left - screen.left, y = screen.bottom - box.bottom;
-    const npc = this.nodes.get(game.city.npc);
     const visible = npc.visible;
     npc.visible = true;
     this.renderer.setScissorTest(true);

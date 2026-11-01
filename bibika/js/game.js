@@ -140,6 +140,8 @@ const Game = {
   entities: [],
   particles: [],
   shots: [],
+  blasts: [],
+  chase: null,
   fireInputs: new Set(),
   nextShotAt: 0,
   shotCount: 0,
@@ -209,7 +211,6 @@ function setWorld(index, announce = true) {
   Music.setTrack(WORLDS[Game.world].music);
   if (announce) {
     showToast(WORLDS[Game.world].icon);
-    Voice.say(WORLDS[Game.world].name);
   }
 }
 function paintSpec(type) {
@@ -269,7 +270,7 @@ function paintNextThumb() {
     card = document.querySelector(`.car-card[data-car="${type}"]`);
   window.driveView.thumbnail(card.querySelector("canvas"), type);
 }
-function selectCar(type, speak = false) {
+function selectCar(type) {
   save.car = type;
   store();
   const c = CARS[type];
@@ -286,7 +287,6 @@ function selectCar(type, speak = false) {
   syncPaints();
   syncTune();
   paintHero();
-  if (speak) Voice.say(c.name);
 }
 function buildGarage() {
   const list = $("car-list");
@@ -311,7 +311,7 @@ function buildGarage() {
         return;
       }
       Sound.tap();
-      selectCar(type, true);
+      selectCar(type);
     });
     list.appendChild(b);
   });
@@ -332,7 +332,6 @@ function buildGarage() {
       save.world = i;
       store();
       syncWorldChips();
-      Voice.say(w.name);
     });
     $("world-list").appendChild(b);
   });
@@ -379,7 +378,6 @@ function choosePaint(p) {
   Sound.unlock();
   if (save.stars < p.at) {
     Sound.boing();
-    Voice.say("Собери ещё звёзды!");
     const chip = $("paint-list").children[PAINTS.indexOf(p)];
     chip.classList.remove("nope");
     void chip.offsetWidth;
@@ -527,6 +525,8 @@ function startDrive(mode) {
   $("rival-dots").replaceChildren();
   Game.particles = [];
   Game.shots = [];
+  Game.blasts = [];
+  stopPoliceChase();
   Game.rings = [];
   Game.hooks = [];
   Game.birds = [];
@@ -589,11 +589,10 @@ function startDrive(mode) {
   hud.stars = hud.power = hud.fill = null;
   updateHUD();
   $("btn-pause").focus({ preventScroll: true });
-  Voice.say(Game.demo ? CARS[save.car].power : Game.farm ? "Подтолкни ковшом три тюка!" : "Собери звёзды!");
 }
 function garage() {
   Sound.engine(Game.car.type, false, false);
-  Voice.stop();
+  stopPoliceChase();
   clearInput();
   Game.mode = "garage";
   Game.demo = false;
@@ -623,7 +622,6 @@ function pause() {
     : $("btn-pause");
   Game.paused = true;
   Sound.engine(Game.car.type, false, false);
-  Voice.stop();
   clearInput();
   $("dialog-backdrop").hidden = false;
   $("btn-resume").focus();
@@ -651,7 +649,6 @@ function finish() {
   clearInput();
   if (!Game.farm) missionHint("");
   Sound.fanfare();
-  Voice.say(Game.farm ? "Все три тюка собраны!" : "Ура! Первое место!");
   const id = WORLDS[Game.world].id;
   save.stickers[id] = (save.stickers[id] || 0) + 1;
   store();
@@ -670,7 +667,6 @@ function showFinish() {
   $("finish-paint").hidden = !fresh;
   if (fresh) {
     $("finish-paint").style.setProperty("--swatch", fresh.color);
-    Voice.say("Новый цвет!");
   }
   $("finish").hidden = false;
   // Медали получают все: у игрока золото, друзья рядом с ним
@@ -713,15 +709,7 @@ function collect(e) {
     Sound.gift();
   }
   updateHUD();
-  sayOnce(TARGET_STARS / 2, "Молодец!");
-  sayOnce(TARGET_STARS - 10, "Ещё чуть-чуть!");
   if (!Game.demo && !Game.farm && Game.stars >= TARGET_STARS) finish();
-}
-function sayOnce(stars, text) {
-  if (Game.stars < stars || Game.stars >= TARGET_STARS || Game.spoken.has(text))
-    return;
-  Game.spoken.add(text);
-  Voice.say(text);
 }
 function burst(x, y, color, n = 16) {
   for (let i = 0; i < n; i++) {
@@ -831,6 +819,47 @@ function fireShot() {
 function shotBurst(x, y, ammo, n = 24) {
   for (const color of ammo.colors) burst(x, y, color, Math.ceil(n / ammo.colors.length));
 }
+// Попадание: машина взрывается и разлетается на куски, конус улетает, на дороге остаётся звезда
+function blowUp(e, ammo) {
+  if (e.dead) return;
+  Game.entities.push({
+    kind: "star",
+    x: e.x,
+    y: e.y,
+    size: 17,
+    phase: Math.random() * TAU,
+  });
+  if (e.kind === "cone") {
+    launchCone(e);
+    shotBurst(e.x, e.y, ammo, 14);
+    return;
+  }
+  e.dead = true;
+  Game.blasts.push({ x: e.x, y: e.y, type: e.type, pace: e.pace ?? 0.72 });
+  // Цвета снаряда этой машины разлетаются вместе с обломками
+  for (let i = 0; i < 18; i++) {
+    const a = Math.random() * TAU,
+      s = 70 + Math.random() * 260;
+    Game.particles.push({
+      x: e.x,
+      y: e.y,
+      vx: Math.cos(a) * s,
+      vy: Math.sin(a) * s,
+      alt: 0.7 + Math.random() * 1.2,
+      valt: 3 + Math.random() * 10,
+      gravity: 15,
+      road: true,
+      life: 0.65 + Math.random() * 0.75,
+      max: 1.4,
+      color: ammo.colors[Math.floor(Math.random() * ammo.colors.length)],
+      size: 2.2 + Math.random() * 2.6,
+    });
+  }
+  const ahead = Math.max(0, Game.car.y - e.y);
+  Game.shake = Math.max(Game.shake, clamp(1 - ahead / 1500, 0.24, 0.95));
+  Sound.boom(clamp(1.15 - ahead / 2200, 0.38, 1));
+  callPolice();
+}
 function holdFire(source) {
   if (Game.mode !== "drive" || Game.paused || Game.finished) return;
   if (!Game.fireInputs.size) {
@@ -869,7 +898,7 @@ function activatePower() {
     for (const e of ahead)
       if (c.y - e.y < 380 && Math.abs(e.x - c.x) < 170) {
         confetti(e.x, e.y, 24);
-        clearObstacle(e, true);
+        blowUp(e, AMMO[c.type]);
       }
     const rest = ahead.filter((e) => !e.dead);
     for (let i = 0; i < 3; i++)
@@ -1288,10 +1317,6 @@ function update(dt) {
       c.air = 0;
       c.spin = 0;
       Sound.whee();
-      if (!Game.spoken.has("loop")) {
-        Game.spoken.add("loop");
-        Voice.say("Мёртвая петля!");
-      }
     }
   }
   if (Game.loop) {
@@ -1310,10 +1335,8 @@ function update(dt) {
     Game.washing = washing;
     if (washing) {
       Sound.splash();
-      Voice.say("Моем машину!");
     } else if (!done) {
       Sound.gift();
-      Voice.say("Как новая!");
       Game.cooldown = 0;
       burst(c.x, c.y, "#ffffff", 26);
       hitBoost({});
@@ -1342,19 +1365,7 @@ function update(dt) {
   const zone = window.driveView?.zone(Game.distance / 22) || "";
   if (zone !== Game.zone) {
     Game.zone = zone;
-    if (zone && !done) {
-      Sound.whoosh();
-      if (!Game.spoken.has(zone)) {
-        Game.spoken.add(zone);
-        Voice.say(
-          zone === "bridge"
-            ? "Большой мост!"
-            : Game.world === 4
-              ? "Подводный туннель!"
-              : "Туннель!",
-        );
-      }
-    }
+    if (zone && !done) Sound.whoosh();
   }
   // Вертолёт прилетает, кружит над дорогой и сбрасывает подарки на парашютах
   if (!done && !Game.farm && !Game.demo && !(Game.city?.manual)) {
@@ -1362,10 +1373,6 @@ function update(dt) {
     if (!Game.heli && Game.heliIn <= 0) {
       Game.heli = { t: 0, x: -520, y: c.y - 860, alt: 11, vx: 0, drops: 2, dropIn: 2.6 };
       Sound.whoosh();
-      if (!Game.spoken.has("heli")) {
-        Game.spoken.add("heli");
-        Voice.say("Смотри, вертолёт!");
-      }
     }
   }
   if (Game.heli) {
@@ -1413,10 +1420,6 @@ function update(dt) {
       Sound.whee();
       Game.shake = Math.max(Game.shake, 0.35);
       burst(c.x, c.y, "#fff4b0", 16);
-      if (!done && !Game.spoken.has("leap")) {
-        Game.spoken.add("leap");
-        Voice.say("Прыжок!");
-      }
     } else {
       Sound.land();
       Game.shake = Math.max(Game.shake, 0.9);
@@ -1738,7 +1741,7 @@ function update(dt) {
     p.x += p.vx * dt;
     p.y += p.vy * dt;
     p.life -= dt;
-    if (p.target && !p.target.dead)
+    if (p.target && !p.target.dead && p.target.kind !== "flyer")
       p.x = lerp(p.x, p.target.x, 1 - Math.exp(-dt * 16));
     // Хвост редкий и мелкий: при очереди он не должен закрывать машину и дорогу
     p.trail = (p.trail || 0) + dt;
@@ -1765,29 +1768,35 @@ function update(dt) {
       if (!isObstacle(hit)) shootWorkTarget(hit);
       else {
         shotBurst(hit.x, hit.y, p.ammo);
-        clearObstacle(hit, true);
+        blowUp(hit, p.ammo);
         // Большой снаряд задевает и то, что стоит рядом
         if (p.ammo.blast) {
           addRing(hit.x, hit.y, "#fff4b0", 190);
           for (const e of Game.entities.filter(isObstacle))
             if (Math.abs(e.x - hit.x) < 170 && Math.abs(e.y - hit.y) < 260) {
               shotBurst(e.x, e.y, p.ammo, 12);
-              clearObstacle(e, true);
+              blowUp(e, p.ammo);
             }
         }
       }
       p.life = 0;
     }
   }
+  updatePoliceChase(dt);
   Game.entities = Game.entities.filter((e) => !e.dead && (e.kind === "patrolActor" || e.y < Game.h + 200));
   Game.shots = Game.shots.filter((p) => p.life > 0 && p.y > c.y - 2200);
   for (const p of Game.particles) {
     p.x += p.vx * dt;
     p.y += p.vy * dt;
     p.vy += 80 * dt;
+    if (p.road) p.y += roadSpeed * dt;
     if (p.alt !== undefined) {
       p.alt += p.valt * dt;
-      p.valt -= 4 * dt;
+      p.valt -= (p.gravity || 4) * dt;
+      if (p.road && p.alt < 0.08) {
+        p.alt = 0.08;
+        p.valt *= -0.4;
+      }
     }
     p.life -= dt;
   }
@@ -1814,15 +1823,10 @@ function update(dt) {
   if (Game.runTime > 9) $("steer-hint").style.opacity = "0";
   Game.toast -= dt;
   if (Game.toast <= 0) $("world-toast").classList.remove("show");
-  if (!done && !Game.usedPower && Game.runTime > 14 && !Game.spoken.has("power")) {
-    Game.spoken.add("power");
-    Voice.say("Нажми волшебную кнопку!");
-  }
   // Первая преграда на своей полосе подсказывает про кнопку выстрела
   if (!done && !Game.demo && !Game.usedFire && Game.runTime > 5 && !Game.spoken.has("fire") && laneTarget(c, AMMO[c.type])) {
     Game.spoken.add("fire");
     $("btn-fire").classList.add("call");
-    Voice.say("Стреляй!");
   }
   updateHUD();
   if (!done)
@@ -1934,7 +1938,6 @@ function syncSound() {
     );
     b.setAttribute("aria-pressed", String(save.sound));
   });
-  if (!save.sound) Voice.stop();
 }
 document.querySelectorAll(".sound-button").forEach((b) =>
   b.addEventListener("click", () => {
@@ -1980,7 +1983,7 @@ function garageKeys(e) {
   Sound.unlock();
   if (next.dataset.car !== save.car) {
     Sound.tap();
-    selectCar(next.dataset.car, true);
+    selectCar(next.dataset.car);
   }
   next.focus({ preventScroll: true });
   next.scrollIntoView({ block: "nearest" });
@@ -2059,7 +2062,6 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     clearInput();
     pause();
-    Voice.stop();
     if (Sound.ctx) Sound.ctx.suspend().catch(() => {});
   }
 });

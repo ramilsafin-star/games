@@ -54,7 +54,9 @@ void main(){
   lit += mix(uMid, uTip, 0.5) * (hemi * 0.4 + uSunCol * 0.22) * rim;
   if (uEmber > 0.0) {
     float vein = smoothstep(0.7, 0.95, h3(floor(normalize(vObj) * 9.0)) * (0.72 + rnd * 0.4));
-    lit += vec3(2.3, 0.72, 0.1) * vein * uEmber * (0.7 + 0.3 * sin(uTime * 6.0 + rnd * 6.0));
+    // На лице прожилок нет, иначе за свечением не видно глаз и рта
+    vein *= 1.0 - smoothstep(0.42, 0.74, dot(normalize(vObj), vec3(0.287, -0.057, 0.956)));
+    lit +=vec3(2.3, 0.72, 0.1) * vein * uEmber * (0.7 + 0.3 * sin(uTime * 6.0 + rnd * 6.0));
   }
   lit += vec3(uFlash);
   gl_FragColor = vec4(lit, 1.0);
@@ -287,10 +289,16 @@ export class Puffs {
     this.active = [];
     this.time = 0;
     this.shadowDepth = new T.MeshDepthMaterial({ depthPacking: T.RGBADepthPacking });
+    this.glint = new T.MeshBasicMaterial({ color: new T.Color(3, 3, 3), toneMapped: false });
   }
 
   setShells(n) {
     this.shells = Math.min(n, this.maxShells);
+  }
+
+  // Чем сильнее свечение мира, тем тусклее блик в глазу, иначе он расползается на всё лицо
+  setGlint(bloom) {
+    this.glint.color.setScalar(Math.min(3, 0.9 / bloom));
   }
 
   typeParts(type) {
@@ -308,8 +316,7 @@ export class Puffs {
         foot.position.set(s * 0.44, -0.96, 0.18);
         foot.scale.set(0.3, 0.17, 0.4);
         return foot;
-      })),
-      glint: new T.MeshBasicMaterial({ color: new T.Color(3, 3, 3), toneMapped: false })
+      }))
     };
     p.browGeo.rotateZ(Math.PI / 2);
     this.parts[type] = p;
@@ -367,7 +374,7 @@ export class Puffs {
       const g = new T.Mesh(SHARED.glint);
       g.position.set(s * 0.34 + 0.04 - 0.09, 0.27, 1.0);
       return g;
-    }))), P.glint);
+    }))), this.glint);
     face.add(glints);
     for (const s of [-1, 1]) {
       const at = new T.Group();

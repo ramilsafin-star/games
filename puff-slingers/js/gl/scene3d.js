@@ -218,6 +218,7 @@ class Scene3D {
     setSkyFor(this.sky, i);
     this.post.final.uniforms.uExposure.value = look.exposure;
     this.post.final.uniforms.uBloom.value = look.bloom;
+    this.puffs.setGlint(look.bloom);
     this.post.final.uniforms.uSaturation.value = look.sat;
     this.post.extract.uniforms.uThreshold.value = 1.05;
   }

@@ -2258,22 +2258,28 @@ const farMaterial = new T.MeshStandardMaterial({
   roughness: 0.42,
   metalness: 0.2,
 });
+const paintable = (n) =>
+  n.isMesh && !n.isInstancedMesh && n.name !== "blob" && !n.material.transparent;
+// Копия детали в координатах машины: цвет материала переходит в вершины
+function tintedCopy(n) {
+  const geo = (n.geometry.index ? n.geometry.toNonIndexed() : n.geometry.clone()).applyMatrix4(n.matrixWorld);
+  for (const name of Object.keys(geo.attributes))
+    if (!["position", "normal"].includes(name)) geo.deleteAttribute(name);
+  const { r, g, b } = n.material.color,
+    colors = new Float32Array(geo.attributes.position.count * 3);
+  for (let i = 0; i < colors.length; i += 3) {
+    colors[i] = r;
+    colors[i + 1] = g;
+    colors[i + 2] = b;
+  }
+  geo.setAttribute("color", new T.BufferAttribute(colors, 3));
+  return geo;
+}
 function flatten(p) {
-  const parts = [],
-    color = new T.Color();
+  const parts = [];
   p.updateWorldMatrix(true, true);
   p.traverseVisible((n) => {
-    if (!n.isMesh || n.isInstancedMesh || n.name === "blob" || n.material.transparent)
-      return;
-    const geo = (n.geometry.index ? n.geometry.toNonIndexed() : n.geometry.clone()).applyMatrix4(n.matrixWorld);
-    for (const name of Object.keys(geo.attributes))
-      if (!["position", "normal"].includes(name)) geo.deleteAttribute(name);
-    color.copy(n.material.color);
-    const count = geo.attributes.position.count,
-      colors = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) colors.set([color.r, color.g, color.b], i * 3);
-    geo.setAttribute("color", new T.BufferAttribute(colors, 3));
-    parts.push(geo);
+    if (paintable(n)) parts.push(tintedCopy(n));
   });
   const merged = new T.Mesh(mergeGeometries(parts), farMaterial);
   parts.forEach((g) => g.dispose());
@@ -2282,6 +2288,150 @@ function flatten(p) {
   const out = new T.Group();
   out.add(merged);
   return out;
+}
+// Обломок с центром в начале координат: так он вращается вокруг себя
+function wreckPart(geometry, flags = {}) {
+  geometry.computeBoundingBox();
+  const center = geometry.boundingBox.getCenter(new T.Vector3());
+  geometry.translate(-center.x, -center.y, -center.z);
+  geometry.computeBoundingSphere();
+  return { geometry, x: center.x, y: center.y, z: center.z, radius: geometry.boundingSphere.radius, ...flags };
+}
+// Длинные треугольники дробятся: иначе разрез проходит гребёнкой вдоль узких полос кузова
+const TEAR_STEP = 0.4;
+function tessellate(geometry) {
+  const source = ["position", "normal", "color"].map((n) => geometry.attributes[n].array),
+    pos = source[0],
+    triangles = pos.length / 9,
+    limit = TEAR_STEP * TEAR_STEP,
+    extra = source.map(() => []),
+    short = new Uint8Array(triangles);
+  const gap = (i, j) => (pos[i] - pos[j]) ** 2 + (pos[i + 1] - pos[j + 1]) ** 2 + (pos[i + 2] - pos[j + 2]) ** 2;
+  // Вершина длинного треугольника: девять чисел подряд — положение, нормаль, цвет
+  const corner = (i) => source.flatMap((array) => [array[i], array[i + 1], array[i + 2]]);
+  const between = (p, q) => p.map((v, i) => (v + q[i]) / 2);
+  const span = (p, q) => (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2;
+  const split = (p, q, r) => {
+    const ab = span(p, q),
+      bc = span(q, r),
+      ca = span(r, p),
+      longest = Math.max(ab, bc, ca);
+    if (longest <= limit) {
+      for (const v of [p, q, r])
+        for (let s = 0; s < 3; s++) extra[s].push(v[s * 3], v[s * 3 + 1], v[s * 3 + 2]);
+    } else if (longest === ab) {
+      const m = between(p, q);
+      split(p, m, r);
+      split(m, q, r);
+    } else if (longest === bc) {
+      const m = between(q, r);
+      split(p, q, m);
+      split(p, m, r);
+    } else {
+      const m = between(r, p);
+      split(p, q, m);
+      split(m, q, r);
+    }
+  };
+  // Большинство треугольников и так мелкие: они копируются как есть
+  let kept = 0;
+  for (let t = 0; t < triangles; t++) {
+    const i = t * 9;
+    if (gap(i, i + 3) <= limit && gap(i + 3, i + 6) <= limit && gap(i + 6, i) <= limit) {
+      short[t] = 1;
+      kept++;
+    } else split(corner(i), corner(i + 3), corner(i + 6));
+  }
+  return source.map((array, s) => {
+    const out = new Float32Array(kept * 9 + extra[s].length);
+    let at = 0;
+    for (let t = 0; t < triangles; t++)
+      if (short[t]) for (let k = 0; k < 9; k++) out[at++] = array[t * 9 + k];
+    out.set(extra[s], at);
+    return out;
+  });
+}
+// Кузов режется сеткой с неровной линией разреза: края кусков получаются рваными.
+// Низ посередине остаётся целым, остальное разлетается панелями
+function sliceBody(body) {
+  body.computeBoundingBox();
+  const { min, max } = body.boundingBox,
+    size = body.boundingBox.getSize(new T.Vector3()),
+    rows = Math.min(6, Math.max(3, Math.round(size.z / 1.25))),
+    middleX = (min.x + max.x) / 2,
+    middleY = min.y + size.y * 0.52,
+    [pos, nor, col] = tessellate(body),
+    triangles = pos.length / 9,
+    cells = new Uint8Array(triangles),
+    counts = new Uint32Array(1 + 4 * rows);
+  for (let t = 0; t < triangles; t++) {
+    const i = t * 9,
+      x = (pos[i] + pos[i + 3] + pos[i + 6]) / 3,
+      y = (pos[i + 1] + pos[i + 4] + pos[i + 7]) / 3,
+      z = (pos[i + 2] + pos[i + 5] + pos[i + 8]) / 3,
+      wobble = Math.sin(y * 4.1 + z * 2.3) * 0.16 + Math.sin(z * 7.3 - x * 3.1) * 0.09,
+      tilt = Math.sin(x * 5.3 + z * 3.7) * 0.13,
+      along = (z + wobble - min.z) / (size.z || 1),
+      high = y + tilt > middleY,
+      cell = along > 0.2 && along < 0.8 && !high
+        ? 0
+        : 1 + (x + wobble > middleX ? 1 : 0) + (high ? 2 : 0) + 4 * Math.max(0, Math.min(rows - 1, Math.floor(along * rows)));
+    cells[t] = cell;
+    counts[cell]++;
+  }
+  const slices = Array.from(counts, (count) => count && {
+      p: new Float32Array(count * 9),
+      n: new Float32Array(count * 9),
+      c: new Float32Array(count * 9),
+      at: 0,
+    });
+  for (let t = 0; t < triangles; t++) {
+    const slice = slices[cells[t]],
+      i = t * 9;
+    for (let k = 0; k < 9; k++, slice.at++) {
+      slice.p[slice.at] = pos[i + k];
+      slice.n[slice.at] = nor[i + k];
+      slice.c[slice.at] = col[i + k];
+    }
+  }
+  const out = [];
+  slices.forEach((slice, cell) => {
+    if (!slice) return;
+    const g = new T.BufferGeometry();
+    g.setAttribute("position", new T.BufferAttribute(slice.p, 3));
+    g.setAttribute("normal", new T.BufferAttribute(slice.n, 3));
+    g.setAttribute("color", new T.BufferAttribute(slice.c, 3));
+    out.push(wreckPart(g, { hull: cell === 0 }));
+  });
+  return out;
+}
+// Из чего состоит взорванная машина: колёса отдельно, кузов кусками. Считается один раз на модель
+const wrecks = new Map();
+export function wreckParts(type) {
+  if (wrecks.has(type)) return wrecks.get(type);
+  const model = vehicle(type, "traffic"),
+    body = [],
+    wheels = new Map();
+  model.updateWorldMatrix(true, true);
+  model.traverseVisible((n) => {
+    if (!paintable(n)) return;
+    let axle = n.parent;
+    while (axle && axle.name !== "axle") axle = axle.parent;
+    if (!axle) body.push(tintedCopy(n));
+    else {
+      if (!wheels.has(axle)) wheels.set(axle, []);
+      wheels.get(axle).push(tintedCopy(n));
+    }
+  });
+  const list = [];
+  for (const parts of wheels.values())
+    list.push(wreckPart(mergeGeometries(parts), { wheel: true }));
+  const merged = mergeGeometries(body),
+    bounds = new T.Box3().setFromBufferAttribute(merged.attributes.position);
+  list.push(...sliceBody(merged));
+  const wreck = { list, length: bounds.max.z - bounds.min.z, middle: (bounds.min.z + bounds.max.z) / 2 };
+  wrecks.set(type, wreck);
+  return wreck;
 }
 const CONCEPT_TYPES = ["racer", "coupe", "hyper", "comet", "neon"];
 // Модель догрузилась позже старта: простые заготовки больше не нужны

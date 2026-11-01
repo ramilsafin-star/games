@@ -1252,3 +1252,15 @@ body[data-finished="yes"] .drive-bottom {
   border-radius: 50%; background: #236d5c; color: white; font: 700 11px/1 system-ui;
 }
 #hero-power:disabled, #btn-mission:disabled { cursor: wait; opacity: 0.65; }
+
+/* На телефоне зеркало поднято к самой полоске звёзд: дорога впереди важнее */
+@media (max-height: 500px) {
+  #patrol-mirror { top: calc(36px + var(--safe-top)); width: min(24%, 132px); }
+}
+
+/* Зеркало во время погони мигает красным и синим, как полицейская мигалка */
+#patrol-mirror.alarm { animation: patrol-alarm 0.46s steps(1) infinite; }
+@keyframes patrol-alarm {
+  0% { border-color: #ff2d3b; box-shadow: 0 0 16px #ff2d3bd0; }
+  50% { border-color: #2f7bff; box-shadow: 0 0 16px #2f7bffd0; }
+}

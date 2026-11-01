@@ -100,7 +100,6 @@ function startChase(city, playerIsPatrol) {
   city.startGap = Game.car.y - city.npc.y;
   Sound.horn("police");
   missionHint(playerIsPatrol ? "🚕   Нарушитель впереди · включи сирену" : "🚓   Патруль догоняет");
-  Voice.say(playerIsPatrol ? "Останови жёлтое такси сиреной!" : "Патруль! Приготовься остановиться.");
 }
 
 function releaseSignal(city) {
@@ -237,4 +236,120 @@ function episodeSpeed(dt, base) {
     }
   }
   return base * 0.55;
+}
+
+// Погоня за стрелком: взорвал машину — сзади появляется полиция с сиреной. Догнать она не может:
+// подходит почти вплотную, теряет ход и отстаёт, а пока игрок стреляет, пробует снова
+const CHASE_MEMORY = 16,
+  CHASE_FAR = 62,
+  CHASE_CLOSE = 7.5;
+function callPolice() {
+  if (Game.demo || Game.farm || Game.city?.manual || Game.finished || Game.car.type === "police") return;
+  if (Game.chase) {
+    Game.chase.memory = CHASE_MEMORY;
+    return;
+  }
+  const c = Game.car,
+    car = {kind:"patrolActor", type:"police", x:nearestLane(c.x), y:c.y + CHASE_FAR * 22, drift:0, phase:0};
+  Game.entities.push(car);
+  Game.chase = {car, phase:"gaining", t:0, gap:CHASE_FAR, memory:CHASE_MEMORY, lane:car.x, tries:0, spin:0};
+  Sound.horn("police");
+}
+
+function stopPoliceChase() {
+  if (Game.chase) Game.chase.car.dead = true;
+  Game.chase = null;
+  Sound.siren(0);
+}
+
+function setChasePhase(chase, phase) {
+  chase.phase = phase;
+  chase.t = 0;
+}
+
+// Мешает ли кто-нибудь ехать на этой полосе рядом с этим местом
+function chaseLaneBusy(x, y) {
+  return Game.entities.some((e) => (e.kind === "traffic" || e.kind === "rival") && !e.dead && Math.abs(e.x - x) < 62 && Math.abs(e.y - y) < 190);
+}
+
+// Полиция теряет ход, а у машины игрока на миг вспыхивают выхлопные трубы
+function dropBehind(chase) {
+  setChasePhase(chase, "dropped");
+  chase.tries++;
+  chase.spin = chase.tries % 2 ? 0 : chase.car.x >= Game.car.x ? 1 : -1;
+  if (chase.spin) Sound.screech();
+  Game.car.flare = 0.7;
+  Sound.turbo();
+}
+
+function updatePoliceChase(dt) {
+  const chase = Game.chase;
+  if (!chase) return;
+  const c = Game.car,
+    car = chase.car,
+    lane = nearestLane(c.x);
+  chase.memory -= dt;
+  c.flare = Math.max(0, (c.flare || 0) - dt);
+  if (Game.finished && chase.phase !== "gaveUp") setChasePhase(chase, "gaveUp");
+  // На светофоре и в петле полиция ждёт позади: погоня продолжится, когда машина снова поедет.
+  // Сдавшаяся полиция уезжает всегда, иначе сирена останется звучать на финише
+  if (chase.phase === "gaveUp" || (Game.speedNow > 150 && !Game.loop)) {
+    chase.t += dt;
+    if (chase.phase === "gaining") {
+      chase.gap -= (3.5 + chase.gap * 0.24) * dt;
+      chase.lane = lane;
+      if (chase.memory <= 0) setChasePhase(chase, "gaveUp");
+      else if (chase.gap < CHASE_CLOSE) {
+        // Выходит на соседнюю полосу, где свободно; если занято с обеих сторон, отстаёт сразу
+        const free = LANES.filter((x) => x !== lane && Math.abs(x - lane) < 130 && !chaseLaneBusy(x, c.y + 60));
+        if (!free.length) dropBehind(chase);
+        else {
+          setChasePhase(chase, "alongside");
+          chase.lane = free[Math.floor(Math.random() * free.length)];
+        }
+      }
+    } else if (chase.phase === "alongside") {
+      // Сначала перестроение, потом рывок вперёд: бампером в машину игрока не въезжает
+      const beside = Math.abs(car.x - chase.lane) < 34;
+      // На вертикальном экране соседняя полоса не помещается в кадр: там полицию видно в зеркале
+      if (beside) chase.gap = lerp(chase.gap, innerWidth < innerHeight ? 3.6 : 1.4, 1 - Math.exp(-dt * 2.2));
+      chase.close = beside ? (chase.close || 0) + dt : 0;
+      const steeredIn = beside && Math.abs(c.x - car.x) < 72,
+        blocked = chaseLaneBusy(car.x, car.y);
+      if (chase.close > 1.9 || steeredIn || blocked || chase.t > 4) {
+        chase.close = 0;
+        dropBehind(chase);
+      }
+    } else if (chase.phase === "dropped") {
+      chase.gap += (5 + chase.t * 14) * dt;
+      if (chase.spin) {
+        // Занос: машина крутится на месте и дымит шинами
+        const k = Math.min(1, chase.t / 0.95);
+        car.spun = chase.spin * TAU * (1 - (1 - k) * (1 - k));
+        chase.smoke = (chase.smoke || 0) - dt;
+        if (k < 1 && chase.smoke <= 0) {
+          chase.smoke = 0.07;
+          Game.blasts.push({skid:true, x:car.x, y:car.y});
+        }
+      }
+      if (chase.gap >= CHASE_FAR) {
+        chase.spin = 0;
+        car.spun = 0;
+        setChasePhase(chase, chase.memory > 0 ? "gaining" : "gaveUp");
+      }
+    } else {
+      chase.gap += 30 * dt;
+      if (chase.gap > 105) {
+        stopPoliceChase();
+        return;
+      }
+    }
+  }
+  const before = car.x;
+  car.x = lerp(car.x, chase.lane, 1 - Math.exp(-dt * 2.6));
+  car.y = c.y + chase.gap * 22;
+  car.drift = clamp(((car.x - before) / Math.max(dt, 0.001)) * 0.0035, -0.2, 0.2) + (car.spun || 0);
+  // Чем ближе полиция, тем громче сирена; вплотную она сбивается на частый вой
+  const near = clamp(1 - chase.gap / 90, 0, 1);
+  Sound.siren(chase.phase === "gaveUp" ? near * near * 0.08 : 0.03 + near * near * 0.09, chase.gap < 14);
 }
