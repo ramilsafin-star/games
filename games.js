@@ -28,4 +28,11 @@ const GAMES = [
     cover: "covers/neboskreb.jpg",
     color: "#2a9df4",
   },
+  {
+    id: "monster-rush",
+    title: "Monster Rush",
+    url: "monster-rush/",
+    cover: "covers/monster-rush.jpg",
+    color: "#ff5a26",
+  },
 ];
