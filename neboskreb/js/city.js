@@ -5,9 +5,20 @@ import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js";
 
 export const PLOT_STEP = 50;
 export const PLOTS = 8;
+// Квартал: восемь участков в ряд, а между кварталами проходит поперечная улица
+export const DISTRICT = 420;
+export const plotX = (i) => Math.floor(i / PLOTS) * DISTRICT + (i % PLOTS) * PLOT_STEP;
 const GRID = 84;
 const GROUND = 16000;
 const ROAD = 15;
+// Оси дорог: поперечные улицы и улицы вдоль участков. Дома стоят ровно между ними
+const ROAD_X = 49;
+const ROAD_Z = 47.5;
+const CITY_R = 3100;
+const HOUSE_CAP = 11500;
+const TREE_CAP = 640;
+const STRIP_CAP = 14;
+const HOUSE_COLORS = ["#b5a58f", "#a68a70", "#8e9ba6", "#c7b9a3", "#7f8c99", "#b0795c", "#67737f", "#a35f4a"].map((c) => new T.Color(c));
 
 function seeded(seed) {
   let s = seed;
@@ -109,10 +120,12 @@ function groundTexture() {
   g.fillStyle = "#6a9a58";
   g.fillRect(0, 0, 1024, 1024);
   const road = ROAD * u;
-  // Тротуар вокруг квартала
+  // Тротуар вокруг квартала: с обеих сторон улицы
   g.fillStyle = "#9c9a92";
   g.fillRect(0, 0, 1024, road + 5 * u);
   g.fillRect(0, 0, road + 5 * u, 1024);
+  g.fillRect(0, 1024 - 5 * u, 1024, 5 * u);
+  g.fillRect(1024 - 5 * u, 0, 5 * u, 1024);
   g.fillStyle = "#30353c";
   g.fillRect(0, 0, 1024, road);
   g.fillRect(0, 0, road, 1024);
@@ -141,7 +154,7 @@ function groundTexture() {
 }
 
 // Бульвар: газон, дорожка вдоль домов и полоски стрижки
-function lawnTexture(length) {
+function lawnTexture() {
   const c = document.createElement("canvas");
   c.width = 2048;
   c.height = 256;
@@ -191,10 +204,16 @@ function cloudGeometry(seed) {
 }
 
 export class City {
-  constructor(renderer, scene, shared) {
+  constructor(renderer, scene, shared, opened = 1) {
     this.renderer = renderer;
     this.scene = scene;
     this.shared = shared;
+    this.opened = opened;
+    this.center = 175;
+    this.sunDist = 200;
+    this.span = 60;
+    this.sinking = null;
+    this.quiet = false;
     this.group = new T.Group();
     scene.add(this.group);
     this.fog = new T.Fog("#c9e6f8", 300, 1700);
@@ -237,100 +256,203 @@ export class City {
     const ground = new T.Mesh(new T.PlaneGeometry(GROUND, GROUND), new T.MeshStandardMaterial({ map: groundTexture(), roughness: 0.95 }));
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
-    // Дороги сдвинуты так, чтобы бульвар шёл между ними
-    ground.material.map.offset.set(((-40 + GROUND / 2) / GRID) % 1, ((-55 + GROUND / 2) / GRID) % 1);
+    // Дороги на текстуре попадают на оси ROAD_X и ROAD_Z при любом размере земли
+    const half = GROUND / (2 * GRID);
+    ground.material.map.offset.set(((7.5 - ROAD_X) / GRID - half) % 1, ((ROAD_Z - 7.5) / GRID - half) % 1);
+    this.ground = ground;
     this.group.add(ground);
-    // Широкая площадка для стройки: закрывает поперечные дороги
-    const strip = new T.Mesh(new T.BoxGeometry(PLOTS * PLOT_STEP + 150, 0.3, 80), new T.MeshStandardMaterial({ map: lawnTexture(PLOTS * PLOT_STEP + 150), roughness: 0.95 }));
-    strip.position.set(((PLOTS - 1) * PLOT_STEP) / 2, 0.14, 0);
-    strip.receiveShadow = true;
-    this.group.add(strip);
-    const pads = new T.InstancedMesh(new T.BoxGeometry(19, 0.5, 19), new T.MeshStandardMaterial({ color: "#5d6166", roughness: 0.9 }), PLOTS);
-    const m = new T.Matrix4();
-    for (let i = 0; i < PLOTS; i++) {
-      m.makeTranslation(i * PLOT_STEP, 0.25, 0);
-      pads.setMatrixAt(i, m);
-    }
-    pads.receiveShadow = true;
-    this.group.add(pads);
+    // Широкая площадка для стройки: закрывает поперечные дороги внутри квартала
+    this.strips = new T.InstancedMesh(new T.BoxGeometry(405, 0.3, 69), new T.MeshStandardMaterial({ map: lawnTexture(), roughness: 0.95 }), STRIP_CAP);
+    this.strips.receiveShadow = true;
+    this.strips.frustumCulled = false;
+    this.pads = new T.InstancedMesh(new T.BoxGeometry(19, 0.5, 19), new T.MeshStandardMaterial({ color: "#5d6166", roughness: 0.9 }), STRIP_CAP * PLOTS);
+    this.pads.receiveShadow = true;
+    this.pads.frustumCulled = false;
+    this.group.add(this.strips, this.pads);
   }
 
   buildDistrict() {
-    const rng = seeded(4242);
-    const list = [];
-    const keep = { x0: -110, x1: PLOTS * PLOT_STEP + 110, z0: -62, z1: 210 };
-    for (let bx = -36; bx <= 40; bx++) {
-      for (let bz = -38; bz <= 38; bz++) {
-        const cx = bx * GRID + 32;
-        const cz = bz * GRID + 45;
-        const dist = Math.hypot(cx - 170, cz);
-        if (dist > 3100) continue;
-        const hits = (x, z, r) => x + r > keep.x0 && x - r < keep.x1 && z + r > keep.z0 && z - r < keep.z1;
+    const g = new T.BoxGeometry(1, 1, 1);
+    g.translate(0, 0.5, 0);
+    this.houses = new T.InstancedMesh(g, districtMaterial(this.shared), HOUSE_CAP);
+    this.houses.setColorAt(0, HOUSE_COLORS[0]);
+    this.houses.castShadow = false;
+    this.houses.receiveShadow = true;
+    this.houses.frustumCulled = false;
+    this.group.add(this.houses);
+    const crown = new T.IcosahedronGeometry(1, 1);
+    crown.deleteAttribute("uv");
+    this.trees = new T.InstancedMesh(crown, new T.MeshStandardMaterial({ roughness: 0.9, flatShading: true }), TREE_CAP);
+    this.trees.setColorAt(0, HOUSE_COLORS[0]);
+    this.trunks = new T.InstancedMesh(new T.CylinderGeometry(0.14, 0.2, 1, 6), new T.MeshStandardMaterial({ color: "#6e4d30", roughness: 0.9 }), TREE_CAP);
+    for (const m of [this.trees, this.trunks]) {
+      m.castShadow = true;
+      m.frustumCulled = false;
+      this.group.add(m);
+    }
+  }
+
+  // Где домов быть не должно: участки и свободное место перед ними, чтобы ничто не заслоняло стройку
+  corridor(opened) {
+    return { x0: -110, x1: (opened - 1) * DISTRICT + (PLOTS - 1) * PLOT_STEP + 110, z0: -62, z1: 210 };
+  }
+
+  // Город раскладывается вокруг точки cx. Дома каждого квартала всегда одни и те же,
+  // поэтому новая раскладка незаметна: меняется только то, что далеко в дымке.
+  // far — готовые дома вдали, они рисуются простыми коробками
+  layout(cx, far = []) {
+    this.center = cx;
+    this.ground.position.x = Math.round(cx / GRID) * GRID;
+    const keep = this.corridor(this.opened);
+    const mat = this.houses.instanceMatrix.array;
+    const col = this.houses.instanceColor.array;
+    let n = 0;
+    const put = (x, z, w, d, h, c) => {
+      if (n >= HOUSE_CAP) return;
+      const o = n * 16;
+      mat[o] = w;
+      mat[o + 5] = h;
+      mat[o + 10] = d;
+      mat[o + 12] = x;
+      mat[o + 14] = z;
+      mat[o + 15] = 1;
+      col[n * 3] = c.r;
+      col[n * 3 + 1] = c.g;
+      col[n * 3 + 2] = c.b;
+      n++;
+    };
+    const lotX = ROAD_X + GRID / 2;
+    const lotZ = ROAD_Z + GRID / 2;
+    const reach = Math.ceil(CITY_R / GRID) + 1;
+    const bx0 = Math.round((cx - lotX) / GRID);
+    for (let bx = bx0 - reach; bx <= bx0 + reach; bx++) {
+      for (let bz = -reach; bz <= reach; bz++) {
+        const lx = bx * GRID + lotX;
+        const lz = bz * GRID + lotZ;
+        const dist = Math.hypot(lx - cx, lz);
+        if (dist > CITY_R) continue;
+        const rng = seeded((((bx + 5000) * 73856093 ^ (bz + 5000) * 19349663) >>> 0) % 2147483646 + 1);
+        rng();
+        const all = 2 + Math.floor(rng() * 4);
         // Вблизи кварталы плотные, а дальше домов меньше: издалека всё равно сливается в город
-        const n = dist < 1100 ? 2 + Math.floor(rng() * 4) : 1 + Math.floor(rng() * 3);
-        for (let i = 0; i < n; i++) {
+        const count = dist < 1100 ? all : 1 + all % 3;
+        for (let i = 0; i < count; i++) {
           const w = 12 + rng() * 20;
           const d = 12 + rng() * 20;
-          const x = cx + (rng() - 0.5) * (GRID - ROAD - w - 12);
-          const z = cz + (rng() - 0.5) * (GRID - ROAD - d - 12);
-          if (hits(x, z, Math.max(w, d) / 2 + 2)) continue;
-          // В центре города дома выше, но всё равно ниже будущего небоскрёба
+          const x = lx + (rng() - 0.5) * (GRID - ROAD - w - 12);
+          const z = lz + (rng() - 0.5) * (GRID - ROAD - d - 12);
           const tall = rng() < 0.16 ? 2.2 : 1;
           const h = (9 + rng() * 26) * tall;
-          list.push({ x, z, w, d, h, c: ["#b5a58f", "#a68a70", "#8e9ba6", "#c7b9a3", "#7f8c99", "#b0795c", "#67737f", "#a35f4a"][Math.floor(rng() * 8)] });
+          const c = HOUSE_COLORS[Math.floor(rng() * HOUSE_COLORS.length)];
+          const r = Math.max(w, d) / 2 + 2;
+          if (x + r > keep.x0 && x - r < keep.x1 && z + r > keep.z0 && z - r < keep.z1) continue;
+          put(x, z, w, d, h, c);
         }
       }
     }
-    const g = new T.BoxGeometry(1, 1, 1);
-    g.translate(0, 0.5, 0);
-    const mesh = new T.InstancedMesh(g, districtMaterial(this.shared), list.length);
+    for (const b of far) put(b.x, 0, 14, 14, b.h, b.color);
+    this.houses.count = n;
+    this.houses.instanceMatrix.needsUpdate = true;
+    this.houses.instanceColor.needsUpdate = true;
+    this.layoutPlots(cx);
+    this.layoutTrees(cx);
+  }
+
+  layoutPlots(cx) {
+    const m = new T.Matrix4();
+    let s = 0;
+    let p = 0;
+    for (let d = 0; d < this.opened && s < STRIP_CAP; d++) {
+      const x = d * DISTRICT;
+      if (Math.abs(x + 175 - cx) > 2800) continue;
+      this.strips.setMatrixAt(s++, m.makeTranslation(x + 175, 0.14, 5.5));
+      for (let i = 0; i < PLOTS; i++) this.pads.setMatrixAt(p++, m.makeTranslation(x + i * PLOT_STEP, 0.25, 0));
+    }
+    this.strips.count = s;
+    this.pads.count = p;
+    this.strips.instanceMatrix.needsUpdate = true;
+    this.pads.instanceMatrix.needsUpdate = true;
+  }
+
+  // Деревья на бульваре, за дальней улицей и на свободном месте перед участками
+  layoutTrees(cx) {
     const m = new T.Matrix4();
     const q = new T.Quaternion();
     const c = new T.Color();
-    list.forEach((b, i) => {
-      m.compose(new T.Vector3(b.x, 0, b.z), q, new T.Vector3(b.w, b.h, b.d));
-      mesh.setMatrixAt(i, m);
-      mesh.setColorAt(i, c.set(b.c));
-    });
-    mesh.castShadow = false;
-    mesh.receiveShadow = true;
-    mesh.frustumCulled = false;
-    this.group.add(mesh);
-    // Деревья вдоль бульвара и в кварталах
-    const crowns = [];
-    for (let i = 0; i < 90; i++) {
-      const front = i % 3 !== 0;
-      const x = -90 + rng() * (PLOTS * PLOT_STEP + 180);
-      const z = front ? 44 + rng() * 6 : -46 - rng() * 12;
-      crowns.push([x, z, 2 + rng() * 1.5]);
-    }
-    for (let i = 0; i < 210; i++) {
-      const a = rng() * Math.PI * 2;
-      const r = 100 + rng() * 500;
-      const x = 170 + Math.cos(a) * r;
-      const z = Math.sin(a) * r + 110;
-      if (z < 210 && z > -62 && x > -110 && x < PLOTS * PLOT_STEP + 110) {
-        if (z > 60 && z < 210) crowns.push([x, z, 2.2 + rng() * 2]);
-        continue;
+    const v = new T.Vector3();
+    const size = new T.Vector3();
+    let n = 0;
+    const onRoad = (x) => {
+      const k = (((x - ROAD_X) % GRID) + GRID) % GRID;
+      return k < 10 || k > GRID - 10;
+    };
+    const first = Math.max(0, Math.floor((cx - 900) / DISTRICT));
+    const last = Math.min(this.opened - 1, Math.ceil((cx + 500) / DISTRICT));
+    for (let d = first; d <= last; d++) {
+      const rng = seeded(1000 + d * 37);
+      const x0 = d * DISTRICT;
+      const add = (x, z, s) => {
+        if (n >= TREE_CAP) return;
+        m.compose(v.set(x, s * 1.5, z), q, size.set(s, s * 1.15, s));
+        this.trees.setMatrixAt(n, m);
+        this.trees.setColorAt(n, c.setHSL(0.28 + rng() * 0.07, 0.6, 0.22 + rng() * 0.1));
+        m.compose(v.set(x, s * 0.5, z), q, size.set(s * 0.9, s, s * 0.9));
+        this.trunks.setMatrixAt(n, m);
+        n++;
+      };
+      for (let i = 0; i < 34; i++) {
+        const x = x0 - 20 + rng() * 392;
+        const z = 33 + rng() * 5.5;
+        const s = 2 + rng() * 1.5;
+        // Деревья растут между участками, а перед домом открыт вид на вход и дорожку к улице
+        const offset = ((x - x0) % PLOT_STEP + PLOT_STEP) % PLOT_STEP;
+        if (offset > 15 && offset < PLOT_STEP - 15) add(x, z, s);
+      }
+      for (let i = 0; i < 20; i++) {
+        const x = x0 - 20 + rng() * 392;
+        const z = -46 - rng() * 12;
+        const s = 2 + rng() * 1.5;
+        if (!onRoad(x)) add(x, z, s);
+      }
+      for (let i = 0; i < 56; i++) {
+        const x = x0 - 40 + rng() * 460;
+        const z = i % 2 ? 62 + rng() * 18 : 145 + rng() * 57;
+        const s = 2.2 + rng() * 2;
+        if (!onRoad(x)) add(x, z, s);
       }
     }
-    const crown = new T.IcosahedronGeometry(1, 1);
-    crown.deleteAttribute("uv");
-    const treeMat = new T.MeshStandardMaterial({ roughness: 0.9, flatShading: true });
-    const trees = new T.InstancedMesh(crown, treeMat, crowns.length);
-    const trunks = new T.InstancedMesh(new T.CylinderGeometry(0.14, 0.2, 1, 6), new T.MeshStandardMaterial({ color: "#6e4d30", roughness: 0.9 }), crowns.length);
-    crowns.forEach(([x, z, s], i) => {
-      m.compose(new T.Vector3(x, s * 1.5, z), q, new T.Vector3(s, s * 1.15, s));
-      trees.setMatrixAt(i, m);
-      trees.setColorAt(i, c.setHSL(0.28 + rng() * 0.07, 0.6, 0.22 + rng() * 0.1));
-      m.compose(new T.Vector3(x, s * 0.5, z), q, new T.Vector3(s * 0.9, s, s * 0.9));
-      trunks.setMatrixAt(i, m);
-    });
-    trees.castShadow = true;
-    trunks.castShadow = true;
-    trees.frustumCulled = false;
-    trunks.frustumCulled = false;
-    this.group.add(trees, trunks);
+    this.trees.count = this.trunks.count = n;
+    this.trees.instanceMatrix.needsUpdate = this.trunks.instanceMatrix.needsUpdate = true;
+    this.trees.instanceColor.needsUpdate = true;
+  }
+
+  // Открывается новый квартал: дома на его месте уходят под землю. Возвращает их, чтобы поднять пыль
+  clearDistrict(k) {
+    const keep = this.corridor(k + 1);
+    const mat = this.houses.instanceMatrix.array;
+    const list = [];
+    for (let i = 0; i < this.houses.count; i++) {
+      const o = i * 16;
+      const x = mat[o + 12];
+      const z = mat[o + 14];
+      const r = Math.max(mat[o], mat[o + 10]) / 2 + 2;
+      if (x + r > keep.x0 && x - r < keep.x1 && z + r > keep.z0 && z - r < keep.z1) list.push({ o, x, z, h: mat[o + 5] });
+    }
+    this.sinking = { list, t: 0 };
+    return list;
+  }
+
+  // Сколько метров вокруг цели покрывает тень: на карте нужно гораздо больше, чем на стройке
+  setShadow(span) {
+    if (span === this.span) return;
+    this.span = span;
+    const c = this.sun.shadow.camera;
+    c.left = c.bottom = -span;
+    c.right = c.top = span;
+    c.far = Math.max(420, span * 4);
+    c.updateProjectionMatrix();
+    this.sunDist = Math.max(200, span * 2);
+    this.sun.shadow.normalBias = (0.05 * span) / 60;
   }
 
   // Стройплощадка переезжает вместе с краном на новый участок
@@ -536,8 +658,8 @@ export class City {
     const scale = new T.Vector3(1, 1, 1);
     this.cars.forEach((car, i) => {
       car.x += car.dir * car.v * dt;
-      if (car.x > 900) car.x = -500;
-      if (car.x < -500) car.x = 900;
+      if (car.x > focus.x + 700) car.x -= 1400;
+      if (car.x < focus.x - 700) car.x += 1400;
       q.setFromAxisAngle(up, car.dir > 0 ? 0 : Math.PI);
       m.compose(new T.Vector3(car.x, 0.1, car.road), q, scale);
       this.carMesh.setMatrixAt(i, m);
@@ -545,7 +667,8 @@ export class City {
     this.carMesh.instanceMatrix.needsUpdate = true;
     this.clouds.forEach((c) => {
       c.x += c.v * dt;
-      if (c.x > 800) c.x = -460;
+      if (c.x > focus.x + 640) c.x -= 1280;
+      if (c.x < focus.x - 640) c.x += 1280;
       m.compose(new T.Vector3(c.x, c.y, c.z), q.identity(), scale.set(c.s, c.s * 0.8, c.s));
       c.mesh.setMatrixAt(c.i, m);
       c.mesh.instanceMatrix.needsUpdate = true;
@@ -567,6 +690,7 @@ export class City {
       const a = u.a + t * 0.035;
       b.position.set(focus.x + Math.cos(a) * u.r, u.y + Math.sin(t * 0.5 + u.a) * 2, focus.z + Math.sin(a) * u.r);
     });
+    this.plane.visible = this.ufo.visible = !this.quiet;
     const pa = t * 0.17;
     this.plane.position.set(focus.x + Math.cos(pa) * 190, 182, focus.z + Math.sin(pa) * 190);
     this.plane.rotation.y = -pa - Math.PI / 2;
@@ -583,7 +707,16 @@ export class City {
     if (this.moon.visible) this.moon.position.set(camera.position.x - 620, camera.position.y + 330, camera.position.z - 900);
     // Тень считается вокруг верха дома
     this.sun.target.position.copy(focus);
-    this.sun.position.copy(focus).addScaledVector(this.sunDir, 200);
+    this.sun.position.copy(focus).addScaledVector(this.sunDir, this.sunDist);
     this.sky.position.copy(camera.position);
+    if (this.sinking) {
+      const S = this.sinking;
+      S.t += dt;
+      const k = Math.min(1, S.t / 1.05);
+      const mat = this.houses.instanceMatrix.array;
+      for (const b of S.list) mat[b.o + 5] = b.h * (1 - k * k) + 0.001;
+      this.houses.instanceMatrix.needsUpdate = true;
+      if (k >= 1) this.sinking = null;
+    }
   }
 }

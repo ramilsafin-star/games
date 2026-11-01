@@ -198,6 +198,29 @@ const Sound = {
     }
   },
 
+  // Контуры сомкнулись: этаж стоит точно над своим местом
+  snap() {
+    if (!this.ready()) return;
+    this.tone({ type: "triangle", f0: 1046, dur: 0.1, vol: 0.2 });
+    this.tone({ type: "triangle", f0: 1568, dur: 0.16, vol: 0.2, at: 0.07 });
+  },
+
+  // Гости приехали: два коротких гудка
+  horn() {
+    if (!this.ready()) return;
+    [0, 0.24].forEach((at) => {
+      this.tone({ type: "square", f0: 392, dur: 0.17, vol: 0.09, at });
+      this.tone({ type: "square", f0: 494, dur: 0.17, vol: 0.07, at });
+    });
+  },
+
+  // Старые дома уходят под землю, освобождая новый квартал
+  rumble() {
+    if (!this.ready()) return;
+    this.noise({ f0: 900, f1: 120, dur: 1.2, vol: 0.4 });
+    this.tone({ type: "sine", f0: 72, f1: 32, dur: 1, vol: 0.42 });
+  },
+
   tap() {
     if (!this.ready()) return;
     this.tone({ type: "sine", f0: 620, f1: 1020, dur: 0.09, vol: 0.2 });

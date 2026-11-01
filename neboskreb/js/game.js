@@ -1,12 +1,14 @@
 // Ход стройки: палец ведёт груз, кран следует за ним, отпустил — этаж опускается на дом.
-// Проиграть нельзя и читать ничего не нужно: сорвавшийся этаж просто падает, кран несёт следующий
+// Проиграть нельзя и читать ничего не нужно: сорвавшийся этаж просто падает, кран несёт следующий.
+// Готовые дома остаются навсегда: город растёт кварталами, и на него можно посмотреть с высоты
 import * as T from "../vendor/three/three.module.min.js";
 import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js";
 import { Post } from "./post.js";
 import { Floors, MODULES, FLOOR_IDS, ROOF_IDS, FLOOR_W, FLOOR_H } from "./floors.js";
 import { Crane } from "./crane.js";
-import { City, PLOT_STEP, PLOTS } from "./city.js";
+import { City, PLOTS, DISTRICT, plotX as plotAt } from "./city.js";
 import { Fx } from "./fx.js";
+import { Life } from "./life.js";
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("game");
@@ -44,12 +46,32 @@ const MILESTONES = [
   { floors: 66, icon: "🛸" },
   { floors: 100, icon: "🌙" }
 ];
+// Необязательные заказы: открытка у свободного участка просит один вид этажа и одну крышу,
+// всё остальное выбирает игрок. Выполнил заказ — к дому приезжают гости
+const ORDERS = [
+  { id: "hotel", title: "Отель у парка", icon: "🏨", floor: "garden", roof: "pool", car: "bus" },
+  { id: "family", title: "Дом для семьи", icon: "🏠", floor: "brick", roof: "dome", car: "van" },
+  { id: "office", title: "Новый офис", icon: "💼", floor: "glass", roof: "helipad", car: "taxi" },
+  { id: "museum", title: "Музей", icon: "🏛️", floor: "classic", roof: "spire", car: "school" },
+  { id: "kids", title: "Детский сад", icon: "🧸", floor: "rainbow", roof: "pool", car: "school" },
+  { id: "station", title: "Вокзал", icon: "🚉", floor: "clock", roof: "spire", car: "bus" },
+  { id: "cinema", title: "Кинотеатр", icon: "🎬", floor: "neon", roof: "dome", car: "taxi" },
+  { id: "palace", title: "Золотой дворец", icon: "👑", floor: "gold", roof: "dome", car: "bus" },
+  { id: "ocean", title: "Океанариум", icon: "🐠", floor: "aqua", roof: "pool", car: "school" }
+];
+const ORDER_BY_ID = Object.fromEntries(ORDERS.map((o) => [o.id, o]));
+// Дальше этого расстояния готовые дома рисуются простой коробкой: их всё равно почти не видно
+const NEAR = 640;
+// Цвет простой коробки: примерно как у этажей, из которых дом собран
+const FAR_COLORS = { glass: "#7fa9c9", brick: "#a85a45", garden: "#8fae8a", classic: "#d9c8a6", clock: "#aab2bb", neon: "#39396e", gold: "#b8923f", aqua: "#6fb7d2", rainbow: "#e0d6ea" };
 
-const save = { stars: 0, plot: 0, sound: true, towers: {}, learned: false };
+const save = { stars: 0, plot: 0, sound: true, towers: {}, learned: false, opened: 1, done: [] };
 try {
   const old = JSON.parse(localStorage.getItem("neboskreb_save") || "{}");
   Object.assign(save, old);
 } catch (_) {}
+// В старых сохранениях кварталов не было: считаем их по занятым участкам
+for (const plot of Object.keys(save.towers)) save.opened = Math.max(save.opened, Math.floor(+plot / PLOTS) + 1);
 function store() {
   try {
     localStorage.setItem("neboskreb_save", JSON.stringify(save));
@@ -64,9 +86,10 @@ renderer.setClearColor(0x000000, 0);
 const scene = new T.Scene();
 const camera = new T.PerspectiveCamera(FOV, 1, 1, 9000);
 const floors = new Floors(scene);
-const city = new City(renderer, scene, floors.shared);
+const city = new City(renderer, scene, floors.shared, save.opened);
 const crane = new Crane(scene);
 const fx = new Fx(scene);
+const life = new Life(scene, fx);
 const post = new Post(renderer);
 post.extract.uniforms.uThreshold.value = 1.05;
 
@@ -97,40 +120,73 @@ dropLine.frustumCulled = false;
 dropLine.visible = false;
 scene.add(dropLine);
 
-function makeHelicopter() {
-  const paint = (g, hex) => {
-    const c = new T.Color(hex);
-    const out = g.index ? g.toNonIndexed() : g;
-    out.deleteAttribute("uv");
-    const a = new Float32Array(out.attributes.position.count * 3);
-    for (let i = 0; i < a.length; i += 3) a.set([c.r, c.g, c.b], i);
-    out.setAttribute("color", new T.BufferAttribute(a, 3));
-    return out;
+// Неподвижный силуэт этажа на его будущем месте: пунктир, а когда груз совпал с ним, сплошной контур
+function outlineGeometry(dashes) {
+  const parts = [];
+  const h = FLOOR_W / 2;
+  const t = 0.22;
+  const edge = (ax, ay, az, bx, by, bz, n) => {
+    const dx = bx - ax;
+    const dy = by - ay;
+    const dz = bz - az;
+    const piece = (Math.hypot(dx, dy, dz) / n) * (dashes ? 0.58 : 1);
+    for (let i = 0; i < n; i++) {
+      const k = (i + 0.5) / n;
+      parts.push(new T.BoxGeometry(dx ? piece : t, dy ? piece : t, dz ? piece : t).translate(ax + dx * k, ay + dy * k, az + dz * k));
+    }
   };
-  const body = mergeGeometries([
-    paint(new T.SphereGeometry(1.7, 16, 12).scale(1.5, 1, 1), "#e23b2e"),
-    paint(new T.SphereGeometry(1.25, 14, 10).scale(1, 0.8, 0.9).translate(1.4, 0.2, 0), "#a9dcf3"),
-    paint(new T.BoxGeometry(5.4, 0.42, 0.42).translate(-4, 0.5, 0), "#e23b2e"),
-    paint(new T.BoxGeometry(1, 1.6, 0.14).translate(-6.6, 1.1, 0), "#ffd23f"),
-    paint(new T.BoxGeometry(5, 0.14, 0.22).translate(0, -2, 1.15), "#30343a"),
-    paint(new T.BoxGeometry(5, 0.14, 0.22).translate(0, -2, -1.15), "#30343a"),
-    paint(new T.BoxGeometry(0.14, 0.9, 0.14).translate(1, -1.5, 1.05), "#30343a"),
-    paint(new T.BoxGeometry(0.14, 0.9, 0.14).translate(-1, -1.5, 1.05), "#30343a"),
-    paint(new T.BoxGeometry(0.14, 0.9, 0.14).translate(1, -1.5, -1.05), "#30343a"),
-    paint(new T.BoxGeometry(0.14, 0.9, 0.14).translate(-1, -1.5, -1.05), "#30343a"),
-    paint(new T.CylinderGeometry(0.16, 0.16, 0.8, 8).translate(0, 2, 0), "#30343a")
-  ]);
-  const mesh = new T.Mesh(body, new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.3, metalness: 0.3 }));
-  const rotor = new T.Mesh(new T.BoxGeometry(11, 0.07, 0.42), new T.MeshStandardMaterial({ color: "#2b2d31" }));
-  rotor.position.y = 2.42;
-  mesh.add(rotor);
-  mesh.userData.rotor = rotor;
-  mesh.castShadow = true;
-  mesh.visible = false;
-  return mesh;
+  const along = dashes ? 7 : 1;
+  const up = dashes ? 3 : 1;
+  for (const y of [0, FLOOR_H]) {
+    edge(-h, y, -h, h, y, -h, along);
+    edge(-h, y, h, h, y, h, along);
+    edge(-h, y, -h, -h, y, h, along);
+    edge(h, y, -h, h, y, h, along);
+  }
+  for (const [x, z] of [[-h, -h], [h, -h], [h, h], [-h, h]]) edge(x, 0, z, x, FLOOR_H, z, up);
+  return mergeGeometries(parts);
 }
-const heli = makeHelicopter();
-scene.add(heli);
+const ghostMat = new T.MeshBasicMaterial({ color: "#1fd4ff", transparent: true, opacity: 0.95, depthWrite: false, toneMapped: false });
+const ghostFillMat = new T.MeshBasicMaterial({ color: "#1fd4ff", transparent: true, opacity: 0.16, depthWrite: false, toneMapped: false });
+const ghost = new T.Group();
+const ghostDash = new T.Mesh(outlineGeometry(true), ghostMat);
+const ghostLine = new T.Mesh(outlineGeometry(false), ghostMat);
+const ghostFill = new T.Mesh(new T.PlaneGeometry(FLOOR_W, FLOOR_W).rotateX(-Math.PI / 2), ghostFillMat);
+ghostFill.position.y = 0.05;
+for (const m of [ghostDash, ghostLine, ghostFill]) {
+  m.renderOrder = 3;
+  ghost.add(m);
+}
+ghost.visible = false;
+scene.add(ghost);
+
+// На карте: свободный участок отмечен пунктирным квадратом с плюсом
+function plotMarkTexture() {
+  const c = document.createElement("canvas");
+  c.width = c.height = 256;
+  const g = c.getContext("2d");
+  g.fillStyle = "rgba(255,255,255,0.22)";
+  g.beginPath();
+  g.roundRect(14, 14, 228, 228, 26);
+  g.fill();
+  g.strokeStyle = "#ffffff";
+  g.lineWidth = 12;
+  g.setLineDash([30, 22]);
+  g.stroke();
+  g.setLineDash([]);
+  g.fillStyle = "#ffffff";
+  g.fillRect(112, 62, 32, 132);
+  g.fillRect(62, 112, 132, 32);
+  const t = new T.CanvasTexture(c);
+  t.anisotropy = 4;
+  return t;
+}
+const marks = new T.InstancedMesh(new T.PlaneGeometry(21, 21).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ map: plotMarkTexture(), transparent: true, depthWrite: false, toneMapped: false }), 128);
+marks.frustumCulled = false;
+marks.renderOrder = 3;
+marks.visible = false;
+marks.count = 0;
+scene.add(marks);
 
 const S = {
   mode: "aim",
@@ -139,7 +195,8 @@ const S = {
   load: null,
   kind: "floor",
   pickedFloor: "glass",
-  pickedRoof: "spire",
+  pickedRoof: "dome",
+  order: null,
   aimX: 0,
   aimZ: 0,
   timer: 0,
@@ -157,31 +214,97 @@ const S = {
   camPitch: 0.24,
   finale: null,
   milestones: new Set(),
-  roofOffered: false
+  roofOffered: false,
+  windK: 1,
+  wasGood: false,
+  snapAt: -9,
+  mapX: 0,
+  mapV: 0,
+  opening: null,
+  viewPlot: 0,
+  viewY: 20,
+  shotUntil: 0,
+  fading: false
 };
 
 const towers = {};
 
 function plotX(i = S.plot) {
-  return i * PLOT_STEP;
+  return plotAt(i);
 }
 
-// Дома держатся на смещениях этажей относительно середины участка
-function makeTower(plot, data) {
-  const t = { plot, floors: [], top: PAD_TOP, roof: null };
+const inCity = () => S.mode === "map" || S.mode === "view";
+const building = () => !inCity() && S.mode !== "finale";
+const floorCount = (t) => t.floors.filter((f) => !MODULES[f.id].roof).length;
+const finishedCount = () => Object.values(save.towers).filter((d) => d.roof).length;
+
+// Дома держатся на смещениях этажей относительно середины участка.
+// Пока дом далеко, его этажей нет в сцене, а сам он описан только в сохранении
+function makeTower(plot) {
+  const data = save.towers[plot];
+  const t = { plot, floors: [], top: PAD_TOP, roof: data ? data.roof : null, order: data ? data.order || null : null, on: false };
+  if (data) t.top += data.floors.length * FLOOR_H + (data.roof ? MODULES[data.roof].height : 0);
+  return t;
+}
+
+function wake(t) {
+  t.on = true;
+  t.floors = [];
+  t.top = PAD_TOP;
+  const data = save.towers[t.plot];
   if (data) {
     data.floors.forEach(([id, x, z]) => addFloor(t, id, x, z));
     if (data.roof) {
       const last = t.floors.at(-1);
       addFloor(t, data.roof, last ? last.x : 0, last ? last.z : 0);
-      t.roof = data.roof;
+      if (t !== S.tower || !S.finale) life.enter(t, plotX(t.plot), false);
     }
   }
-  return t;
+}
+
+function sleep(t) {
+  t.on = false;
+  life.leave(t);
+  t.floors.forEach((f) => floors.remove(f.item));
+  t.floors = [];
+}
+
+// Близкие дома целиком, далёкие коробками: так город может расти сколько угодно
+let syncedAt = null;
+function syncCity(cx, force) {
+  if (!force && syncedAt !== null && Math.abs(cx - syncedAt) < 120) return;
+  syncedAt = cx;
+  let changed = false;
+  for (const t of Object.values(towers)) {
+    const near = t === S.tower || Math.abs(plotX(t.plot) - cx) < NEAR;
+    if (near && !t.on) {
+      wake(t);
+      changed = true;
+    } else if (!near && t.on) {
+      sleep(t);
+      changed = true;
+    }
+  }
+  if (force || changed || Math.abs(cx - city.center) > 500) city.layout(cx, farTowers());
+}
+
+function farTowers() {
+  const list = [];
+  for (const t of Object.values(towers)) {
+    if (t.on) continue;
+    const data = save.towers[t.plot];
+    const tally = {};
+    let best = "glass";
+    for (const [id] of data.floors) {
+      tally[id] = (tally[id] || 0) + 1;
+      if (tally[id] > (tally[best] || 0)) best = id;
+    }
+    list.push({ x: plotX(t.plot), h: t.top, color: new T.Color(FAR_COLORS[best]) });
+  }
+  return list;
 }
 
 function addFloor(t, id, x, z) {
-  if (floors.full(id)) return null;
   const f = { id, x, z, y: t.top, h: MODULES[id].height, item: floors.add(id), squash: 0 };
   t.floors.push(f);
   t.top += f.h;
@@ -189,13 +312,9 @@ function addFloor(t, id, x, z) {
   return f;
 }
 
-function removeTower(t) {
-  t.floors.forEach((f) => floors.remove(f.item));
-}
-
 function storeTower(t) {
   const list = t.floors.filter((f) => !MODULES[f.id].roof).map((f) => [f.id, +f.x.toFixed(2), +f.z.toFixed(2)]);
-  save.towers[t.plot] = { floors: list, roof: t.roof };
+  save.towers[t.plot] = { floors: list, roof: t.roof, order: t.order };
   save.plot = S.plot;
   store();
 }
@@ -293,15 +412,56 @@ function chip(id) {
     if (MODULES[id].roof) S.pickedRoof = id;
     else S.pickedFloor = id;
     syncTray();
+    paintRoofButton();
     // Висящий груз сразу меняется на выбранный
-    if (S.load && S.mode === "aim") swapLoad();
+    swapIfHanging();
+  });
+  // Отметка: этого этажа или этой крыши ждёт заказ
+  if (S.order && (S.order.floor === id || S.order.roof === id)) {
+    const need = document.createElement("span");
+    need.className = "need";
+    need.textContent = "✉️";
+    b.appendChild(need);
+  }
+  return b;
+}
+
+// Первая кнопка среди крыш: передумал, дом ещё низковат
+function moreChip() {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "chip more";
+  b.dataset.id = "more";
+  b.setAttribute("aria-label", "Ещё этаж");
+  const art = document.createElement("canvas");
+  art.width = art.height = 170;
+  art.getContext("2d").drawImage(thumbs[S.pickedFloor], 0, 0);
+  b.appendChild(art);
+  const plus = document.createElement("span");
+  plus.className = "plus";
+  plus.textContent = "+";
+  b.appendChild(plus);
+  const tag = document.createElement("span");
+  tag.className = "cost";
+  tag.textContent = "Ещё этаж";
+  b.appendChild(tag);
+  b.addEventListener("click", () => {
+    Sound.unlock();
+    Sound.tap();
+    S.idle = 0;
+    S.kind = "floor";
+    buildTray();
+    syncHud();
+    swapIfHanging();
   });
   return b;
 }
 
 function buildTray() {
   const tray = $("tray");
-  tray.replaceChildren(...(S.kind === "roof" ? ROOF_IDS : FLOOR_IDS).map(chip));
+  const chips = (S.kind === "roof" ? ROOF_IDS : FLOOR_IDS).map(chip);
+  if (S.kind === "roof" && floorCount(S.tower) < MAX_FLOORS) chips.unshift(moreChip());
+  tray.replaceChildren(...chips);
   syncTray();
   fitTray();
 }
@@ -319,11 +479,84 @@ function syncTray() {
 
 function syncHud() {
   $("stars").textContent = "⭐ " + save.stars;
-  const count = S.tower ? S.tower.floors.filter((f) => !MODULES[f.id].roof).length : 0;
-  $("floors").textContent = "🏢 " + count;
-  const can = S.kind === "floor" && count >= 5 && !S.finale;
+  const t = S.mode === "view" ? towers[S.viewPlot] : S.tower;
+  const count = t ? floorCount(t) : 0;
+  $("floors").textContent = S.mode === "map" ? "🏙️ " + finishedCount() : "🏢 " + count;
+  const can = S.kind === "floor" && count >= 5 && building();
   $("btn-roof").hidden = !can;
-  $("btn-roof").classList.toggle("call", count >= 12 + S.plot * 3);
+  $("btn-roof").classList.toggle("call", count >= 12 + Math.min(S.plot, 8) * 3);
+  syncOrderCard();
+  syncButtons();
+}
+
+// Вместо флага на кнопке картинка крыши: та, которую просит заказ, или последняя выбранная
+function paintRoofButton() {
+  const art = $("btn-roof").querySelector("canvas");
+  const g = art.getContext("2d");
+  g.clearRect(0, 0, 170, 170);
+  g.drawImage(thumbs[S.order ? S.order.roof : S.pickedRoof], 0, 0);
+}
+
+// Кнопки меняются вместе с тем, что происходит на экране
+function syncButtons() {
+  const scene = (S.finale && S.finale.nextShown) || S.mode === "view";
+  $("btn-next").hidden = !(scene || (S.mode === "map" && !S.opening));
+  $("btn-city").hidden = !(scene || (building() && finishedCount() > 0));
+  document.body.classList.toggle("scene", !!scene);
+}
+
+// Открытка заказа: название и две картинки. Подходит для кнопки на карте и для угла экрана
+function fillCard(el, order) {
+  const name = document.createElement("b");
+  name.textContent = order.icon + " " + order.title;
+  const row = document.createElement("span");
+  row.className = "pics";
+  for (const id of [order.floor, order.roof]) {
+    const pic = document.createElement("span");
+    pic.className = "pic";
+    pic.dataset.id = id;
+    const art = document.createElement("canvas");
+    art.width = art.height = 170;
+    art.getContext("2d").drawImage(thumbs[id], 0, 0);
+    pic.appendChild(art);
+    row.appendChild(pic);
+  }
+  el.replaceChildren(name, row);
+}
+
+function syncOrderCard() {
+  const el = $("order");
+  const t = S.mode === "view" ? towers[S.viewPlot] : S.tower;
+  let order = null;
+  if (S.mode === "view") order = t.order ? ORDER_BY_ID[t.order] : null;
+  else if (S.finale) order = S.finale.order;
+  else if (S.mode !== "map") order = S.order;
+  el.hidden = !order;
+  if (!order) return;
+  const fresh = el.dataset.order !== order.id;
+  if (fresh) {
+    el.dataset.order = order.id;
+    fillCard(el, order);
+  }
+  el.querySelectorAll(".pic").forEach((pic) => {
+    const id = pic.dataset.id;
+    const done = MODULES[id].roof ? t.roof === id : t.floors.some((f) => f.id === id);
+    if (done && !fresh && !pic.classList.contains("ok") && building()) Sound.gift();
+    pic.classList.toggle("ok", done);
+  });
+}
+
+// Какая открытка лежит у какого свободного участка: каждый третий участок с заказом, остальные пустые
+function assignOrders() {
+  const taken = new Set(Object.values(towers).map((t) => t.order).filter(Boolean));
+  const waiting = ORDERS.filter((o) => !save.done.includes(o.id) && !taken.has(o.id) && unlocked(o.floor));
+  const out = new Map();
+  for (let i = 0; i < save.opened * PLOTS; i++) {
+    if (save.towers[i]) continue;
+    if (towers[i] && towers[i].order) out.set(i, ORDER_BY_ID[towers[i].order]);
+    else if (i % 3 === 1 && waiting.length) out.set(i, waiting.shift());
+  }
+  return out;
 }
 
 function toast(icon) {
@@ -395,7 +628,7 @@ function swayAt(i, n) {
   }
   const f = Math.pow(i / n, 1.7);
   const a = Math.min(1.3, n * 0.035);
-  const wind = Math.min(0.9, n * 0.014);
+  const wind = Math.min(0.9, n * 0.014) * S.windK;
   swayOut.x = (S.sway.x * a + Math.sin(S.time * 0.72) * wind) * f;
   swayOut.z = (S.sway.z * a + Math.cos(S.time * 0.51) * wind * 0.6) * f;
   return swayOut;
@@ -410,8 +643,7 @@ function pickPoint() {
 const MAX_FLOORS = 300;
 
 function startFetch() {
-  const count = S.tower.floors.length;
-  if (S.kind === "floor" && (count >= MAX_FLOORS || floors.full(S.pickedFloor))) {
+  if (S.kind === "floor" && floorCount(S.tower) >= MAX_FLOORS) {
     S.kind = "roof";
     buildTray();
   }
@@ -439,6 +671,10 @@ function swapLoad() {
   fx.sparkle(S.load.x, S.load.y + 2, S.load.z, FLOOR_W * 0.4, 0);
 }
 
+function swapIfHanging() {
+  if (S.load && (S.mode === "aim" || S.mode === "fetch")) swapLoad();
+}
+
 function placeLoad() {
   const L = S.load;
   floors.place(L.item, L.x, L.y, L.z, 0, 0, 0);
@@ -449,7 +685,6 @@ function beginDrop() {
   S.mode = "lower";
   S.timer = 0;
   S.dropFrom = S.load.y;
-  save.learned = true;
   $("hand").hidden = true;
 }
 
@@ -472,6 +707,8 @@ function landed() {
   f.squash = 1;
   S.load = null;
   if (roof) t.roof = L.id;
+  // Подсказки нужны, пока не получилось в первый раз
+  save.learned = true;
   storeTower(t);
   const at = new T.Vector3(c.x + (exact ? 0 : dx), f.y, c.z + (exact ? 0 : dz));
   fx.landing(at.x, at.y, at.z, FLOOR_W / 2, exact ? 1 : 1.3);
@@ -555,33 +792,56 @@ function updateFallers(dt) {
 
 function askRoof() {
   S.kind = "roof";
+  if (S.order) S.pickedRoof = S.order.roof;
   buildTray();
   syncHud();
-  if (S.load && S.mode === "aim") swapLoad();
+  swapIfHanging();
 }
 
 // ---------- финал: вечер, свет в окнах, салют ----------
 function startFinale() {
   S.mode = "finale";
-  S.finale = { t: 0, lastFire: 3.6, nextShown: false };
+  S.finale = { t: 0, lastFire: 3.6, nextShown: false, opened: false, order: null, shot: false, visited: false };
   $("tray").hidden = true;
   $("btn-roof").hidden = true;
   $("hand").hidden = true;
+  $("hint").hidden = true;
   mark.visible = false;
   dropLine.visible = false;
+  ghost.visible = false;
   Sound.fanfare();
   const t = S.tower;
   const c = new T.Vector3(plotX() + (t.floors.at(-1)?.x || 0), t.top + 2, t.floors.at(-1)?.z || 0);
   fx.confetti(c.x, c.y, c.z, 110);
-  award(8, c);
+  // Заказ выполнен, только если в доме есть нужный этаж и нужная крыша. Нет — ничего страшного, открытка подождёт
+  const o = S.order;
+  const done = o && t.roof === o.roof && t.floors.some((f) => f.id === o.floor);
+  t.order = done ? o.id : null;
+  if (done) {
+    S.finale.order = o;
+    if (!save.done.includes(o.id)) save.done.push(o.id);
+  }
+  storeTower(t);
+  award(done ? 18 : 8, c);
   floors.shared.uSweep.value = 0;
   // Кран отворачивается, чтобы не загораживать дом
   crane.aim(plotX() - 44, -48);
   crane.hookY = crane.jibY - 6;
-  if (t.roof === "helipad") {
-    heli.visible = true;
-    S.finale.heli = 0;
+  if (t.roof === "helipad") life.heli.visible = true;
+  syncHud();
+}
+
+// Забор и бытовка исчезают в облаке пыли, у дома появляется вход
+function openHouse(t) {
+  const x0 = plotX(t.plot);
+  for (let i = 0; i < 26; i++) {
+    const a = (i / 26) * Math.PI * 2;
+    fx.puff(x0 + Math.cos(a) * 15, 1 + Math.random() * 1.5, Math.sin(a) * 15, Math.cos(a) * 5, 1, Math.sin(a) * 5, [0.74, 0.7, 0.64], 7 + Math.random() * 5, 0.9 + Math.random() * 0.5);
   }
+  for (let i = 0; i < 12; i++) fx.puff(x0 - 20 + Math.random() * 12, 1.5, -26 + Math.random() * 24, 0, 1, 0, [0.74, 0.7, 0.64], 6 + Math.random() * 4, 0.9);
+  city.site.visible = false;
+  life.enter(t, x0, true);
+  Sound.pop();
 }
 
 function updateFinale(dt) {
@@ -591,22 +851,32 @@ function updateFinale(dt) {
   city.setMood(2 * T.MathUtils.smoothstep(F.t, 0.5, 3.4));
   floors.shared.uSweep.value = T.MathUtils.smoothstep(F.t, 2.6, 5.4) * (t.top + 30);
   crane.step(dt, 0.2);
+  if (!F.opened && F.t > 1.4) {
+    F.opened = true;
+    openHouse(t);
+  }
+  if (F.order && !F.visited && F.t > 2.6) {
+    F.visited = true;
+    life.visit(t, F.order.car);
+  }
+  // Гостей показываем вблизи, а потом камера снова отъезжает к дому и салюту
+  F.shot = !!F.order && F.t > 4.2 && F.t < 13;
   if (F.t > F.lastFire) {
     F.lastFire = F.t + 0.45 + Math.random() * 0.6;
     fireworkNear(t);
   }
   if (!F.nextShown && F.t > 4.8) {
     F.nextShown = true;
-    $("btn-next").hidden = false;
+    syncButtons();
   }
-  if (heli.visible) {
+  if (life.heli.visible) {
     const k = T.MathUtils.smoothstep(F.t, 1.2, 6.5);
     const last = t.floors.at(-1);
     const hx = plotX() + last.x;
     const hz = last.z;
-    heli.position.set(hx + (1 - k) * 46, t.top + 2.4 + (1 - k) * 26 + Math.sin(F.t * 3) * 0.2 * (1 - k), hz + (1 - k) * 18);
-    heli.rotation.y = 0.6 * (1 - k) + Math.PI;
-    heli.userData.rotor.rotation.y = S.time * 34;
+    life.heli.position.set(hx + (1 - k) * 46, t.top + 2.15 + (1 - k) * 26 + Math.sin(F.t * 3) * 0.2 * (1 - k), hz + (1 - k) * 18);
+    life.heli.rotation.y = 0.6 * (1 - k) + Math.PI;
+    life.heli.children[0].rotation.y = S.time * 34;
   }
 }
 
@@ -621,53 +891,314 @@ function fireworkNear(t) {
   Sound.firework();
 }
 
-function nextTower() {
-  Sound.tap();
+function fadeTo(fn) {
+  if (S.fading) return;
+  S.fading = true;
   $("fade").classList.add("on");
   setTimeout(() => {
-    startPlot((S.plot + 1) % PLOTS);
+    fn();
     $("fade").classList.remove("on");
+    S.fading = false;
   }, 260);
 }
 
+function nextFree() {
+  for (let i = 0; i < save.opened * PLOTS; i++) if (!save.towers[i]) return i;
+  return null;
+}
+
+// Кнопка ▶: вернуться к недостроенному дому или начать следующий. Квартал кончился — открывается соседний
+function buildNext() {
+  if (S.opening || S.fading) return;
+  Sound.unlock();
+  Sound.tap();
+  const plot = S.tower && !S.tower.roof ? S.plot : nextFree();
+  if (plot === null) openDistrict();
+  else fadeTo(() => startPlot(plot));
+}
+
 function startPlot(plot) {
+  if (S.finale) life.park(S.tower);
+  const old = S.tower;
+  // Участок, на который так и не поставили этажа, снова свободен
+  if (old && old.plot !== plot && !save.towers[old.plot]) {
+    old.on = false;
+    delete towers[old.plot];
+  }
   S.plot = plot;
   S.finale = null;
   S.kind = "floor";
   S.streak = 0;
-  S.milestones = new Set();
   S.fallers.forEach((f) => floors.remove(f.item));
   S.fallers = [];
   if (S.load) floors.remove(S.load.item);
   S.load = null;
-  heli.visible = false;
-  // На заново занятом участке старый дом разбирают
-  if (towers[plot] && towers[plot].roof) {
-    removeTower(towers[plot]);
-    delete towers[plot];
-    delete save.towers[plot];
-  }
+  life.heli.visible = false;
   towers[plot] = towers[plot] || makeTower(plot);
-  S.tower = towers[plot];
-  save.plot = plot;
-  store();
-  city.setMood(0);
-  floors.shared.uSweep.value = 1e5;
-  crane.setPlot(plotX(), 0);
-  city.site.position.x = plotX();
-  crane.jibY = Math.max(30, S.tower.top + 22);
-  crane.hookY = S.tower.top + 10;
-  S.sway = { x: 0, z: 0, vx: 0, vz: 0 };
-  S.camYaw = 0.52;
+  const t = towers[plot];
+  // Новый участок забирает свою открытку, недостроенный дом помнит свою
+  if (!save.towers[plot] && !t.order) {
+    const offer = assignOrders().get(plot);
+    t.order = offer ? offer.id : null;
+  }
+  S.order = t.order ? ORDER_BY_ID[t.order] : null;
+  S.tower = t;
   S.mode = "down";
   S.timer = 0.2;
+  syncCity(plotX(plot), true);
+  S.milestones = new Set(MILESTONES.filter((m) => floorCount(t) >= m.floors).map((m) => m.floors));
+  save.plot = plot;
+  store();
+  if (S.order && !t.floors.length) S.pickedFloor = S.order.floor;
+  city.setMood(0);
+  city.setShadow(60);
+  floors.shared.uSweep.value = 1e5;
+  crane.setPlot(plotX(), 0);
+  crane.shown = true;
+  city.site.position.x = plotX();
+  city.site.visible = true;
+  crane.jibY = Math.max(30, t.top + 22);
+  crane.hookY = t.top + 10;
+  S.sway = { x: 0, z: 0, vx: 0, vz: 0 };
+  S.windK = 1;
+  S.camYaw = 0.52;
   fx.clear();
+  clearPins();
+  marks.visible = false;
   $("tray").hidden = false;
-  $("btn-next").hidden = true;
   Music.setTrack(plot % Music.TRACKS.length);
   buildTray();
+  paintRoofButton();
   syncHud();
   snapCamera();
+  // Новая открытка сначала показывается крупно, потом отъезжает в угол
+  if (S.order && !t.floors.length) {
+    const card = $("order");
+    card.classList.add("intro");
+    clearTimeout(S.introTimer);
+    S.introTimer = setTimeout(() => card.classList.remove("intro"), 2400);
+  }
+}
+
+// ---------- мой город ----------
+// Метки над домами и открытки на участках живут поверх холста и следуют за камерой
+const pins = [];
+function clearPins() {
+  pins.forEach((p) => p.el.remove());
+  pins.length = 0;
+}
+function addPin(el, x, y, z) {
+  $("pins").appendChild(el);
+  pins.push({ el, x, y, z });
+}
+function updatePins() {
+  for (const p of pins) {
+    tmpV.set(p.x, p.y, p.z).project(camera);
+    const on = tmpV.z < 1 && Math.abs(tmpV.x) < 1.15 && Math.abs(tmpV.y) < 1.15;
+    p.el.style.visibility = on ? "visible" : "hidden";
+    if (on) p.el.style.transform = `translate(${((tmpV.x * 0.5 + 0.5) * innerWidth).toFixed(1)}px, ${((-tmpV.y * 0.5 + 0.5) * innerHeight).toFixed(1)}px) translate(-50%, -100%)`;
+  }
+}
+
+const markList = [];
+function refreshMap() {
+  clearPins();
+  markList.length = 0;
+  const offers = assignOrders();
+  const next = S.tower && !S.tower.roof ? S.plot : nextFree();
+  for (let i = 0; i < save.opened * PLOTS; i++) {
+    const x = plotX(i);
+    const data = save.towers[i];
+    if (data) {
+      const t = towers[i];
+      const icon = !data.roof ? "🏗️" : data.order ? ORDER_BY_ID[data.order].icon : "";
+      if (icon && t) {
+        const tag = document.createElement("span");
+        tag.className = "tag";
+        tag.textContent = icon;
+        addPin(tag, x, t.top + 3, 0);
+      }
+      continue;
+    }
+    if (markList.length < marks.instanceMatrix.count) markList.push({ x, next: i === next });
+    const offer = offers.get(i);
+    if (offer) {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "postcard pinned";
+      card.setAttribute("aria-label", offer.title);
+      fillCard(card, offer);
+      card.addEventListener("click", () => chooseFromMap(i));
+      addPin(card, x, 3, 2);
+    }
+  }
+  marks.visible = S.mode === "map";
+}
+
+function updateMarks() {
+  if (!marks.visible) return;
+  const m = tmpMatrix;
+  let n = 0;
+  for (const k of markList) {
+    const s = k.next ? 1 + Math.sin(S.time * 4) * 0.07 : 1;
+    m.makeScale(s, 1, s);
+    m.setPosition(k.x, 0.62, 0);
+    marks.setMatrixAt(n++, m);
+  }
+  marks.count = n;
+  marks.instanceMatrix.needsUpdate = true;
+}
+
+// Широкий экран видит весь квартал, узкий несколько участков: остальное листается пальцем
+function mapWidth() {
+  return T.MathUtils.clamp(camera.aspect * 300, 170, 470);
+}
+
+// Весь город сверху. Стройка замирает: висящий груз убран, недостроенный дом ждёт на своём месте
+function openMap(plot) {
+  if (S.mode === "map") return;
+  const from = plot !== undefined ? plot : S.mode === "view" ? S.viewPlot : S.plot;
+  if (S.finale) {
+    life.park(S.tower);
+    if (S.finale.visited && life.trip) life.endTrip();
+  }
+  if (S.load) floors.remove(S.load.item);
+  S.load = null;
+  S.finale = null;
+  S.mode = "map";
+  S.mapX = mapWidth() >= 400 ? Math.floor(from / PLOTS) * DISTRICT + 175 : plotX(from);
+  S.mapV = 0;
+  life.heli.visible = false;
+  crane.shown = !S.tower.roof;
+  crane.speed = 0;
+  city.site.visible = !S.tower.roof;
+  floors.shared.uSweep.value = 1e5;
+  city.setShadow(340);
+  $("tray").hidden = true;
+  $("btn-roof").hidden = true;
+  $("hand").hidden = true;
+  $("hint").hidden = true;
+  mark.visible = false;
+  dropLine.visible = false;
+  ghost.visible = false;
+  syncCity(S.mapX);
+  refreshMap();
+  syncHud();
+}
+
+// Один дом вблизи: можно покрутить его и посмотреть, кто в нём живёт
+function openView(plot) {
+  S.mode = "view";
+  S.viewPlot = plot;
+  const t = towers[plot];
+  syncCity(plotX(plot));
+  S.viewY = t.top * 0.5;
+  clearPins();
+  marks.visible = false;
+  city.setShadow(Math.max(70, t.top * 0.75));
+  life.replay(t);
+  S.shotUntil = 0;
+  if (t.order) {
+    life.visit(t, ORDER_BY_ID[t.order].car);
+    S.shotUntil = S.time + 9.5;
+  }
+  syncHud();
+}
+
+function chooseFromMap(plot) {
+  if (S.opening || S.fading) return;
+  Sound.unlock();
+  Sound.tap();
+  fadeTo(() => startPlot(plot));
+}
+
+// Касание на карте: ближайший к пальцу дом или участок. Высокий дом можно нажать по всей его высоте
+function mapTap(px, py) {
+  if (S.opening || S.fading) return;
+  let best = -1;
+  let bestD = Infinity;
+  const a = new T.Vector3();
+  const b = new T.Vector3();
+  const toPx = (v) => [(v.x * 0.5 + 0.5) * innerWidth, (-v.y * 0.5 + 0.5) * innerHeight];
+  for (let i = 0; i < save.opened * PLOTS; i++) {
+    const x = plotX(i);
+    const t = towers[i];
+    a.set(x, 0, 0).project(camera);
+    b.set(x, t ? Math.max(t.top, 8) : 1, 0).project(camera);
+    const [ax, ay] = toPx(a);
+    const [bx, by] = toPx(b);
+    const dx = bx - ax;
+    const dy = by - ay;
+    const k = T.MathUtils.clamp(((px - ax) * dx + (py - ay) * dy) / Math.max(1, dx * dx + dy * dy), 0, 1);
+    const d = Math.hypot(px - ax - dx * k, py - ay - dy * k);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  // Участок шириной в половину шага между домами: ошибиться соседом трудно
+  a.set(plotX(0), 0, 0).project(camera);
+  b.set(plotX(1), 0, 0).project(camera);
+  const reach = Math.max(30, (Math.abs(b.x - a.x) * innerWidth) / 4);
+  if (best < 0 || bestD > reach) return;
+  if (save.towers[best] && save.towers[best].roof && towers[best]) {
+    Sound.tap();
+    openView(best);
+  } else chooseFromMap(best);
+}
+
+// Кварталы кончились: камера едет к соседнему, старые дома уходят под землю, появляются новые участки
+function openDistrict() {
+  const k = save.opened;
+  openMap(k * PLOTS);
+  S.mapX = plotX(k * PLOTS) + 175;
+  syncCity(S.mapX, true);
+  S.opening = { t: 0, k, stage: 0 };
+  syncButtons();
+}
+
+function stepOpening(dt) {
+  const O = S.opening;
+  O.t += dt;
+  if (O.stage === 0 && O.t > 1.2) {
+    O.stage = 1;
+    Sound.rumble();
+    const list = city.clearDistrict(O.k);
+    for (let i = 0; i < list.length; i += Math.max(1, Math.floor(list.length / 70))) {
+      const h = list[i];
+      fx.puff(h.x, 2 + Math.random() * 6, h.z, (Math.random() - 0.5) * 8, 2, (Math.random() - 0.5) * 8, [0.74, 0.7, 0.64], 18 + Math.random() * 16, 1.3 + Math.random() * 0.8);
+    }
+  } else if (O.stage === 1 && O.t > 2.45) {
+    save.opened = O.k + 1;
+    city.opened = save.opened;
+    store();
+    S.opening = null;
+    syncCity(S.mapX, true);
+    refreshMap();
+    fx.confetti(plotX(O.k * PLOTS) + 175, 40, 0, 160);
+    Sound.fanfare();
+    toast("🎉");
+    syncHud();
+  }
+}
+
+function stepCity(dt) {
+  if (city.mood > 0) city.setMood(Math.max(0, city.mood - dt * 0.7));
+  if (S.mode !== "map") return;
+  if (S.mapV && !drag) {
+    S.mapX += S.mapV * dt;
+    S.focus.x += S.mapV * dt;
+    S.mapV *= Math.exp(-dt * 3);
+    if (Math.abs(S.mapV) < 3) S.mapV = 0;
+  }
+  const last = (save.opened + (S.opening ? 1 : 0)) * PLOTS - 1;
+  const clamped = T.MathUtils.clamp(S.mapX, plotX(0) - 30, plotX(last) + 30);
+  if (clamped !== S.mapX) {
+    S.mapX = clamped;
+    S.mapV = 0;
+  }
+  syncCity(S.mapX);
+  if (S.opening) stepOpening(dt);
 }
 
 // ---------- шаг времени ----------
@@ -676,8 +1207,12 @@ function simStep(dt) {
   floors.shared.uTime.value = S.time;
   // Качание дома затухает пружиной
   const w = 1.5;
-  S.sway.vx += (-w * w * S.sway.x - 0.32 * S.sway.vx) * dt;
-  S.sway.vz += (-w * w * S.sway.z - 0.32 * S.sway.vz) * dt;
+  // Достроенный дом быстро успокаивается и больше не качается: на нём теперь живут
+  const still = S.mode === "finale" || inCity();
+  const damp = still ? 2.4 : 0.32;
+  S.windK += ((still ? 0 : 1) - S.windK) * (1 - Math.exp(-dt * 1.5));
+  S.sway.vx += (-w * w * S.sway.x - damp * S.sway.vx) * dt;
+  S.sway.vz += (-w * w * S.sway.z - damp * S.sway.vz) * dt;
   S.sway.x += S.sway.vx * dt;
   S.sway.z += S.sway.vz * dt;
   S.shake = Math.max(0, S.shake - dt * 2.6);
@@ -687,6 +1222,10 @@ function simStep(dt) {
   crane.jibY += (wantJib - crane.jibY) * (1 - Math.exp(-dt * 1.4));
   if (S.mode === "finale") {
     updateFinale(dt);
+    return;
+  }
+  if (inCity()) {
+    stepCity(dt);
     return;
   }
   const c = topCenter();
@@ -780,7 +1319,21 @@ function placeTower() {
 function cameraWanted() {
   const aspect = camera.aspect;
   const t = S.tower;
+  if (S.mode === "map") {
+    return { fx: S.mapX, fy: 12, fz: 8, D: mapWidth() / (2 * TAN * aspect), pitch: 0.66, yaw: 0.2, rate: 2.2 };
+  }
+  if (S.mode === "view") {
+    const v = towers[S.viewPlot];
+    if (S.time < S.shotUntil) return guestShot(v, aspect);
+    const span = v.top * 1.16 + 22;
+    const D = T.MathUtils.clamp(Math.max(span / (2 * TAN), 46 / (2 * TAN * aspect)), 64, 200);
+    // Вход остаётся над кнопками внизу, а высокий дом целиком не влезет: палец ведёт камеру вдоль него
+    const lo = D * TAN * 0.55;
+    S.viewY = T.MathUtils.clamp(S.viewY, lo, Math.max(lo, v.top + 5 - D * TAN * 0.78));
+    return { fx: plotX(v.plot), fy: S.viewY, fz: 0, D, pitch: 0.13, rate: 2 };
+  }
   if (S.finale) {
+    if (S.finale.shot) return guestShot(t, aspect);
     const span = t.top * 1.18 + 34;
     const D = Math.max(span / (2 * TAN), 56 / (2 * TAN * aspect));
     return { fx: plotX(), fy: t.top * 0.52 + 2, fz: 0, D, pitch: 0.1, rate: 0.9 };
@@ -789,6 +1342,13 @@ function cameraWanted() {
   const D = Math.max(46 / (2 * TAN), 62 / (2 * TAN * aspect));
   const pitch = 0.24 + Math.min(0.16, t.top * 0.0022);
   return { fx: plotX() + 3, fy: t.top + (innerHeight < 500 ? 3.5 : 6.5), fz: 0, D, pitch, rate: 2.2 };
+}
+
+// Вид на вход и улицу: сюда приезжают гости
+function guestShot(t, aspect) {
+  const rec = life.recs.get(t);
+  const x = rec ? rec.door.x : plotX(t.plot);
+  return { fx: x - 2, fy: 4, fz: 24, D: Math.max(62, 42 / (2 * TAN * aspect)), pitch: 0.26, yaw: 0.36, rate: 1.4 };
 }
 
 function snapCamera() {
@@ -822,18 +1382,33 @@ function updateCamera(dt) {
   S.focus.z += (w.fz - S.focus.z) * k;
   S.camD += (w.D - S.camD) * k;
   S.camPitch += (w.pitch - S.camPitch) * k;
-  if (S.finale && !drag) S.camYaw += dt * 0.09;
+  if (w.yaw !== undefined) {
+    const d = w.yaw - S.camYaw;
+    S.camYaw += Math.atan2(Math.sin(d), Math.cos(d)) * k;
+  } else if ((S.finale || S.mode === "view") && !drag) S.camYaw += dt * 0.09;
   applyCamera();
 }
 
 // ---------- метка и подсказка ----------
 const tmpV = new T.Vector3();
+const tmpMatrix = new T.Matrix4();
+const tmpFocus = new T.Vector3();
 function updateGuides() {
   const aim = S.mode === "aim" && S.load;
   mark.visible = dropLine.visible = !!aim;
   const hand = $("hand");
+  const hint = $("hint");
+  // Силуэт стоит на месте всё время, пока кран несёт этаж
+  ghost.visible = !!S.load && (S.mode === "aim" || S.mode === "fetch" || S.mode === "lower");
+  if (ghost.visible) {
+    const c0 = topCenter();
+    ghost.position.set(c0.x, S.tower.top + 0.04, c0.z);
+  }
   if (!aim) {
     hand.hidden = true;
+    hint.hidden = true;
+    S.wasGood = false;
+    if (ghost.visible) showGhost(false);
     return;
   }
   const L = S.load;
@@ -841,15 +1416,33 @@ function updateGuides() {
   const off = Math.max(Math.abs(L.x - c.x), Math.abs(L.z - c.z));
   const roof = !!MODULES[L.id].roof;
   const good = off <= (roof ? FLOOR_W * 0.45 : PERFECT);
-  mark.position.set(L.x, S.tower.top + 0.12, L.z);
-  markMat.color.set(good ? "#39f07a" : off > STAYS ? "#ffb02e" : "#ffffff");
-  markMat.opacity = good ? 0.95 : 0.7;
+  if (good && !S.wasGood) {
+    S.snapAt = S.time;
+    Sound.snap();
+  }
+  S.wasGood = good;
+  showGhost(good);
+  // Контуры смыкаются: пока груз над своим местом, метка стоит ровно на силуэте и коротко вздрагивает
+  const pulse = 1 + Math.exp(-(S.time - S.snapAt) * 9) * 0.07;
+  ghost.scale.set(good ? pulse : 1, roof ? 0.5 : 1, good ? pulse : 1);
+  mark.position.set(good ? c.x : L.x, S.tower.top + 0.12, good ? c.z : L.z);
+  mark.scale.setScalar(good ? pulse : 1);
+  markMat.color.set(good ? "#39f07a" : off > STAYS ? "#ff9a2e" : "#ffd23f");
+  markMat.opacity = good ? 0.95 : 0.8;
   const a = dropGeo.attributes.position;
   a.setXYZ(0, L.x, L.y, L.z);
   a.setXYZ(1, L.x, S.tower.top + 0.15, L.z);
   a.needsUpdate = true;
   dropLine.computeLineDistances();
   dropLine.material.color.copy(markMat.color);
+  // Первый раз: когда всё сошлось, подсказка просит отпустить палец
+  const hintOn = !!drag && good && !save.learned;
+  hint.hidden = !hintOn;
+  if (hintOn) {
+    tmpV.set(L.x, L.y + L.hang + 3.5, L.z).project(camera);
+    hint.style.left = (tmpV.x * 0.5 + 0.5) * innerWidth + "px";
+    hint.style.top = Math.max(132, (-tmpV.y * 0.5 + 0.5) * innerHeight) + "px";
+  }
   // Если ребёнок не знает, что делать, рука показывает движение от груза к дому
   const show = !drag && (!save.learned || S.idle > 7);
   hand.hidden = !show;
@@ -861,6 +1454,14 @@ function updateGuides() {
     hand.style.top = (-tmpV.y * 0.5 + 0.5) * innerHeight + "px";
     hand.style.opacity = k < 0.85 ? 1 : (1 - k) / 0.15;
   }
+}
+
+function showGhost(good) {
+  ghostDash.visible = !good;
+  ghostLine.visible = good;
+  ghostMat.color.set(good ? "#39f07a" : "#1fd4ff");
+  ghostFillMat.color.copy(ghostMat.color);
+  ghostFillMat.opacity = good ? 0.3 : 0.16;
 }
 
 // ---------- управление ----------
@@ -881,7 +1482,10 @@ function moveAim(dx, dy) {
 canvas.addEventListener("pointerdown", (e) => {
   Sound.unlock();
   S.idle = 0;
-  drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0 };
+  S.mapV = 0;
+  S.shotUntil = 0;
+  $("order").classList.remove("intro");
+  drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0, at: performance.now(), v: 0 };
   try {
     canvas.setPointerCapture(e.pointerId);
   } catch (_) {}
@@ -902,13 +1506,35 @@ window.addEventListener("pointermove", (e) => {
     S.camYaw -= dx * 0.005;
     return;
   }
+  if (S.mode === "view") {
+    S.camYaw -= dx * 0.005;
+    S.viewY += (dy * 2 * S.camD * TAN) / innerHeight;
+    return;
+  }
+  if (S.mode === "map") {
+    // Город едет за пальцем без задержки, а отпущенный ещё немного катится
+    const shift = -(dx * 2 * S.camD * TAN) / innerHeight / Math.cos(S.camYaw);
+    S.mapX += shift;
+    S.focus.x += shift;
+    const now = performance.now();
+    drag.v = (shift / Math.max(1, now - drag.at)) * 1000;
+    drag.at = now;
+    return;
+  }
   if (S.mode === "aim" || S.mode === "fetch") moveAim(dx, dy);
 });
 function endDrag(e, cancel) {
   if (!drag || e.pointerId !== drag.id) return;
   const moved = drag.moved;
+  const v = drag.v;
+  const stale = performance.now() - drag.at > 90;
   drag = null;
   if (cancel) return;
+  if (S.mode === "map") {
+    if (moved <= 12) mapTap(e.clientX, e.clientY);
+    else S.mapV = stale ? 0 : T.MathUtils.clamp(v, -900, 900);
+    return;
+  }
   // Простое касание без движения этаж не роняет: показываем, как его вести
   if (S.mode === "aim") {
     if (moved > 12) beginDrop();
@@ -934,10 +1560,12 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
     Sound.unlock();
     if (S.mode === "aim") moveAim(...arrows[e.code]);
+    if (S.mode === "map") S.mapX += arrows[e.code][0] * 3;
   } else if (e.code === "Space" || e.code === "Enter") {
     e.preventDefault();
     Sound.unlock();
     if (S.mode === "aim") beginDrop();
+    else if (S.mode === "map" || S.mode === "view") buildNext();
   }
 });
 
@@ -946,7 +1574,13 @@ $("btn-roof").addEventListener("click", () => {
   Sound.tap();
   askRoof();
 });
-$("btn-next").addEventListener("click", nextTower);
+$("btn-next").addEventListener("click", buildNext);
+$("btn-city").addEventListener("click", () => {
+  if (S.opening || S.fading) return;
+  Sound.unlock();
+  Sound.tap();
+  openMap();
+});
 function syncSound() {
   Sound.setOn(save.sound);
   $("btn-sound").textContent = save.sound ? "🔊" : "🔇";
@@ -1029,21 +1663,42 @@ function tick(dt) {
   updateCamera(dt);
   fx.update(dt);
   updateGuides();
+  updateMarks();
+  updatePins();
+  life.update(dt, camera, floors.shared.uLight.value);
   const anchors = S.load && S.mode !== "settle" ? loadAnchors() : null;
   crane.draw(anchors);
-  crane.hook.visible = crane.rope.visible = true;
-  city.update(dt, new T.Vector3(plotX(), S.tower.top, 0), camera);
-  Sound.motor(crane.speed / 16);
-  Sound.ambience(S.tower.top);
+  city.quiet = S.mode === "map";
+  city.update(dt, cityFocus(), camera);
+  Sound.motor(building() ? crane.speed / 16 : 0);
+  Sound.ambience(S.mode === "map" ? 60 : S.tower.top);
   Music.tick();
   draw();
 }
 
+// Вокруг этой точки живёт город: летают птицы и считаются тени
+function cityFocus() {
+  if (S.mode === "map") return tmpFocus.set(S.mapX, 0, 0);
+  if (S.mode === "view") return tmpFocus.set(plotX(S.viewPlot), S.viewY, 0);
+  if (S.finale && S.finale.shot) return tmpFocus.set(plotX(), 6, 18);
+  return tmpFocus.set(plotX(), S.tower.top, 0);
+}
+
 const anchorV = [new T.Vector3(), new T.Vector3(), new T.Vector3(), new T.Vector3()];
+// Куда цепляются стропы: у этажа за углы крыши, у купола за край кольца, у остальных крыш за основание
+const SLINGS = { spire: { y: 2.4, q: 5.4 }, dome: { y: 2, q: 6.2, round: true }, helipad: { y: 2.06, q: 5.3 }, pool: { y: 1, q: 6.4 } };
 function loadAnchors() {
   const L = S.load;
-  const q = FLOOR_W * 0.38;
-  const y = L.y + Math.min(L.hang, FLOOR_H + 0.2);
+  const s = SLINGS[L.id];
+  const q = s ? s.q : FLOOR_W * 0.38;
+  const y = L.y + (s ? s.y : FLOOR_H + 0.2);
+  if (s && s.round) {
+    anchorV[0].set(L.x - q, y, L.z);
+    anchorV[1].set(L.x, y, L.z - q);
+    anchorV[2].set(L.x + q, y, L.z);
+    anchorV[3].set(L.x, y, L.z + q);
+    return anchorV;
+  }
   anchorV[0].set(L.x - q, y, L.z - q);
   anchorV[1].set(L.x + q, y, L.z - q);
   anchorV[2].set(L.x + q, y, L.z + q);
@@ -1066,11 +1721,15 @@ function draw() {
 function boot() {
   makeThumbnails();
   // Уже построенные дома снова стоят на своих местах
-  for (const [plot, data] of Object.entries(save.towers)) {
-    towers[plot] = makeTower(+plot, data);
-  }
+  for (const plot of Object.keys(save.towers)) towers[plot] = makeTower(+plot);
   const unfinished = towers[save.plot] && !towers[save.plot].roof;
-  const plot = unfinished ? save.plot : towers[save.plot] ? (save.plot + 1) % PLOTS : save.plot;
+  let plot = unfinished ? save.plot : towers[save.plot] ? nextFree() : save.plot;
+  // Квартал закончился ещё в прошлый раз: соседний просто уже открыт
+  if (plot === null) {
+    save.opened++;
+    city.opened = save.opened;
+    plot = nextFree();
+  }
   resize();
   startPlot(plot);
   syncSound();
@@ -1080,5 +1739,5 @@ function boot() {
   requestAnimationFrame(frame);
 }
 
-window.Neboskreb = { S, save, floors, city, crane, fx, renderer, tick, draw, lockQuality: false, beginDrop, askRoof, startPlot, addFloor, storeTower, startFinale, moveAim, topCenter, setQuality: (q) => { quality = q; resize(); } };
+window.Neboskreb = { S, save, towers, floors, city, crane, fx, life, ORDERS, renderer, camera, tick, draw, lockQuality: false, beginDrop, askRoof, startPlot, addFloor, storeTower, startFinale, moveAim, topCenter, openMap, openView, openDistrict, buildNext, nextFree, plotX, setQuality: (q) => { quality = q; resize(); } };
 boot();

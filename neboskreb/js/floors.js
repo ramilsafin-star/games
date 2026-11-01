@@ -187,7 +187,7 @@ const BUILD = {
         s.add("solid", cube(2.2, 0.16, 0.26, x, H * 0.48 - 1.46, HALF - 0.08, "#f6ecd6"));
       });
       [-5.9, -2.93, 0, 2.93, 5.9].forEach((x) => {
-        s.add("solid", plainPart(new T.CylinderGeometry(0.3, 0.34, H - 0.62, 12), "#fff3da", x, H / 2 - 0.1, HALF - 0.02));
+        s.add("solid", plainPart(new T.CylinderGeometry(0.3, 0.34, H - 0.62, 8), "#fff3da", x, H / 2 - 0.1, HALF - 0.02));
         s.add("solid", cube(0.86, 0.2, 0.5, x, H - 0.66, HALF - 0.04, "#f6ecd6"), cube(0.86, 0.2, 0.5, x, 0.3, HALF - 0.04, "#f6ecd6"));
       });
     });
@@ -199,7 +199,7 @@ const BUILD = {
     k.around((s) => {
       s.add("glass", pane(rng, 2.2, 2.3, -4.9, H / 2, HALF - 0.17, "#74b4d8"), pane(rng, 2.2, 2.3, 4.9, H / 2, HALF - 0.17, "#74b4d8"));
       s.add("glow", plainPart(new T.CircleGeometry(1.62, 32), "#fff6dc", 0, H / 2, HALF - 0.14));
-      const rim = new T.TorusGeometry(1.68, 0.14, 8, 36);
+      const rim = new T.TorusGeometry(1.68, 0.14, 5, 24);
       s.add("metal", plainPart(rim, "#d9a93a", 0, H / 2, HALF - 0.14));
       for (let i = 0; i < 12; i++) {
         const a = (i * Math.PI) / 6;
@@ -281,7 +281,7 @@ const BUILD = {
         const x = -5.2 + a * 2.6;
         const c = colors[(a + i * 2) % colors.length];
         s.add("glass", pane(rng, 0, 0, x, H / 2, HALF - 0.12, c, new T.CircleGeometry(1.05, 24)));
-        s.add("solid", plainPart(new T.TorusGeometry(1.1, 0.13, 8, 26), "#ffffff", x, H / 2, HALF - 0.1));
+        s.add("solid", plainPart(new T.TorusGeometry(1.1, 0.13, 5, 16), "#ffffff", x, H / 2, HALF - 0.1));
       }
     });
   },
@@ -442,17 +442,28 @@ export class Floors {
         scene.add(m);
         meshes.push(m);
       }
-      this.pools[id] = { meshes, matrix, seeds, items: [] };
+      this.pools[id] = { meshes, matrix, seeds, items: [], capacity: CAPACITY };
     }
   }
 
-  // Запас копий кончился: столько этажей одного вида за всю игру почти не бывает, но ломаться нельзя
-  full(id) {
-    return this.pools[id].items.length >= CAPACITY;
+  // Запас копий кончился: город растёт без конца, поэтому запас просто удваивается
+  grow(pool) {
+    pool.capacity *= 2;
+    const matrix = new T.InstancedBufferAttribute(new Float32Array(pool.capacity * 16), 16).setUsage(T.DynamicDrawUsage);
+    const seeds = new T.InstancedBufferAttribute(new Float32Array(pool.capacity), 1).setUsage(T.DynamicDrawUsage);
+    matrix.array.set(pool.matrix.array);
+    seeds.array.set(pool.seeds.array);
+    pool.matrix = matrix;
+    pool.seeds = seeds;
+    for (const m of pool.meshes) {
+      m.instanceMatrix = matrix;
+      if (m.geometry.attributes.iSeed) m.geometry.setAttribute("iSeed", seeds);
+    }
   }
 
   add(id) {
     const pool = this.pools[id];
+    if (pool.items.length >= pool.capacity) this.grow(pool);
     const item = { id, slot: pool.items.length, matrix: new T.Matrix4() };
     pool.items.push(item);
     pool.seeds.array[item.slot] = Math.random();

@@ -20,10 +20,14 @@
       <span id="floors" class="pill">🏢 0</span>
     </div>
     <button id="btn-sound" class="round" type="button" aria-label="Выключить звук">🔊</button>
-    <button id="btn-roof" class="round big" type="button" aria-label="Поставить крышу" hidden>🏁</button>
-    <button id="btn-next" type="button" aria-label="Строить следующий дом" hidden>▶</button>
+    <button id="btn-roof" class="round big" type="button" aria-label="Выбрать крышу" hidden><canvas width="170" height="170"></canvas></button>
+    <button id="btn-city" class="round" type="button" aria-label="Мой город" hidden><span>🏙️</span><small>Мой город</small></button>
+    <button id="btn-next" type="button" aria-label="Строить дальше" hidden>▶</button>
+    <div id="pins"></div>
+    <div id="order" class="postcard" hidden></div>
     <div id="tray"></div>
     <div id="hand" aria-hidden="true" hidden>👆</div>
+    <div id="hint" aria-hidden="true" hidden><i>✋</i> Отпускай!</div>
     <div id="toast" aria-hidden="true"></div>
     <div id="fade" aria-hidden="true"></div>
     <p id="load" role="status">🏗️</p>

@@ -175,6 +175,7 @@ export class Crane {
     this.pos = new T.Vector3();
     this.anchors = [new T.Vector3(), new T.Vector3(), new T.Vector3(), new T.Vector3()];
     this.attached = false;
+    this.shown = true;
     this.sizeCache = 0;
   }
 
@@ -249,8 +250,9 @@ export class Crane {
     this.hook.position.copy(this.pos);
     stretch(this.rope, top, this.pos.clone().setY(this.pos.y + 0.8));
     this.attached = !!loadAnchors;
+    this.root.visible = this.rope.visible = this.hook.visible = this.shown;
     this.slings.forEach((s, i) => {
-      s.visible = this.attached;
+      s.visible = this.attached && this.shown;
       if (this.attached) stretch(s, this.pos, loadAnchors[i]);
     });
   }
