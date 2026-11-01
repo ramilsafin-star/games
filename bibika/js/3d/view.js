@@ -977,6 +977,14 @@ export class DriveView {
       }
     });
   }
+  // Видна ли машина на дороге: снаряд не должен улетать к той, что осталась за краем кадра
+  onScreen(game, x, y) {
+    const car = game.car,
+      d = game.distance / UNITS_PER_METRE + (game.h * 0.73 - car.y) / UNITS_PER_METRE,
+      z = (y - car.y) / UNITS_PER_METRE;
+    this.temp.position.set(this.roadPosition(x, z, d), 1 + this.roadLift(z, d), z).project(this.cam);
+    return this.temp.position.z < 1 && Math.abs(this.temp.position.x) < 1 && Math.abs(this.temp.position.y) < 1;
+  }
   drive(game, fx, dt) {
     const screen = this.canvas.getBoundingClientRect();
     if (!screen.width || !screen.height) return;

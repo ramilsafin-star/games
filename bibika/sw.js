@@ -1,4 +1,4 @@
-const CACHE = "bibika-v25-blasts";
+const CACHE = "bibika-v26-shots";
 const FILES = [
   "./",
   "./index.html",

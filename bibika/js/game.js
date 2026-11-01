@@ -789,16 +789,34 @@ function launchShot(x, y, vx = 0, target = null) {
     color: ammo.colors[Game.shotCount++ % ammo.colors.length],
   });
 }
+// По чему можно стрелять: поток и конусы, трое друзей рядом и полицейская погоня
+function isShootable(e) {
+  return isObstacle(e) || (e.kind === "rival" && !e.dead) || (e === Game.chase?.car && !e.dead);
+}
 // Во что попадает снаряд этой машины
 function shotHits(e, ammo) {
-  return isObstacle(e) || (e.kind === ammo.douses && !e.spent);
+  return isShootable(e) || (e.kind === ammo.douses && !e.spent);
 }
-// Снаряд сам немного доводится: ребёнку достаточно ехать по той же полосе
+// Снаряд сам находит ближайшую цель, целиться ребёнку не нужно: по своей полосе издалека,
+// на соседних вблизи, в том числе когда машина едет совсем рядом, сбоку от носа
 function laneTarget(c, ammo) {
-  let best = null;
+  let best = null,
+    bestCost = Infinity;
   for (const e of Game.entities) {
-    const ahead = c.y - e.y;
-    if (ahead > 40 && ahead < 1700 && Math.abs(e.x - c.x) < 95 && shotHits(e, ammo) && (!best || e.y > best.y)) best = e;
+    if (!shotHits(e, ammo)) continue;
+    const ahead = c.y - e.y,
+      dx = Math.abs(e.x - c.x),
+      inLane = dx < 95;
+    // Конус на чужой полосе не должен отвлекать снаряд от машины
+    if (!inLane && e.kind === "cone") continue;
+    if (ahead < -70 || ahead > (inLane ? 1700 : dx < 215 ? 800 : 450)) continue;
+    // На вертикальном экране соседняя полоса вблизи не помещается в кадр: туда не стреляем
+    if (!inLane && window.driveView?.onScreen && !driveView.onScreen(Game, e.x, e.y)) continue;
+    const cost = Math.max(ahead, 0) + dx * 2.2;
+    if (cost < bestCost) {
+      best = e;
+      bestCost = cost;
+    }
   }
   return best;
 }
@@ -822,20 +840,26 @@ function shotBurst(x, y, ammo, n = 24) {
 // Попадание: машина взрывается и разлетается на куски, конус улетает, на дороге остаётся звезда
 function blowUp(e, ammo) {
   if (e.dead) return;
-  Game.entities.push({
-    kind: "star",
-    x: e.x,
-    y: e.y,
-    size: 17,
-    phase: Math.random() * TAU,
-  });
+  // Звезду оставляет только то, что стояло на своей полосе. Друзья и полиция возвращаются снова и снова,
+  // а снаряд теперь достаёт и соседние полосы: лишние звёзды сделали бы заезд короче
+  const returns = e.kind === "rival" || e.kind === "patrolActor";
+  if (!returns && Math.abs(e.x - Game.car.x) < 95)
+    Game.entities.push({
+      kind: "star",
+      x: e.x,
+      y: e.y,
+      size: 17,
+      phase: Math.random() * TAU,
+    });
   if (e.kind === "cone") {
     launchCone(e);
     shotBurst(e.x, e.y, ammo, 14);
     return;
   }
   e.dead = true;
-  Game.blasts.push({ x: e.x, y: e.y, type: e.type, pace: e.pace ?? 0.72 });
+  if (e.kind === "rival") e.back = RIVAL_BACK;
+  // Друг и полиция едут вровень с игроком: обломки летят дальше с их скоростью
+  Game.blasts.push({ x: e.x, y: e.y, type: e.type, pace: e.pace ?? (returns ? 0 : 0.72) });
   // Цвета снаряда этой машины разлетаются вместе с обломками
   for (let i = 0; i < 18; i++) {
     const a = Math.random() * TAU,
@@ -858,6 +882,8 @@ function blowUp(e, ammo) {
   const ahead = Math.max(0, Game.car.y - e.y);
   Game.shake = Math.max(Game.shake, clamp(1 - ahead / 1500, 0.24, 0.95));
   Sound.boom(clamp(1.15 - ahead / 2200, 0.38, 1));
+  // Подбитая полиция не конец погони: за стрелком сразу выезжает новая машина
+  if (e === Game.chase?.car) stopPoliceChase();
   callPolice();
 }
 function holdFire(source) {
@@ -893,7 +919,7 @@ function activatePower() {
     // Вплотную залп накрывает сразу, остальные преграды находят самонаводящиеся шары:
     // сначала ближние и на любой полосе, а не только дальние прямо по курсу
     const ahead = Game.entities
-      .filter((e) => isObstacle(e) && e.y < c.y + 60 && c.y - e.y < 2300)
+      .filter((e) => isShootable(e) && e.y < c.y + 60 && c.y - e.y < 2300)
       .sort((a, b) => b.y - a.y);
     for (const e of ahead)
       if (c.y - e.y < 380 && Math.abs(e.x - c.x) < 170) {
@@ -965,6 +991,23 @@ function giveWay(e) {
     index = LANES.indexOf(nearestLane(e.x)),
     dir = index === 0 ? 1 : index === 2 ? -1 : e.x >= c.x ? 1 : -1;
   e.tx = LANES[index + dir];
+}
+// Подбитый друг через несколько секунд обгоняет игрока: на полосе звёзд и на финише он остаётся
+const RIVAL_BACK = 5;
+function returnRivals(dt) {
+  const c = Game.car;
+  for (const r of Game.rivals) {
+    if (!r.dead) continue;
+    r.back -= dt;
+    if (r.back > 0) continue;
+    const free = [0, 1, 2].filter((l) => Math.abs(LANES[l] - c.x) > 90);
+    r.lane = free[Math.floor(Math.random() * free.length)] ?? 0;
+    r.x = LANES[r.lane];
+    r.y = c.y + 300;
+    r.think = 1.5;
+    r.dead = false;
+    Game.entities.push(r);
+  }
 }
 // Три друга едут рядом и тоже будто собирают звёзды, но первым приходит игрок
 function addRivals() {
@@ -1738,11 +1781,18 @@ function update(dt) {
     }
   }
   for (const p of Game.shots) {
+    const aim = p.target && !p.target.dead && p.target.kind !== "flyer" ? p.target : null,
+      left = aim ? p.y - aim.y : 1;
     p.x += p.vx * dt;
-    p.y += p.vy * dt;
+    // Цель уже сбоку от носа: снаряд поворачивает к ней, а не летит вперёд мимо
+    if (left > 0) p.y += p.vy * dt;
     p.life -= dt;
-    if (p.target && !p.target.dead && p.target.kind !== "flyer")
-      p.x = lerp(p.x, p.target.x, 1 - Math.exp(-dt * 16));
+    if (aim) {
+      // Вбок ровно столько, чтобы встретиться с целью, когда снаряд до неё долетит
+      const k = Math.min(1, dt / Math.max(0.07, Math.abs(left) / -p.vy));
+      p.x += (aim.x - p.x) * k;
+      if (left <= 0) p.y += (aim.y - p.y) * k;
+    }
     // Хвост редкий и мелкий: при очереди он не должен закрывать машину и дорогу
     p.trail = (p.trail || 0) + dt;
     if (p.trail > 0.035) {
@@ -1765,14 +1815,14 @@ function update(dt) {
         shotHits(e, p.ammo) && Math.abs(e.x - p.x) < 62 && Math.abs(e.y - p.y) < 110,
     );
     if (hit && p.life > 0) {
-      if (!isObstacle(hit)) shootWorkTarget(hit);
+      if (!isShootable(hit)) shootWorkTarget(hit);
       else {
         shotBurst(hit.x, hit.y, p.ammo);
         blowUp(hit, p.ammo);
         // Большой снаряд задевает и то, что стоит рядом
         if (p.ammo.blast) {
           addRing(hit.x, hit.y, "#fff4b0", 190);
-          for (const e of Game.entities.filter(isObstacle))
+          for (const e of Game.entities.filter(isShootable))
             if (Math.abs(e.x - hit.x) < 170 && Math.abs(e.y - hit.y) < 260) {
               shotBurst(e.x, e.y, p.ammo, 12);
               blowUp(e, p.ammo);
@@ -1783,6 +1833,7 @@ function update(dt) {
     }
   }
   updatePoliceChase(dt);
+  returnRivals(dt);
   Game.entities = Game.entities.filter((e) => !e.dead && (e.kind === "patrolActor" || e.y < Game.h + 200));
   Game.shots = Game.shots.filter((p) => p.life > 0 && p.y > c.y - 2200);
   for (const p of Game.particles) {
