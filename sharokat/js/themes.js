@@ -1,6 +1,6 @@
 // Темы трасс: у каждого уровня своя — небо, дорожка, бортики, острова, облака, море внизу.
 // Уровень n берёт тему themes[n % themes.length].
-import * as T from "../vendor/three/three.module.min.js?v=d712f43b";
+import * as T from "../vendor/three/three.module.min.js?v=d805dd80";
 
 function tile(draw) {
   const c = document.createElement("canvas");
@@ -29,6 +29,8 @@ const hsl = (h, s, l) => new T.Color().setHSL(((h % 1) + 1) % 1, s, l);
 export const themes = [
   {
     id: "rainbow",
+    trim: () => new T.Color("#ffffff"),
+    water: { deep: "#1677d6", shallow: "#43c8f0", sky: "#cfeeff", sun: "#fff3c4" },
     name: "Радуга",
     ui: "linear-gradient(135deg,#ff4f7b,#ffc93c,#2fd0a6,#4aa3ff)",
     sky: [[-1, "#ffc6e0"], [-0.08, "#ffd6ea"], [0.03, "#fff0f6"], [0.16, "#9fd8ff"], [0.45, "#4aa8ff"], [1, "#2a6fe0"]],
@@ -46,6 +48,8 @@ export const themes = [
   },
   {
     id: "sunset",
+    trim: () => new T.Color("#fff1e6"),
+    water: { deep: "#3b2f86", shallow: "#ff8a7a", sky: "#ffc3a8", sun: "#ffd08a" },
     name: "Закат",
     ui: "linear-gradient(135deg,#ffb36b,#ff6f91,#8f5bd8)",
     sky: [[-1, "#ffb36b"], [-0.08, "#ff9a7a"], [0.03, "#ffd1a1"], [0.16, "#ff8fb1"], [0.45, "#a36bd8"], [1, "#4b3aa8"]],
@@ -63,6 +67,8 @@ export const themes = [
   },
   {
     id: "ice",
+    trim: () => new T.Color("#ffffff"),
+    water: { deep: "#1f6aa8", shallow: "#9fe0ff", sky: "#e2f4ff", sun: "#ffffff" },
     name: "Лёд",
     ui: "linear-gradient(135deg,#e6f6ff,#8fd3ff,#4a9ae0)",
     sky: [[-1, "#e6f6ff"], [-0.08, "#d8f0ff"], [0.03, "#f4fbff"], [0.16, "#bfe7ff"], [0.45, "#7cc6f5"], [1, "#4a9ae0"]],
@@ -103,6 +109,8 @@ export const themes = [
   },
   {
     id: "caramel",
+    trim: () => new T.Color("#ff3d63"),
+    water: { deep: "#e0569c", shallow: "#ffb3d6", sky: "#ffe0f0", sun: "#ffffff" },
     name: "Карамель",
     ui: "repeating-linear-gradient(135deg,#ff4f6e 0 8px,#fff 8px 16px)",
     sky: [[-1, "#ffd0e8"], [-0.08, "#ffe0f0"], [0.03, "#fff0f8"], [0.16, "#ffc2e2"], [0.45, "#ff9ed2"], [1, "#e06ab8"]],
@@ -138,6 +146,7 @@ export const themes = [
   },
   {
     id: "neon",
+    trim: () => new T.Color("#3a2a7a"),
     name: "Ночной неон",
     ui: "linear-gradient(135deg,#120a2e,#ff2fd6,#2ff3ff)",
     sky: [[-1, "#120a2e"], [-0.08, "#1e1452"], [0.03, "#3a2380"], [0.16, "#22175c"], [0.45, "#120c3a"], [1, "#070420"]],
@@ -174,6 +183,8 @@ export const themes = [
   },
   {
     id: "lava",
+    trim: () => new T.Color("#3a2420"),
+    water: { deep: "#d42a00", shallow: "#ffb000", sky: "#ff7a2a", sun: "#ffe08a", glow: 1.4 },
     name: "Вулкан",
     ui: "linear-gradient(135deg,#2a0a14,#ff6a2a,#ffd23f)",
     sky: [[-1, "#ff5a1f"], [-0.08, "#ff7a2a"], [0.03, "#ff9a4a"], [0.16, "#b83a2a"], [0.45, "#6a1c24"], [1, "#2a0a14"]],
@@ -220,6 +231,8 @@ export const themes = [
   },
   {
     id: "gold",
+    trim: () => new T.Color("#ffffff"),
+    water: { deep: "#1a5fd0", shallow: "#5fc8ff", sky: "#e8eeff", sun: "#fff0c8" },
     name: "Золото",
     ui: "linear-gradient(135deg,#fff3b0,#e8b73a,#4d7ff0)",
     sky: [[-1, "#ffe9b0"], [-0.08, "#fff1cc"], [0.03, "#fff6dc"], [0.16, "#9fc4ff"], [0.45, "#4d7ff0"], [1, "#2a4ac0"]],
@@ -237,6 +250,7 @@ export const themes = [
   },
   {
     id: "space",
+    trim: () => new T.Color("#2a2060"),
     name: "Космос",
     ui: "linear-gradient(135deg,#05030f,#5b35c9,#2ff3ff)",
     sky: [[-1, "#05030f"], [-0.08, "#0f0a2a"], [0.03, "#2a1660"], [0.16, "#140c38"], [0.45, "#0a0620"], [1, "#020108"]],
@@ -271,6 +285,82 @@ export const themes = [
     crowns: ["#2ff3ff", "#b47cff", "#ff8ff0", "#7cffd1"],
     glowCrowns: true,
     decor: "planets",
+  },
+  {
+    id: "forest",
+    name: "Лес",
+    ui: "linear-gradient(135deg,#2f9a5f,#8ad66b,#c98a4a)",
+    sky: [[-1, "#cfeee0"], [-0.08, "#d8f4e6"], [0.03, "#f2fff6"], [0.16, "#a6e3ff"], [0.45, "#5bb8f5"], [1, "#2f7fe0"]],
+    fog: "#d6f0ea",
+    sea: "#2a9a8a",
+    cloud: "#ffffff",
+    light: [1.2, 2.2, "#fff2d0"],
+    trim: () => new T.Color("#7a4f2c"),
+    water: { deep: "#11707a", shallow: "#3fcbb0", sky: "#d6f0ea", sun: "#fff2c4" },
+    road: {
+      // Деревянные мостки: доски поперёк, щели между ними, сучки
+      tex: tile((ctx) => {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, 64, 128);
+        for (let y = 0; y < 128; y += 16) {
+          ctx.fillStyle = y % 32 ? "#f2e6d6" : "#ffffff";
+          ctx.fillRect(0, y + 1, 64, 13);
+          ctx.fillStyle = "#6b4a2b";
+          ctx.fillRect(0, y + 14, 64, 2);
+          ctx.fillStyle = "#c9a57a";
+          ctx.fillRect(((y * 7) % 40) + 8, y + 6, 4, 3);
+        }
+        ctx.fillStyle = "#8a6a4a";
+        ctx.fillRect(6, 0, 2, 128);
+        ctx.fillRect(56, 0, 2, 128);
+      }),
+      color: (h) => hsl(0.07 + (h % 0.1) * 0.2, 0.55, 0.58),
+      roughness: 0.7,
+      clearcoat: 0.15,
+    },
+    rail: (h, i) => hsl(0.13, 1, 0.6 + (i % 2) * 0.15),
+    leg: () => new T.Color("#8a5a33"),
+    rock: (r) => hsl(0.08, 0.2, 0.5 + r * 0.1),
+    grass: (r) => hsl(0.3 + r * 0.06, 0.65, 0.45),
+    crowns: ["#2f9a4f", "#3fb85a", "#1f7a42", "#5ccf73"],
+    pines: true,
+    decor: "none",
+  },
+  {
+    id: "city",
+    name: "Город будущего",
+    ui: "linear-gradient(135deg,#1a1a4a,#ff6fb0,#3fd6ff)",
+    sky: [[-1, "#ff9a6b"], [-0.08, "#ff8fa8"], [0.03, "#ffb8a0"], [0.16, "#c07ad8"], [0.45, "#5a3aa8"], [1, "#1a1450"]],
+    fog: "#c08ac8",
+    sea: "#2a2a6a",
+    cloud: "#e8c8f0",
+    light: [1.0, 1.8, "#ffc8a8"],
+    trim: () => new T.Color("#e8ecff"),
+    water: { deep: "#1a1f5a", shallow: "#5a6ad8", sky: "#ffb8c8", sun: "#ffd0a0" },
+    road: {
+      tex: tile(stripes("#ffffff", "#e6eaf4")),
+      glow: tile((ctx) => {
+        ctx.fillStyle = "#000000";
+        ctx.fillRect(0, 0, 64, 128);
+        ctx.fillStyle = "#3fd6ff";
+        ctx.fillRect(0, 0, 3, 128);
+        ctx.fillRect(61, 0, 3, 128);
+        ctx.fillStyle = "#ff6fb0";
+        for (let y = 10; y < 128; y += 32) ctx.fillRect(30, y, 4, 14);
+      }),
+      color: (h) => hsl(0.66, 0.15, 0.72 + (h % 0.2) * 0.3),
+      roughness: 0.15,
+      metalness: 0.6,
+      clearcoat: 1,
+    },
+    rail: (h, i) => hsl(i % 2 ? 0.92 : 0.52, 1, 0.62),
+    railGlow: 1.1,
+    leg: () => new T.Color("#c8d0e8"),
+    rock: () => hsl(0.68, 0.2, 0.4),
+    grass: () => hsl(0.5, 0.5, 0.45),
+    crowns: ["#3fd6ff", "#ff6fb0", "#b47cff", "#7cffd1"],
+    glowCrowns: true,
+    decor: "city",
   },
 ];
 export const themeFor = (level) => themes[level % themes.length];

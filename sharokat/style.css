@@ -577,3 +577,9 @@ h1 em {
 .ball-neon {
   background: repeating-linear-gradient(90deg, #0d0a2a 0 6px, #2ff3ff 6px 8px), #0d0a2a;
 }
+/* 20 уровней: на широком экране 5 рядов по 4 смотрелись бы длинно — 7 в ряд */
+@media (min-width: 640px) {
+  .levels {
+    grid-template-columns: repeat(7, 64px);
+  }
+}

@@ -1,6 +1,6 @@
 // Трасса «Шароката»: путь строится «черепашкой» из кусков (холм, поворот, петля, прыжок…),
 // каждые полметра — кадр (точка, вперёд, вверх, вправо). По кадрам строятся меш и физика шара.
-import * as T from "../vendor/three/three.module.min.js?v=d712f43b";
+import * as T from "../vendor/three/three.module.min.js?v=d805dd80";
 
 export const DS = 0.5;
 export const HALF = 2.2; // половина ширины дорожки
@@ -28,6 +28,11 @@ const unlock = {
   tube: 4,
   sweepers: 5,
   corkscrew: 6,
+  bounce: 1,
+  holes: 2,
+  split: 3,
+  pushers: 4,
+  pit: 5,
 };
 // План уровня: последовательность кусков, каждые несколько кусков — чекпойнт
 export function plan(level) {
@@ -62,6 +67,8 @@ export class Track {
     this.rings = [];
     this.gates = [];
     this.tubes = [];
+    this.pads = []; // батуты
+    this.starts = [0]; // начала кусков: сюда шар возвращается, если упал
     // Черепашка: курс, наклон вверх-вниз, крен, сдвиг вбок для петель
     this.pos = new T.Vector3(0, 30, 0);
     this.h = 0;
@@ -69,7 +76,10 @@ export class Track {
     this.b = 0;
     this.s = 0;
     this.hue = (level * 0.13) % 1;
-    for (const seg of plan(level)) this[seg.type](seg);
+    for (const seg of plan(level)) {
+      this.starts.push(this.s);
+      this[seg.type](seg);
+    }
     this.length = this.s;
     this.fillGems();
   }
@@ -92,8 +102,13 @@ export class Track {
       lane = 0;
     for (let s = 12; s < this.finishAt - 4; s += 2) {
       const a = this.samples[Math.round(s / DS)];
+      // У дыр, развилок и батутов свои кристаллы
       const blocked =
-        a.air || a.kind === "loop" || a.kind === "ramp" || near(s, 4) || this.obstacles.some((o) => Math.abs(o.s - s) < 2.5);
+        a.air ||
+        a.gaps ||
+        ["loop", "ramp", "holes", "split", "bounce", "pit"].includes(a.kind) ||
+        near(s, 4) ||
+        this.obstacles.some((o) => Math.abs(o.s - s) < 2.5);
       if (blocked) {
         run = 0;
         continue;
@@ -137,6 +152,8 @@ export class Track {
       tube: !!on.tube,
       hue: this.hue,
       kind: on.kind || "road",
+      // Вырезанные участки поперёк дорожки: [[u0, u1], …] — там дыра
+      gaps: on.gaps || null,
     });
     this.pos.addScaledVector(fwd, DS);
     this.s += DS;
@@ -369,6 +386,86 @@ export class Track {
   hammers(seg) {
     this.zone("hammer", seg);
   }
+  pushers(seg) {
+    this.zone("pusher", seg);
+  }
+  // Дыры в плитке: дорожка из трёх рядов, то в одном, то в другом ряду нет плиток.
+  // Кристаллы ведут по целому ряду.
+  holes(seg) {
+    this.nextHue();
+    this.settle(6);
+    const lane = (2 * HALF) / 3,
+      BLOCK = 9,
+      blocks = 6;
+    const s0 = this.s;
+    const r = rng(Math.floor(seg.rand * 1e6));
+    // Целый ряд в каждом блоке; следующий — только соседний, чтобы ребёнок успевал перерулить
+    // Первый блок — средний ряд: после возврата шар стоит посередине
+    const pattern = [0];
+    for (let k = 1; k < blocks; k++) {
+      const prev = pattern[k - 1];
+      pattern.push(prev === 0 ? (r() < 0.5 ? -1 : 1) : 0);
+    }
+    const n = Math.round((4 + blocks * BLOCK + 4) / DS);
+    for (let i = 0; i < n; i++) {
+      const at = i * DS,
+        block = Math.floor((at - 4) / BLOCK),
+        inBlock = (at - 4) % BLOCK;
+      let gaps = null;
+      if (block >= 0 && block < blocks && inBlock > 1.5 && inBlock < 5.5)
+        gaps = [-1, 0, 1].filter((x) => x !== pattern[block]).map((x) => [x * lane - lane / 2, x * lane + lane / 2]);
+      this.step({ gaps, kind: "holes" });
+    }
+    // Кристаллы по целому ряду и чуть дальше конца дыры (дыра до 5,5 м, кристаллы до 6,2 м)
+    pattern.forEach((safeRow, k) => this.gemLine(s0 + 4 + k * BLOCK + 0.6, s0 + 4 + k * BLOCK + 6.5, safeRow * lane, 0, 1.4));
+  }
+  // Развилка: посередине провал, ехать можно по левой или правой дорожке
+  split(seg) {
+    this.nextHue();
+    this.settle(6);
+    const s0 = this.s,
+      n = 100;
+    for (let i = 0; i < n; i++) {
+      const t = i / n,
+        open = Math.sin(Math.min(1, Math.max(0, (t - 0.08) / 0.84)) * pie);
+      const w = open * 1.2;
+      this.h += Math.sin(t * 2 * pie) * 0.003 * seg.side;
+      this.step({ gaps: w > 0.15 ? [[-w, w]] : null, half: HALF + open * 0.6, kind: "split" });
+    }
+    // Кристаллы заранее уводят шар в сторону, ещё до того, как посередине откроется провал
+    const lead = (s) => Math.min(1, Math.max(0, (s - s0 - 1) / 8));
+    this.gemLine(s0 + 1, s0 + 44, (s) => -2.0 * seg.side * lead(s), 0, 1.5);
+    this.gemLine(s0 + 14, s0 + 40, 2.0 * seg.side, 0.6, 3.2);
+  }
+  // Батут: шар подлетает высоко, в воздухе дуга кристаллов
+  bounce() {
+    this.nextHue();
+    this.settle(6);
+    for (let i = 0; i < 10; i++) this.step();
+    this.pads.push({ s: this.s, power: 13 });
+    const s0 = this.s;
+    for (let i = 0; i < 70; i++) this.step({ kind: "bounce" });
+    this.arcGems(s0, 13);
+  }
+  // Провал во всю ширину: перед ним батут, шар перелетает
+  pit() {
+    this.nextHue();
+    this.settle(6);
+    for (let i = 0; i < 10; i++) this.step();
+    this.pads.push({ s: this.s, power: 14.5 });
+    const s0 = this.s;
+    for (let i = 0; i < 8; i++) this.step({ kind: "bounce" });
+    for (let i = 0; i < 22; i++) this.step({ gaps: [[-9, 9]], kind: "pit" });
+    for (let i = 0; i < 40; i++) this.step({ kind: "bounce" });
+    this.arcGems(s0, 14.5);
+  }
+  // Дуга кристаллов над батутом: высота как у полёта шара с крейсерской скоростью уровня
+  arcGems(s0, power) {
+    const v = Math.min(15 + this.level * 0.5, 21),
+      g = 26;
+    const flight = (2 * power) / g;
+    for (let t = 0.12; t < flight - 0.08; t += 0.09) this.gems.push({ s: s0 + v * t, u: 0, h: Math.max(0, power * t - (g / 2) * t * t) });
+  }
   sweepers(seg) {
     this.zone("sweeper", seg);
   }
@@ -395,6 +492,7 @@ export class Track {
     out.half = a.half + (b.half - a.half) * t;
     out.tube = a.tube;
     out.kind = a.kind;
+    out.gaps = a.gaps;
     out.sample = a;
     return out;
   }
@@ -422,60 +520,122 @@ const stripe = (() => {
   t.anisotropy = 8;
   return t;
 })();
-export function trackMesh(track, theme) {
-  const pos = [],
-    col = [],
-    uv = [],
-    idx = [];
-  const color = new T.Color();
-  const S = track.samples;
-  // Точки сечения: [вправо, вверх, u-текстуры, тёмный ли низ]
-  const profile = (half) => [
-    [-half - 0.2, -0.45, 0, 1],
-    [-half - 0.2, 0.18, 0, 0.6],
-    [-half, 0.02, 0.02, 0],
-    [half, 0.02, 0.98, 0],
-    [half + 0.2, 0.18, 1, 0.6],
-    [half + 0.2, -0.45, 1, 1],
-    [-half - 0.2, -0.45, 0, 1],
-  ];
-  let base = -1;
-  for (let i = 0; i < S.length; i++) {
-    const a = S[i];
-    if (a.air) {
-      base = -1;
-      continue;
-    }
-    const ring = profile(a.half);
-    const start = pos.length / 3;
-    color.copy(theme.road.color(a.hue));
-    for (const [x, y, u, dark] of ring) {
-      const p = a.p.clone().addScaledVector(a.r, x).addScaledVector(a.u, y);
-      pos.push(p.x, p.y, p.z);
-      const c = color.clone().multiplyScalar(1 - dark * 0.45);
-      col.push(c.r, c.g, c.b);
-      uv.push(u, a.s / 6);
-    }
-    if (base >= 0) {
-      const m = ring.length;
-      for (let k = 0; k < m - 1; k++) {
-        const a0 = base + k,
-          a1 = base + k + 1,
-          b0 = start + k,
-          b1 = start + k + 1;
-        idx.push(a0, b0, a1, a1, b0, b1);
+// Дорожка из «полос»: обычная — одна полоса во всю ширину, у дыр и развилок — несколько.
+// Верх — с узором темы, бока, бортики и низ — отдельная глянцевая сетка цвета отделки.
+function pieces(a) {
+  let list = [[-a.half, a.half]];
+  for (const [g0, g1] of a.gaps || []) {
+    const next = [];
+    for (const [u0, u1] of list) {
+      if (g1 <= u0 || g0 >= u1) next.push([u0, u1]);
+      else {
+        if (g0 > u0) next.push([u0, g0]);
+        if (g1 < u1) next.push([g1, u1]);
       }
     }
-    base = start;
+    list = next;
   }
-  const geo = new T.BufferGeometry();
-  geo.setAttribute("position", new T.Float32BufferAttribute(pos, 3));
-  geo.setAttribute("color", new T.Float32BufferAttribute(col, 3));
-  geo.setAttribute("uv", new T.Float32BufferAttribute(uv, 2));
-  geo.setIndex(idx);
-  geo.computeVertexNormals();
-  const mesh = new T.Mesh(
-    geo,
+  // Край с бортиком — только внешний и только там, где бортики есть
+  return list.map(([u0, u1]) => ({ u0, u1, lipL: a.rails && u0 <= -a.half + 1e-6, lipR: a.rails && u1 >= a.half - 1e-6 }));
+}
+export function trackMesh(track, theme) {
+  const top = { pos: [], col: [], uv: [], idx: [] },
+    body = { pos: [], col: [], uv: [], idx: [] };
+  const S = track.samples,
+    color = new T.Color(),
+    trim = new T.Color(),
+    tmp = new T.Vector3();
+  const LIP = 0.2,
+    LIPH = 0.2,
+    BOT = -0.5;
+  const put = (g, a, x, y, c, u = 0) => {
+    tmp.copy(a.p).addScaledVector(a.r, x).addScaledVector(a.u, y);
+    g.pos.push(tmp.x, tmp.y, tmp.z);
+    g.col.push(c.r, c.g, c.b);
+    g.uv.push(u, a.s / 6);
+    return g.pos.length / 3 - 1;
+  };
+  // Грани сечения полосы: [x0, y0, x1, y1, оттенок]
+  const faces = (pc) => {
+    const L = pc.lipL ? LIP : 0,
+      Rr = pc.lipR ? LIP : 0,
+      hl = pc.lipL ? LIPH : 0.02,
+      hr = pc.lipR ? LIPH : 0.02;
+    const f = [[pc.u0 - L, BOT, pc.u0 - L, hl, "wall"]];
+    if (pc.lipL) f.push([pc.u0 - LIP, LIPH, pc.u0, 0.02, "lip"]);
+    if (pc.lipR) f.push([pc.u1, 0.02, pc.u1 + LIP, LIPH, "lip"]);
+    f.push([pc.u1 + Rr, hr, pc.u1 + Rr, BOT, "wall"], [pc.u1 + Rr, BOT, pc.u0 - L, BOT, "bottom"]);
+    return f;
+  };
+  const shade = (kind, road) => (kind === "lip" ? trim : kind === "wall" ? trim.clone().multiplyScalar(0.82) : road.clone().multiplyScalar(0.5));
+  // Торец полосы на краю дыры: многоугольник сечения веером
+  const cap = (a, pc, road) => {
+    const L = pc.lipL ? LIP : 0,
+      Rr = pc.lipR ? LIP : 0;
+    const ring = [[pc.u0 - L, BOT], [pc.u0 - L, pc.lipL ? LIPH : 0.02]];
+    if (pc.lipL) ring.push([pc.u0, 0.02]);
+    if (pc.lipR) ring.push([pc.u1, 0.02]);
+    ring.push([pc.u1 + Rr, pc.lipR ? LIPH : 0.02], [pc.u1 + Rr, BOT]);
+    const c = trim.clone().multiplyScalar(0.9);
+    const mid = put(body, a, (pc.u0 + pc.u1) / 2, -0.15, c);
+    const ids = ring.map(([x, y]) => put(body, a, x, y, c));
+    for (let k = 0; k < ids.length; k++) body.idx.push(mid, ids[k], ids[(k + 1) % ids.length]);
+  };
+  let prev = null; // {a, list, sig}
+  for (let i = 0; i <= S.length; i++) {
+    const a = S[i];
+    const list = a && !a.air ? pieces(a) : null;
+    const sig = list ? list.map((pc) => `${pc.lipL}${pc.lipR}`).join("|") + "#" + list.length : null;
+    const road = a ? theme.road.color(a.hue) : null;
+    // Конец прогона: закрыть торцы прошлой полосы
+    if (prev && sig !== prev.sig) for (const pc of prev.list) cap(prev.a, pc, prev.road);
+    if (!list) {
+      prev = null;
+      continue;
+    }
+    trim.copy(theme.trim ? theme.trim(a.hue) : new T.Color("#ffffff"));
+    if (prev && sig === prev.sig) {
+      list.forEach((pc, j) => {
+        const q = prev.list[j];
+        // Верх
+        color.copy(road);
+        const u = (x) => (x + a.half) / (2 * a.half);
+        const t0 = put(top, prev.a, q.u0, 0.02, prev.road, (q.u0 + prev.a.half) / (2 * prev.a.half)),
+          t1 = put(top, prev.a, q.u1, 0.02, prev.road, (q.u1 + prev.a.half) / (2 * prev.a.half)),
+          t2 = put(top, a, pc.u0, 0.02, color, u(pc.u0)),
+          t3 = put(top, a, pc.u1, 0.02, color, u(pc.u1));
+        top.idx.push(t0, t2, t1, t1, t2, t3);
+        // Бока, бортики, низ
+        const fp = faces(q),
+          fa = faces(pc);
+        fa.forEach(([x0, y0, x1, y1, kind], k) => {
+          const [px0, py0, px1, py1] = fp[k];
+          const cp = shade(kind, prev.road),
+            ca = shade(kind, road);
+          const b0 = put(body, prev.a, px0, py0, cp),
+            b1 = put(body, prev.a, px1, py1, cp),
+            b2 = put(body, a, x0, y0, ca),
+            b3 = put(body, a, x1, y1, ca);
+          body.idx.push(b0, b2, b1, b1, b2, b3);
+        });
+      });
+    } else {
+      // Начало прогона: торцы
+      for (const pc of list) cap(a, pc, road);
+    }
+    prev = { a, list, sig, road: road.clone() };
+  }
+  const make = (g) => {
+    const geo = new T.BufferGeometry();
+    geo.setAttribute("position", new T.Float32BufferAttribute(g.pos, 3));
+    geo.setAttribute("color", new T.Float32BufferAttribute(g.col, 3));
+    geo.setAttribute("uv", new T.Float32BufferAttribute(g.uv, 2));
+    geo.setIndex(g.idx);
+    geo.computeVertexNormals();
+    return geo;
+  };
+  const surface = new T.Mesh(
+    make(top),
     new T.MeshPhysicalMaterial({
       map: theme.road.tex || stripe,
       vertexColors: true,
@@ -486,12 +646,18 @@ export function trackMesh(track, theme) {
       // Светящиеся узоры у ночных тем: края, пунктир, трещины лавы
       emissive: theme.road.glow ? 0xffffff : 0x000000,
       emissiveMap: theme.road.glow || null,
-      emissiveIntensity: theme.road.glow ? 1 : 0,
+      emissiveIntensity: theme.road.glow ? 1.8 : 0,
       side: T.DoubleSide,
     }),
   );
-  mesh.receiveShadow = true;
-  return mesh;
+  const sides = new T.Mesh(
+    make(body),
+    new T.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.28, clearcoat: 1, clearcoatRoughness: 0.15, side: T.DoubleSide }),
+  );
+  surface.receiveShadow = sides.receiveShadow = true;
+  const group = new T.Group();
+  group.add(surface, sides);
+  return group;
 }
 // Бортики: цепочка светящихся бусин вдоль краёв, где есть бортик
 export function railLights(track, theme) {
@@ -503,8 +669,9 @@ export function railLights(track, theme) {
   const mesh = new T.InstancedMesh(
     new T.SphereGeometry(0.14, 10, 8),
     // Ночью бусины без освещения: цвет горит в полную силу, как неон
+    // Множитель больше 1 — бусины ярче порога свечения и сияют
     theme.railGlow
-      ? new T.MeshBasicMaterial({ color: 0xffffff })
+      ? new T.MeshBasicMaterial({ color: new T.Color(2.2, 2.2, 2.2) })
       : new T.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.25, roughness: 0.3 }),
     spots.length,
   );

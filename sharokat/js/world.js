@@ -1,6 +1,6 @@
 // Всё, что видно вокруг шара: небо, острова, облака, арки, препятствия, кристаллы, шар и эффекты
-import * as T from "../vendor/three/three.module.min.js?v=d712f43b";
-import { HALF, rng } from "./track.js?v=d712f43b";
+import * as T from "../vendor/three/three.module.min.js?v=d805dd80";
+import { HALF, rng } from "./track.js?v=d805dd80";
 
 const pie = Math.PI;
 export const R = 0.6; // радиус шара
@@ -201,11 +201,12 @@ export function supports(scene, track, theme) {
   const legs = [];
   let low = Infinity;
   for (const a of track.samples) low = Math.min(low, a.p.y);
-  const floor = low - 34;
+  // Над водой трасса ниже, чтобы волны и блики было видно
+  const floor = low - (theme.water ? 20 : 34);
   for (let i = 0; i < track.samples.length; i += 14) {
     const a = track.samples[i];
     // Опоры только под дорожкой, которая лежит «нормально» (не в петле, не в трубе, не в прыжке)
-    if (a.air || a.u.y < 0.8 || a.kind === "loop") continue;
+    if (a.air || a.gaps || a.u.y < 0.8 || a.kind === "loop") continue;
     for (const side of [-1, 1]) legs.push([a.p.clone().addScaledVector(a.r, side * (a.half * 0.7)).addScaledVector(a.u, -0.4), a.hue]);
   }
   const mesh = new T.InstancedMesh(new T.CylinderGeometry(0.16, 0.24, 1, 8), new T.MeshPhysicalMaterial({ roughness: 0.3, clearcoat: 0.8 }), legs.length);
@@ -220,17 +221,23 @@ export function supports(scene, track, theme) {
   });
   scene.add(mesh);
   const c = track.samples[Math.floor(track.samples.length / 2)].p;
-  const sea = new T.Mesh(new T.CircleGeometry(900, 48), new T.MeshBasicMaterial({ color: theme.sea }));
-  sea.rotation.x = -Math.PI / 2;
-  sea.position.set(c.x, floor + 2, c.z);
-  scene.add(sea);
+  let water = null;
+  if (theme.water) water = ocean(scene, c, floor + 2, theme);
+  else {
+    const sea = new T.Mesh(new T.CircleGeometry(900, 48), new T.MeshBasicMaterial({ color: theme.sea }));
+    sea.rotation.x = -Math.PI / 2;
+    sea.position.set(c.x, floor + 2, c.z);
+    scene.add(sea);
+  }
+  if (theme.decor === "city") towers(scene, track, floor + 2);
   const rand = rng(31 + track.level);
-  const n = 260;
+  // Над водой — редкие клочки тумана, без воды — плотное море облаков
+  const n = theme.water ? 50 : 260;
   const puffs = new T.InstancedMesh(new T.SphereGeometry(1, 12, 8), new T.MeshStandardMaterial({ color: theme.cloud, roughness: 1 }), n);
   for (let i = 0; i < n; i++) {
     const a = track.samples[Math.floor(rand() * track.samples.length)].p;
-    const r = 6 + rand() * 12;
-    m.compose(new T.Vector3(a.x + (rand() - 0.5) * 160, floor + 2 + r * 0.25, a.z + (rand() - 0.5) * 160), q, sc.set(r * 1.4, r * 0.55, r));
+    const r = (theme.water ? 3 : 6) + rand() * (theme.water ? 6 : 12);
+    m.compose(new T.Vector3(a.x + (rand() - 0.5) * 160, floor + 2 + r * (theme.water ? 0.6 : 0.25), a.z + (rand() - 0.5) * 160), q, sc.set(r * 1.4, r * 0.55, r));
     puffs.setMatrixAt(i, m);
   }
   scene.add(puffs);
@@ -243,7 +250,150 @@ export function supports(scene, track, theme) {
     place(ring, fr, 0, R + 0.4, 0);
     scene.add(ring);
   }
-  return floor;
+  return { floor, water };
+}
+
+// ---------- Океан: волны, блики солнца, отражение неба (у вулкана — светящаяся лава) ----------
+function ocean(scene, center, y, theme) {
+  const w = theme.water;
+  const uniforms = T.UniformsUtils.merge([
+    T.UniformsLib.fog,
+    {
+      time: { value: 0 },
+      deep: { value: new T.Color(w.deep) },
+      shallow: { value: new T.Color(w.shallow) },
+      skyTint: { value: new T.Color(w.sky) },
+      sunTint: { value: new T.Color(w.sun) },
+      sunDir: { value: new T.Vector3(-0.45, 0.55, -0.7).normalize() },
+      glow: { value: w.glow || 0 },
+    },
+  ]);
+  const material = new T.ShaderMaterial({
+    uniforms,
+    fog: true,
+    vertexShader: `
+      varying vec3 vWorld;
+      #include <fog_pars_vertex>
+      void main() {
+        vec4 world = modelMatrix * vec4(position, 1.0);
+        vWorld = world.xyz;
+        vec4 mvPosition = viewMatrix * world;
+        gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+      }`,
+    fragmentShader: `
+      uniform float time;
+      uniform vec3 deep, shallow, skyTint, sunTint, sunDir;
+      uniform float glow;
+      varying vec3 vWorld;
+      #include <fog_pars_fragment>
+      // Высота волн — сумма бегущих синусоид в разных направлениях
+      float wave(vec2 p) {
+        float h = 0.0;
+        h += sin(dot(p, vec2(0.12, 0.05)) + time * 1.1) * 0.5;
+        h += sin(dot(p, vec2(-0.07, 0.15)) + time * 1.4) * 0.35;
+        h += sin(dot(p, vec2(0.31, -0.22)) + time * 2.2) * 0.15;
+        h += sin(dot(p, vec2(-0.52, -0.41)) + time * 3.1) * 0.08;
+        h += sin(dot(p, vec2(0.9, 0.7)) + time * 4.0) * 0.04;
+        return h;
+      }
+      void main() {
+        vec2 p = vWorld.xz;
+        float e = 0.6;
+        float h = wave(p);
+        vec3 n = normalize(vec3(wave(p - vec2(e, 0.0)) - wave(p + vec2(e, 0.0)), 2.2, wave(p - vec2(0.0, e)) - wave(p + vec2(0.0, e))));
+        vec3 view = normalize(cameraPosition - vWorld);
+        float fresnel = pow(1.0 - max(dot(n, view), 0.0), 4.0);
+        vec3 col = mix(deep, shallow, smoothstep(-0.8, 0.9, h));
+        col = mix(col, skyTint, fresnel * 0.7);
+        // Солнечные блики и пена на гребнях
+        float spec = pow(max(dot(reflect(-view, n), sunDir), 0.0), 140.0);
+        col += sunTint * spec * 2.2;
+        col += vec3(1.0) * smoothstep(0.78, 1.0, h) * 0.22;
+        col *= 1.0 + glow * (0.6 + 0.4 * sin(time * 1.3 + h * 2.0));
+        gl_FragColor = vec4(col, 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+        #include <fog_fragment>
+      }`,
+  });
+  const mesh = new T.Mesh(new T.PlaneGeometry(2400, 2400), material);
+  mesh.rotation.x = -pie / 2;
+  mesh.position.set(center.x, y, center.z);
+  scene.add(mesh);
+  return { update: (t) => (uniforms.time.value = t) };
+}
+// ---------- Город будущего: башни со светящимися окнами вокруг трассы ----------
+function towers(scene, track, ground) {
+  const windows = canvasTexture(64, 128, (ctx) => {
+    ctx.fillStyle = "#000000";
+    ctx.fillRect(0, 0, 64, 128);
+    for (let y = 4; y < 128; y += 10)
+      for (let x = 4; x < 64; x += 10) {
+        const lit = ((x * 7 + y * 13) % 5) < 3;
+        ctx.fillStyle = lit ? ["#ffe08a", "#3fd6ff", "#ff8fd0"][(x + y) % 3] : "#1a1a33";
+        ctx.fillRect(x, y, 6, 6);
+      }
+  });
+  windows.wrapS = windows.wrapT = T.RepeatWrapping;
+  const rand = rng(97 + track.level);
+  const spots = [];
+  for (let s = 0; s < track.length; s += 9) {
+    const fr = track.at(s);
+    for (const side of [-1, 1]) {
+      if (rand() < 0.35) continue;
+      const p = fr.p.clone().add(new T.Vector3(fr.r.x, 0, fr.r.z).normalize().multiplyScalar(side * (14 + rand() * 50)));
+      if (track.samples.some((a, i) => i % 4 === 0 && Math.hypot(a.p.x - p.x, a.p.z - p.z) < 9)) continue;
+      const top = fr.p.y - 4 + rand() * 30;
+      spots.push({ p, top, w: 4 + rand() * 6, d: 4 + rand() * 6 });
+    }
+  }
+  const look = new T.MeshStandardMaterial({ map: windows, emissiveMap: windows, emissive: 0xffffff, emissiveIntensity: 0.9, roughness: 0.3, metalness: 0.5, color: "#5a5f8a" });
+  const mesh = new T.InstancedMesh(new T.BoxGeometry(1, 1, 1), look, spots.length);
+  const cap = new T.InstancedMesh(new T.BoxGeometry(1, 1, 1), new T.MeshBasicMaterial({ color: "#ff6fb0" }), spots.length);
+  const m = new T.Matrix4(),
+    q = new T.Quaternion(),
+    sc = new T.Vector3();
+  spots.forEach((t, i) => {
+    const h = t.top - ground;
+    m.compose(new T.Vector3(t.p.x, ground + h / 2, t.p.z), q, sc.set(t.w, h, t.d));
+    mesh.setMatrixAt(i, m);
+    // Светящаяся крыша-полоска
+    m.compose(new T.Vector3(t.p.x, t.top + 0.2, t.p.z), q, sc.set(t.w * 1.02, 0.4, t.d * 1.02));
+    cap.setMatrixAt(i, m);
+    cap.setColorAt(i, new T.Color(candy[i % candy.length]));
+  });
+  if (cap.instanceColor) cap.instanceColor.needsUpdate = true;
+  scene.add(mesh, cap);
+}
+
+// ---------- Батуты ----------
+export function trampolines(scene, track) {
+  return track.pads.map((pad) => {
+    const fr = track.at(pad.s),
+      g = new T.Group();
+    place(g, fr);
+    const base = new T.Mesh(new T.BoxGeometry(2 * HALF + 0.2, 0.25, 2.2), glossy("#2a2a44"));
+    base.position.y = 0.1;
+    const top = new T.Mesh(new T.BoxGeometry(2 * HALF - 0.1, 0.12, 1.9), glossy("#ff4f8e", 0.35));
+    top.position.y = 0.3;
+    g.add(base, top);
+    // Стрелки вверх на полотне батута
+    for (const x of [-1.2, 0, 1.2]) {
+      const arrow = new T.Mesh(new T.ConeGeometry(0.28, 0.35, 3), new T.MeshBasicMaterial({ color: "#ffffff" }));
+      arrow.position.set(x, 0.42, 0);
+      arrow.rotation.x = -pie / 2;
+      g.add(arrow);
+    }
+    scene.add(g);
+    pad.bounceAt = -9;
+    pad.update = (t) => {
+      const k = Math.max(0, 1 - (t - pad.bounceAt) / 0.35);
+      top.position.y = 0.3 - Math.sin(k * pie) * 0.18;
+      top.scale.set(1, 1 + k * 1.5, 1);
+    };
+    return pad;
+  });
 }
 
 // ---------- Арки: чекпойнты и финиш ----------
@@ -392,6 +542,26 @@ export function obstacles(scene, track) {
         Math.abs(a) < 0.5 + R && Math.abs(u - block.position.x) < 0.85 + R && y < 1.4
           ? { push: Math.sign(u - block.position.x || 1) * 9, slow: 0.5, hop: 3 }
           : null;
+    } else if (o.kind === "pusher") {
+      // Толкатель выезжает из бортика и отталкивает шар к другому краю
+      const len = 2.2,
+        block = new T.Mesh(new T.BoxGeometry(len, 0.9, 1.1), glossy(c, 0.15)),
+        face = new T.Mesh(new T.BoxGeometry(0.12, 0.7, 0.9), glossy("#ffffff"));
+      block.position.y = 0.45;
+      face.position.set((-o.side * len) / 2, 0, 0);
+      block.add(face);
+      g.add(block);
+      const rest = o.side * (HALF + len / 2 + 0.25);
+      o.update = (t) => {
+        const ph = (t * 0.7 + o.phase) % 1;
+        // Быстро выезжает, медленно уходит обратно
+        const out = ph < 0.15 ? ph / 0.15 : ph < 0.45 ? 1 : Math.max(0, 1 - (ph - 0.45) / 0.4);
+        block.position.x = rest - o.side * out * 2.1;
+      };
+      o.hit = (a, u, y) => {
+        const x = block.position.x;
+        return Math.abs(a) < 0.55 + R && Math.abs(u - x) < len / 2 + R && y < 1.4 ? { push: -o.side * 13, slow: 0.7, hop: 2 } : null;
+      };
     } else {
       // Пружинные бамперы, как в пинболе
       const spots = [
@@ -442,14 +612,14 @@ export function gemField(scene, track) {
   look.onBeforeCompile = (shader) => {
     shader.fragmentShader = shader.fragmentShader.replace(
       "#include <emissivemap_fragment>",
-      "#include <emissivemap_fragment>\n#ifdef USE_COLOR\n totalEmissiveRadiance += vColor * 0.55;\n#endif",
+      "#include <emissivemap_fragment>\n#ifdef USE_COLOR\n totalEmissiveRadiance += vColor * 1.1;\n#endif",
     );
   };
   const n = track.gems.length;
   const mesh = new T.InstancedMesh(geo, look, n);
   const halo = new T.InstancedMesh(
-    new T.SphereGeometry(0.95, 16, 12),
-    new T.MeshBasicMaterial({ transparent: true, opacity: 0.3, blending: T.AdditiveBlending, depthWrite: false }),
+    new T.SphereGeometry(0.75, 16, 12),
+    new T.MeshBasicMaterial({ transparent: true, opacity: 0.14, blending: T.AdditiveBlending, depthWrite: false }),
     n,
   );
   mesh.frustumCulled = halo.frustumCulled = false;
@@ -493,6 +663,7 @@ export function gemField(scene, track) {
         }
         // Крутятся и покачиваются кристаллы впереди шара, ореол мягко дышит
         if (g.s < near - 10 || g.s > near + 160) return;
+        g.shown = true;
         q.setFromAxisAngle(up, t * 2.4 + i);
         at.copy(g.pos).setY(g.pos.y + Math.sin(t * 3 + i) * 0.15);
         m.compose(at, q, sc.setScalar(1));

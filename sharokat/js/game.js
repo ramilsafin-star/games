@@ -1,11 +1,16 @@
 // «Шарокат»: шар катится по радужным горкам в небе. Здесь игровой цикл, физика шара, камера, меню.
-import * as T from "../vendor/three/three.module.min.js?v=d712f43b";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=d712f43b";
-import { Track, trackMesh, railLights, tubeMeshes, HALF } from "./track.js?v=d712f43b";
-import { R, sky, scenery, supports, gates, boostPads, obstacles, gemField, skins, skinMaterial, ballMesh, effects } from "./world.js?v=d712f43b";
-import { themeFor } from "./themes.js?v=d712f43b";
+import * as T from "../vendor/three/three.module.min.js?v=d805dd80";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=d805dd80";
+import { Track, trackMesh, railLights, tubeMeshes, HALF } from "./track.js?v=d805dd80";
+import { R, sky, scenery, supports, gates, boostPads, obstacles, trampolines, gemField, skins, skinMaterial, ballMesh, effects } from "./world.js?v=d805dd80";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=d805dd80";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=d805dd80";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=d805dd80";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=d805dd80";
+import { themeFor } from "./themes.js?v=d805dd80";
 
-const LEVELS = 12;
+// 20 уровней: каждая из 10 тем встречается дважды
+const LEVELS = 20;
 const el = (id) => document.getElementById(id);
 const clamp = T.MathUtils.clamp;
 const KEY = "sharokat-v1";
@@ -85,7 +90,7 @@ function loadLevel(n) {
   sun.color.set(theme.light[2]);
   world.add(trackMesh(track, theme), railLights(track, theme), tubeMeshes(track));
   const view = scenery(world, track, theme);
-  supports(world, track, theme);
+  const base = supports(world, track, theme);
   lvl = {
     n,
     theme,
@@ -93,6 +98,8 @@ function loadLevel(n) {
     view,
     gates: gates(world, track),
     chevrons: boostPads(world, track),
+    water: base.water,
+    pads: trampolines(world, track),
     obstacles: obstacles(world, track),
     gems: gemField(world, track),
     total: track.gems.length,
@@ -125,14 +132,31 @@ function ballPosition() {
   pos.copy(F.p).addScaledVector(F.r, b.u).addScaledVector(F.u, R + b.h);
   ball.position.copy(pos);
 }
-function startFall() {
+// through — шар провалился в дыру и падает прямо вниз, иначе скатился с края вбок
+function startFall(through = false) {
   b.state = "fall";
   b.fallT = 0;
-  vel.copy(F.f).multiplyScalar(b.v).addScaledVector(F.r, Math.sign(b.u) * 5).addScaledVector(F.u, 2);
+  b.fellAt = b.s;
+  vel.copy(F.f).multiplyScalar(b.v * (through ? 0.6 : 1));
+  if (through) vel.addScaledVector(F.u, -2);
+  else vel.addScaledVector(F.r, Math.sign(b.u) * 5).addScaledVector(F.u, 2);
   Sound.fall();
 }
+// Шар возвращается в начало того куска трассы, где упал (но не раньше чекпойнта)
 function respawn() {
-  resetBall(lvl.track.checkpoints.filter((c) => c <= b.checkpoint).pop() + 3);
+  const tr = lvl.track;
+  const from = Math.max(tr.checkpoints.filter((c) => c <= b.checkpoint).pop(), tr.starts.filter((s) => s <= b.fellAt - 1).pop() ?? 0);
+  // Кристаллы этого куска возвращаются: они показывают безопасный путь
+  const keep = b.gems;
+  let back = 0;
+  for (const g of tr.gems)
+    if (g.taken && g.s >= from && g.s <= b.fellAt + 2) {
+      g.taken = false;
+      back++;
+    }
+  resetBall(from + 3);
+  b.gems = keep - back;
+  el("gems").textContent = b.gems;
   b.state = "play";
   Sound.poof();
   fx.burst(ball.position, 22, 6, 0.8, 1);
@@ -169,6 +193,8 @@ function step(dt) {
     }
     b.uTarget = clamp(b.uTarget, -lim - 0.4, lim + 0.4);
   } else if (Math.abs(b.u) > F.half + 0.15) return startFall();
+  // Дыра под шаром: если он катится по дорожке (не в прыжке), проваливается
+  if (F.gaps && !F.air && b.h < 0.05 && F.gaps.some(([g0, g1]) => b.u > g0 + R * 0.5 && b.u < g1 - R * 0.5)) return startFall(true);
   else b.uTarget = clamp(b.uTarget, -F.half - 1.2, F.half + 1.2);
   // Подскок после удара
   if (b.h > 0 || b.vh > 0) {
@@ -197,6 +223,19 @@ function step(dt) {
   // Кристаллы рядом
   // Кристаллы крупные, поэтому и ловятся щедро
   for (const g of tr.gems) if (!g.taken && Math.abs(g.s - b.s) < 3 && g.pos.distanceToSquared(pos) < 1.7) collect(g);
+  // Батуты: подбрасывают шар, в воздухе дуга кристаллов
+  for (const pad of tr.pads)
+    if (before < pad.s && b.s >= pad.s && b.h < 0.3) {
+      b.vh = pad.power;
+      b.h = Math.max(b.h, 0.01);
+      // Скорость не ниже крейсерской, чтобы перелететь провал
+      b.v = Math.max(b.v, cruise());
+      pad.bounceAt = clock;
+      Sound.boing();
+      Sound.whee();
+      fx.burst(pos, 14, 5, 0.6, 2);
+      shake = 0.15;
+    }
   // Ускорители
   for (const p of tr.boosts)
     if (before < p.s + 2 && b.s >= p.s + 2) {
@@ -344,6 +383,8 @@ function frame(ms) {
       }
     }
     for (const o of lvl.obstacles) o.update(clock);
+    for (const pad of lvl.pads) pad.update(clock);
+    lvl.water?.update(clock);
     lvl.gems.update(clock, b.s);
     lvl.chevrons.offset.y -= dt * 1.8;
     Sound.roll(b.state === "play" ? b.v : 0, b.state === "play" && !b.flying);
@@ -357,7 +398,28 @@ function frame(ms) {
     el("progress-fill").style.width = share * 100 + "%";
     el("progress-ball").style.left = share * 100 + "%";
   }
-  renderer.render(scene, camera);
+  if (glow.on) composer.render();
+  else renderer.render(scene, camera);
+  watchSpeed(dt);
+}
+// ---------- Свечение (bloom): сияют кристаллы, неон, лава и солнечные блики ----------
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+// Порог выше яркости неба и белых бортиков: светится только то, что ярче, — кристаллы, неон, лава, блики
+const bloom = new UnrealBloomPass(new T.Vector2(256, 256), 0.45, 0.35, 1.3);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+// Если кадры медленные (старый iPad), свечение выключается само
+const glow = { on: true, slow: 0, checked: 0 };
+function watchSpeed(dt) {
+  if (!glow.on || b.state !== "play" || !dt) return;
+  glow.checked += dt;
+  if (dt > 1 / 40) glow.slow += dt;
+  // За 6 секунд игры больше 2 секунд медленных кадров — без свечения
+  if (glow.checked > 6) {
+    if (glow.slow > 2) glow.on = false;
+    glow.checked = glow.slow = 0;
+  }
 }
 function trailTint() {
   return { rainbow: "#ffd1f0", melon: "#c8ffc4", beach: "#fff2a6", planet: "#a8d8ff", disco: "#ffffff", candy: "#ffc2dc", lava: "#ffb35c", stars: "#fff07a" }[save.skin];
@@ -366,6 +428,10 @@ function resize() {
   const w = canvas.clientWidth,
     h = canvas.clientHeight;
   renderer.setSize(w, h, false);
+  composer.setPixelRatio(renderer.getPixelRatio());
+  composer.setSize(w, h);
+  // Свечение считается в половинном разрешении: заметно дешевле, на вид так же
+  bloom.resolution.set(w / 2, h / 2);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
@@ -554,4 +620,4 @@ toMenu();
 renderer.setAnimationLoop(frame);
 // Для проверок: адрес с ?debug открывает состояние из консоли
 if (new URLSearchParams(location.search).has("debug"))
-  Object.assign(window, { b, lvl: () => lvl, startLevel, go, camera, scene });
+  Object.assign(window, { b, lvl: () => lvl, startLevel, go, camera, scene, glow });

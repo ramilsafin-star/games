@@ -479,8 +479,8 @@ const Music = {
 
 // Голосовые подсказки вместо текста: игрок ещё не читает.
 // Если русского голоса нет, просто молчим: чужой голос читает русский непонятно.
-// Голос: записанные фразы Google (voices/<имя>.mp3, см. games-portal/tools/voices.mjs).
-// Если записи нет или звук ещё не разрешён — встроенный голос устройства, как раньше.
+// Голос: только записанные фразы Gemini (voices/<имя>.mp3, см. games-portal/tools/voices.mjs).
+// Роботного голоса устройства нет: если записи нет или звук ещё не разрешён, фраза не звучит.
 const Voice = {
   cache: new Map(),
   token: 0,
@@ -527,27 +527,8 @@ const Voice = {
         this.current = source;
         Music.duck(clip.duration + 0.3);
         return;
-      } catch (_) {
-        if (token !== this.token) return;
-      }
+      } catch (_) {}
     }
-    this.speak(text);
-  },
-  speak(text) {
-    if (!("speechSynthesis" in window)) return;
-    try {
-      const voices = speechSynthesis.getVoices(),
-        russian = voices.find((v) => /^ru/i.test(v.lang));
-      if (voices.length && !russian) return;
-      speechSynthesis.cancel();
-      const phrase = new SpeechSynthesisUtterance(text);
-      phrase.lang = "ru-RU";
-      if (russian) phrase.voice = russian;
-      phrase.rate = 1;
-      phrase.pitch = 1.2;
-      phrase.volume = Math.min(1, Sound.effectsLevel + 0.15);
-      speechSynthesis.speak(phrase);
-    } catch (_) {}
   },
   stop() {
     this.token++;
@@ -555,8 +536,5 @@ const Voice = {
       if (this.current) this.current.stop();
     } catch (_) {}
     this.current = null;
-    try {
-      if ("speechSynthesis" in window) speechSynthesis.cancel();
-    } catch (_) {}
   },
 };
