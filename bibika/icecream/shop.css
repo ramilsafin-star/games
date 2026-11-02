@@ -1,0 +1,891 @@
+:root {
+  color-scheme: light;
+  --ink: #3e253d;
+  --coral: #e75158;
+  --paper: #fff8e8;
+  --edge: #50324b;
+  --shadow: #dfc99d;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--ink);
+  font-family:
+    ui-rounded,
+    "Avenir Next",
+    system-ui,
+    -apple-system,
+    sans-serif;
+  background-color: #fff4d9;
+  background-image: radial-gradient(#eacc934e 1.4px, transparent 1.5px);
+  background-size: 13px 13px;
+  -webkit-tap-highlight-color: transparent;
+}
+button,
+a {
+  touch-action: manipulation;
+  color: inherit;
+  font: inherit;
+  -webkit-user-select: none;
+  user-select: none;
+}
+button {
+  cursor: pointer;
+}
+a:focus-visible,
+button:focus-visible {
+  outline: 4px solid #067796;
+  outline-offset: 3px;
+}
+button:active,
+a:active {
+  translate: 0 2px;
+}
+[hidden] {
+  display: none !important;
+}
+/* Страница во весь экран: сцена забирает всё место, что осталось от кнопок */
+.shop {
+  width: min(1080px, 100%);
+  margin: auto;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: max(12px, env(safe-area-inset-top))
+    max(22px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom))
+    max(22px, env(safe-area-inset-left));
+}
+header,
+.mast,
+.bench-head,
+.step,
+.choices,
+.finish-row,
+.happy {
+  display: flex;
+  align-items: center;
+}
+header {
+  height: 46px;
+  justify-content: space-between;
+  border-bottom: 1px solid #c3a77c73;
+  padding-bottom: 7px;
+}
+.back,
+.sound {
+  border: 1.5px solid #584153;
+  border-radius: 30px;
+  background: #fffaf0;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.back {
+  padding: 0 13px 1px 9px;
+  gap: 6px;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 760;
+}
+.back span {
+  font-size: 22px;
+  line-height: 1;
+}
+.sound {
+  width: 42px;
+  height: 36px;
+}
+.sound svg {
+  width: 21px;
+}
+.wordmark {
+  font-size: 19px;
+  font-weight: 900;
+  letter-spacing: -1px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.wordmark i {
+  font-size: 19px;
+  font-weight: 900;
+  background: var(--ink);
+  color: #ffdc75;
+  border-radius: 8px;
+  line-height: 24px;
+  padding: 0 5px 1px;
+  transform: rotate(-8deg);
+}
+.mast {
+  justify-content: space-between;
+  gap: 12px;
+  margin: 17px 2px 14px;
+}
+.eyebrow,
+.place,
+.ticket small,
+#order small {
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.13em;
+}
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #7b493b;
+  margin-bottom: 1px;
+}
+.eyebrow i {
+  width: 18px;
+  height: 7px;
+  border-radius: 20px;
+  background: repeating-linear-gradient(120deg, #e95d5e 0 4px, #ffc2a2 4px 6px);
+}
+h1,
+h2 {
+  margin: 0;
+  letter-spacing: -0.058em;
+  line-height: 1.13;
+  font-weight: 900;
+}
+h1 {
+  font-size: clamp(28px, 5vw, 54px);
+}
+h1 em {
+  font-style: normal;
+  color: #bf4053;
+}
+.ticket {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  border: 1.5px dashed #a77649;
+  border-radius: 12px;
+  padding: 5px 11px;
+  background: #ffe3a0;
+  transform: rotate(2deg);
+}
+.ticket > span {
+  color: #cc7430;
+  font-size: 23px;
+}
+.ticket small {
+  display: block;
+  font-size: 8px;
+  line-height: 1.5;
+}
+.ticket b {
+  font-variant-numeric: tabular-nums;
+  font-size: 21px;
+  line-height: 1;
+  display: block;
+}
+#theatre {
+  isolation: isolate;
+  overflow: hidden;
+  position: relative;
+  flex: 1 1 0;
+  min-height: clamp(220px, 56vw, 380px);
+  max-height: min(125vw, 1100px);
+  border: 2px solid var(--edge);
+  border-radius: 24px;
+  background: linear-gradient(#6bd5e3, #b7efe4 74%, #9ed78f);
+  box-shadow: 0 4px 0 var(--shadow);
+}
+#park {
+  position: absolute;
+  inset: 0;
+}
+#park,
+#fallback {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+.place {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  background: #ffffe9e8;
+  border-radius: 20px;
+  padding: 6px 11px;
+  color: #285852;
+  pointer-events: none;
+  letter-spacing: 0.1em;
+  font-size: 9px;
+}
+.place span {
+  color: #368d64;
+  margin-right: 4px;
+}
+#order {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: 55%;
+  min-height: 52px;
+  text-align: left;
+  border: 2px solid var(--edge);
+  border-radius: 17px 17px 17px 3px;
+  background: #fffaf0;
+  padding: 6px 12px 6px 8px;
+  box-shadow: 2px 3px 0 #55345136;
+  line-height: 1.12;
+}
+/* Заказ картинками: зелёная галочка, когда это уже на рожке */
+#order-icon {
+  display: flex;
+  gap: 5px;
+  flex: none;
+}
+.want {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 39px;
+  height: 38px;
+  background: #ffecc7;
+  border-radius: 12px;
+  font-size: 25px;
+  transition: background-color 0.25s;
+}
+.want svg {
+  width: 35px;
+  height: 35px;
+}
+.want.plus {
+  margin-left: 9px;
+}
+.want.plus::before {
+  content: "+";
+  position: absolute;
+  left: -11px;
+  font-size: 15px;
+  font-weight: 900;
+  color: #805466;
+}
+.want.ok {
+  background: #d5f2dd;
+  box-shadow: inset 0 0 0 2px #3f9e74;
+}
+.want.ok::after {
+  content: "✓";
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #2f8f66;
+  border: 1.5px solid #fffaf0;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 15px;
+  text-align: center;
+  animation: tick 0.35s cubic-bezier(0.3, 1.7, 0.5, 1);
+}
+.want.love {
+  color: #e2476a;
+}
+#order.done {
+  border-color: #2f8f66;
+  background: #f1fff4;
+}
+@keyframes tick {
+  from {
+    transform: scale(0);
+  }
+}
+#order small {
+  display: block;
+  color: #805466;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+#order strong {
+  font-size: 15px;
+  font-weight: 850;
+}
+.speak-icon {
+  font-size: 17px;
+  color: #a54c65;
+}
+#scene-note {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  border-radius: 18px;
+  background: var(--ink);
+  color: white;
+  padding: 5px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  pointer-events: none;
+  max-width: 92%;
+  width: max-content;
+}
+#scene-note:empty {
+  display: none;
+}
+.bench {
+  position: relative;
+  margin-top: 13px;
+  padding: 13px 18px 16px;
+  border: 2px solid var(--edge);
+  border-radius: 22px;
+  background: var(--paper);
+  box-shadow: 0 4px 0 var(--shadow);
+}
+.bench-head {
+  justify-content: space-between;
+  margin-bottom: 11px;
+}
+.step {
+  gap: 9px;
+}
+h2 {
+  font-size: clamp(21px, 2.5vw, 28px);
+  letter-spacing: -0.045em;
+}
+#step-icon {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 15px;
+  font-weight: 850;
+}
+.dots {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.dots li {
+  width: 8px;
+  height: 8px;
+  border-radius: 20px;
+  background: #e2cdb1;
+}
+.dots li.on {
+  width: 22px;
+  background: #e76671;
+}
+.dots li.done {
+  background: #72ac9e;
+}
+.choices {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.choice {
+  border: 1.5px solid var(--edge);
+  border-radius: 16px;
+  background: var(--tile);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 5px 6px;
+  min-height: 65px;
+  box-shadow: 0 3px 0 var(--rim);
+  font-size: clamp(13px, 1.7vw, 18px);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  touch-action: none;
+}
+.choice svg {
+  width: 49px;
+  height: 49px;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+.choice span {
+  pointer-events: none;
+}
+.choice[aria-pressed="true"] {
+  outline: 3px solid #176957;
+  outline-offset: -5px;
+}
+#toppings {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.primary,
+.secondary {
+  min-height: 48px;
+  border-radius: 16px;
+  font-weight: 850;
+  border: 1.5px solid var(--edge);
+  font-size: 17px;
+  letter-spacing: -0.025em;
+}
+.primary {
+  padding: 8px 19px;
+  background: #ffe16c;
+  box-shadow: 0 3px 0 #bc8332;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+}
+.primary b {
+  font-size: 23px;
+  line-height: 1;
+}
+.secondary {
+  background: #fff9e8;
+  padding: 6px 13px;
+}
+.finish-row,
+.happy {
+  justify-content: space-between;
+  gap: 10px;
+}
+/* Шаги лежат друг на друге: высота лавки одна и та же на каждом шаге */
+.bench-body {
+  display: grid;
+}
+.bench-body > .pane {
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+#pick {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+.away {
+  visibility: hidden;
+}
+.happy {
+  min-height: 62px;
+}
+.happy > span {
+  font-size: 17px;
+  font-weight: 750;
+}
+#fallback {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(#94e6f2 60%, #a9d889 60%);
+  pointer-events: none;
+}
+#fallback span,
+.paper-cart {
+  position: absolute;
+  bottom: 12%;
+  font-size: clamp(60px, 10vw, 115px);
+}
+#paper-guest {
+  right: 17%;
+}
+#paper-cone {
+  left: 44%;
+  z-index: 1;
+}
+.paper-cart {
+  left: 12%;
+  background: repeating-linear-gradient(
+    90deg,
+    #f58687 0 21px,
+    #ffe4c1 21px 42px
+  );
+  border: 6px solid #0f8f8d;
+  border-radius: 24px;
+  padding: 0 22px;
+}
+.drag-token {
+  position: fixed;
+  z-index: 10;
+  width: 60px;
+  height: 60px;
+  pointer-events: none;
+  filter: drop-shadow(0 5px 4px #55263350);
+  transform: translate(-50%, -60%);
+}
+@media (max-width: 650px) {
+  .shop {
+    padding-left: max(10px, env(safe-area-inset-left));
+    padding-right: max(10px, env(safe-area-inset-right));
+  }
+  .mast {
+    margin: 13px 1px 10px;
+  }
+  .ticket {
+    padding: 4px 7px;
+  }
+  .ticket > span {
+    display: none;
+  }
+  .bench {
+    padding: 12px 10px 14px;
+  }
+  .choices {
+    gap: 6px;
+  }
+  .choice {
+    flex-direction: column;
+    gap: 1px;
+    padding: 4px 1px 6px;
+  }
+  .choice svg {
+    width: 41px;
+    height: 41px;
+  }
+  .place {
+    top: 9px;
+    left: 9px;
+    font-size: 8px;
+    padding: 5px 7px;
+  }
+  #order {
+    right: 9px;
+    top: 9px;
+    gap: 6px;
+    padding: 5px 7px;
+    min-height: 44px;
+  }
+  .want {
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+  }
+  .want svg {
+    width: 28px;
+    height: 28px;
+  }
+  #order strong {
+    font-size: 13px;
+  }
+  #order small {
+    font-size: 8px;
+  }
+  .speak-icon {
+    display: none;
+  }
+  h1 {
+    font-size: clamp(24px, 6.4vw, 37px);
+  }
+  .ticket small {
+    font-size: 7px;
+  }
+  .ticket b {
+    font-size: 18px;
+  }
+  .happy > span {
+    font-size: 14px;
+  }
+  .primary,
+  .secondary {
+    font-size: 15px;
+    padding: 6px 10px;
+  }
+}
+.secondary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+#paper-cone {
+  width: 60px;
+  height: 128px;
+  bottom: 6%;
+  transition: transform 0.5s;
+}
+#paper-cone i {
+  position: absolute;
+  display: block;
+  left: 5px;
+}
+.paper-waffle {
+  bottom: 0;
+  width: 48px;
+  height: 50px;
+  background: repeating-linear-gradient(48deg, #e4a650 0 7px, #f5c47e 7px 9px);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+.paper-ball {
+  width: 48px;
+  height: 34px;
+  border-radius: 50%;
+  box-shadow: inset -3px -5px 5px #77494d33;
+}
+.paper-top {
+  width: 32px;
+  height: 32px;
+  margin-left: 9px;
+}
+.given #paper-cone {
+  transform: translateX(15vw) rotate(12deg);
+}
+h1 {
+  letter-spacing: -0.044em;
+}
+h1 em {
+  margin-left: 0.04em;
+}
+/* Кнопки с картинками: понятны и тому, кто ещё не читает */
+.secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.primary {
+  gap: 10px;
+}
+.picto {
+  width: 28px;
+  height: 28px;
+  flex: none;
+}
+.primary:disabled {
+  opacity: 0.45;
+  cursor: default;
+  box-shadow: none;
+  translate: none;
+}
+.ticket.bump {
+  animation: bump 0.6s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+@keyframes bump {
+  40% {
+    transform: rotate(-4deg) scale(1.2);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ticket.bump,
+  .want.ok::after {
+    animation: none;
+  }
+}
+/* Высокий экран (iPad стоя): кнопки крупнее, под детский палец */
+@media (orientation: portrait) and (min-height: 760px) {
+  .choice {
+    min-height: clamp(65px, 9.5vh, 120px);
+  }
+  .choice svg {
+    width: clamp(49px, 6vh, 72px);
+    height: clamp(49px, 6vh, 72px);
+  }
+  .primary,
+  .secondary {
+    min-height: clamp(48px, 5.4vh, 64px);
+    font-size: clamp(16px, 2vh, 21px);
+  }
+  .picto {
+    width: clamp(26px, 3vh, 34px);
+    height: clamp(26px, 3vh, 34px);
+  }
+}
+@media (max-width: 650px) {
+  .place {
+    display: none;
+  }
+  #order {
+    max-width: 74%;
+  }
+  .picto {
+    width: 24px;
+    height: 24px;
+  }
+}
+/* Экран лёжа: сцена слева во всю высоту, заголовок и лавка справа */
+@media (min-aspect-ratio: 5/4) and (min-width: 640px) {
+  .shop {
+    width: min(1500px, 100%);
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(250px, 31%, 390px);
+    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-areas:
+      "top top"
+      "scene mast"
+      "scene bench";
+    column-gap: 16px;
+  }
+  header {
+    grid-area: top;
+  }
+  .mast {
+    grid-area: mast;
+    align-items: flex-start;
+    margin: 14px 0 10px;
+  }
+  #theatre {
+    grid-area: scene;
+    margin-top: 12px;
+    min-height: 0;
+    max-height: none;
+  }
+  /* Лавка занимает всю колонку, карточки растут под детский палец */
+  .bench {
+    grid-area: bench;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    margin-top: 0;
+  }
+  .bench-body {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  #pick {
+    justify-content: space-between;
+  }
+  #pick > .choices {
+    flex: 1 1 auto;
+    max-height: 400px;
+    grid-auto-rows: minmax(0, 1fr);
+    align-items: stretch;
+  }
+  h2 {
+    font-size: clamp(19px, 2vw, 26px);
+  }
+  .happy > span {
+    font-size: clamp(16px, 2.6vh, 24px);
+  }
+  h1 {
+    font-size: clamp(24px, 3vw, 42px);
+  }
+  .choices {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  #toppings {
+    grid-template-columns: 1fr;
+  }
+  .choice {
+    flex-direction: column;
+    gap: 2px;
+    min-height: 0;
+    padding: 6px 2px 8px;
+  }
+  #toppings .choice {
+    flex-direction: row;
+    gap: 12px;
+  }
+  .choice svg {
+    width: clamp(40px, 8vh, 72px);
+    height: clamp(40px, 8vh, 72px);
+  }
+  #toppings .choice svg {
+    width: clamp(36px, 6.5vh, 60px);
+    height: clamp(36px, 6.5vh, 60px);
+  }
+  .finish-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .primary,
+  .secondary {
+    min-height: clamp(44px, 6.5vh, 60px);
+  }
+  .happy {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    gap: 14px;
+    text-align: center;
+  }
+}
+/* Телефон лёжа: всё ужато, видны только счёт, сцена и кнопки */
+@media (min-aspect-ratio: 5/4) and (min-width: 640px) and (max-height: 520px) {
+  .shop {
+    padding-top: max(3px, env(safe-area-inset-top));
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    column-gap: 10px;
+  }
+  header {
+    height: 40px;
+  }
+  .mast {
+    margin: 6px 0;
+    justify-content: flex-end;
+  }
+  .mast > div:first-child,
+  .ticket small,
+  .dots {
+    display: none;
+  }
+  .ticket {
+    padding: 1px 8px;
+  }
+  #theatre {
+    margin-top: 6px;
+  }
+  .bench {
+    padding: 6px 10px 8px;
+  }
+  .bench-head {
+    margin-bottom: 5px;
+  }
+  h2 {
+    font-size: 19px;
+  }
+  .choices {
+    gap: 6px;
+  }
+  .choice,
+  #toppings .choice {
+    flex-direction: row;
+    gap: 4px;
+    font-size: 13px;
+  }
+  .choice svg,
+  #toppings .choice svg {
+    width: 32px;
+    height: 32px;
+  }
+  #pick {
+    gap: 6px;
+  }
+  .finish-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .primary,
+  .secondary {
+    min-height: 42px;
+    padding: 4px 6px;
+    font-size: 13px;
+    gap: 5px;
+    white-space: nowrap;
+  }
+  .primary b {
+    display: none;
+  }
+  .picto {
+    width: 22px;
+    height: 22px;
+  }
+  .happy {
+    gap: 8px;
+  }
+  .happy > span {
+    font-size: 14px;
+  }
+}

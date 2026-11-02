@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#fff3d7" />
+    <title>Мороженое на колёсах · Бибика</title>
+    <link rel="icon" href="../icons/icon-192.png" />
+    <link rel="stylesheet" href="./shop.css" />
+  </head>
+  <body>
+    <main class="shop">
+      <header>
+        <a class="back" href="../index.html" aria-label="Вернуться в гараж"
+          ><span aria-hidden="true">←</span> Гараж</a
+        >
+        <span class="wordmark"><i aria-hidden="true">b.</i> бибика</span>
+        <button
+          id="sound"
+          class="sound"
+          aria-label="Выключить звук"
+          aria-pressed="true"
+        ></button>
+      </header>
+      <div class="mast">
+        <div>
+          <div class="eyebrow"><i></i> ПАРК ЛАКОМКА</div>
+          <h1>Мороженое <em>на колёсах</em></h1>
+        </div>
+        <div class="ticket" aria-label="Угощено гостей">
+          <span aria-hidden="true">★</span>
+          <div><small>УГОЩЕНО</small><b id="served">0</b></div>
+        </div>
+      </div>
+      <section id="theatre" aria-label="Фургончик в парке">
+        <canvas
+          id="park"
+          aria-label="Рожок, фургончик и гость в парке"
+        ></canvas>
+        <div id="fallback" hidden>
+          <div class="paper-cart">🍦</div>
+          <span id="paper-cone">🍦</span><span id="paper-guest">🐻</span>
+        </div>
+        <div class="place"><span>●</span> ФУРГОН № 01</div>
+        <button id="order" aria-label="Послушать заказ">
+          <span id="order-icon" aria-hidden="true"></span
+          ><span
+            ><small id="guest-name"></small><strong id="wish"></strong></span
+          ><span class="speak-icon" aria-hidden="true">♪</span>
+        </button>
+        <div id="scene-note" role="status"></div>
+      </section>
+      <section class="bench" aria-labelledby="action-title">
+        <div class="bench-head">
+          <div class="step">
+            <span id="step-icon">1</span>
+            <h2 id="action-title" aria-live="polite">Выбери вкус</h2>
+          </div>
+          <ol class="dots" aria-label="Шаги заказа">
+            <li></li>
+            <li></li>
+            <li></li>
+          </ol>
+        </div>
+        <!-- Все шаги занимают одно место, поэтому сцена над ними не прыгает -->
+        <div class="bench-body">
+          <div id="pick" class="pane">
+            <div id="flavors" class="choices" aria-label="Вкусы"></div>
+            <div
+              id="toppings"
+              class="choices"
+              aria-label="Украшения"
+              hidden
+            ></div>
+            <div id="serve-row" class="finish-row">
+              <button id="again-scoop" class="secondary">
+                <span>Ещё шарик</span></button
+              ><button id="serve" class="primary">
+                <span>Угостить</span> <b>→</b>
+              </button>
+            </div>
+          </div>
+          <div id="happy" class="pane happy away">
+            <span id="thanks"></span
+            ><button id="next" class="primary">
+              <span>Позвать гостя</span> <b>→</b>
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script src="../js/audio.js"></script>
+    <script type="module" src="./shop.js"></script>
+  </body>
+</html>
