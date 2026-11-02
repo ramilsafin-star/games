@@ -1,6 +1,6 @@
 // «Зубик»: ход приёма, инструменты, подсказки, голос, галерея улыбок. Всё 3D — в mouth.js.
-import { Clinic, patients, decorations } from "./mouth.js?v=9a893b63";
-import { tools as TOOL_ART, gems, ui } from "./icons.js?v=9a893b63";
+import { Clinic, patients, decorations, braceKinds } from "./mouth.js?v=cc1f2089";
+import { tools as TOOL_ART, gems, ui } from "./icons.js?v=cc1f2089";
 
 const el = (id) => document.getElementById(id);
 const KEY = "zubik-v1";
@@ -78,6 +78,7 @@ let clinic,
   stepAt = 0,
   tool = null,
   deco = null,
+  braceKind = "rainbow",
   busy = true,
   idleAt = 0,
   heard = new Set();
@@ -191,13 +192,16 @@ async function finishPatient() {
   el("photo-img").src = pic;
   el("photo-who").textContent = patient.name;
   el("photo-new").hidden = !fresh;
-  if (fresh) el("photo-new").innerHTML = gems[fresh.id] + "<span>Новое украшение!</span>";
+  if (fresh) el("photo-new").innerHTML = img(fresh.id) + "<span>Новое украшение!</span>";
   el("photo").hidden = false;
   if (fresh) say("hint/unlock", 1.2);
   el("count").textContent = save.served;
 }
 
 // ---------- Панель инструментов ----------
+// Объёмные картинки инструментов и украшений, отрисованные из тех же 3D-моделей
+let pics = {};
+const img = (id) => (pics[id] ? `<img alt="" src="${pics[id]}">` : gems[id] || TOOL_ART[id] || "");
 const TOOL_NAMES = { tweezers: "Пинцет", floss: "Ниточка", brush: "Щётка", water: "Водичка", drill: "Жужжалка", paste: "Паста", lamp: "Лампа" };
 function renderTray() {
   const tray = el("tray");
@@ -208,19 +212,29 @@ function renderTray() {
   if (name === "decorate") {
     tray.innerHTML =
       unlocked()
-        .map((d) => `<button class="tool gem${deco === d.id ? " on" : ""}" data-deco="${d.id}" aria-label="${d.name}">${gems[d.id]}</button>`)
+        .map((d) => {
+          const b = `<button class="tool gem${deco === d.id ? " on" : ""}" data-deco="${d.id}" aria-label="${d.name}">${img(d.id)}</button>`;
+          if (d.id !== "braces" || deco !== "braces") return b;
+          // Выбраны брекеты — рядом с кнопкой появляются их виды
+          return (
+            b +
+            braceKinds
+              .map((k) => `<button class="tool gem kind${clinic.bracesKind === k.id ? " on" : ""}" data-kind="${k.id}" aria-label="${k.name}">${img("braces-" + k.id)}</button>`)
+              .join("")
+          );
+        })
         .join("") + `<button class="tool done" data-done="1" aria-label="Готово">${TOOL_ART.done}</button>`;
     return;
   }
   const st = current();
   tray.innerHTML = st
-    ? st.tools.map((t) => `<button class="tool${tool === t ? " on" : ""}" data-tool="${t}" aria-label="${TOOL_NAMES[t]}">${TOOL_ART[t]}</button>`).join("")
+    ? st.tools.map((t) => `<button class="tool${tool === t ? " on" : ""}" data-tool="${t}" aria-label="${TOOL_NAMES[t]}">${img(t)}</button>`).join("")
     : "";
 }
 function renderSteps() {
   const icon = { crumbs: "tweezers", floss: "floss", brush: "brush", rinse: "water", cavity: "drill", chip: "paste", decorate: null };
   el("steps").innerHTML = steps
-    .map((s, i) => `<i class="${i < stepAt ? "done" : i === stepAt ? "now" : ""}">${s === "decorate" ? gems.diamond : TOOL_ART[icon[s]]}</i>`)
+    .map((s, i) => `<i class="${i < stepAt ? "done" : i === stepAt ? "now" : ""}">${img(s === "decorate" ? "diamond" : icon[s])}</i>`)
     .join("");
 }
 el("tray").addEventListener("click", (e) => {
@@ -232,13 +246,23 @@ el("tray").addEventListener("click", (e) => {
     finishStep();
     return;
   }
-  if (b.dataset.deco) {
+  if (b.dataset.kind) {
+    // Другой вид брекетов: снимаются старые, надеваются новые
+    braceKind = b.dataset.kind;
+    clinic.braces(braceKind);
+    Sound.sparkle();
+    say("hint/braces-" + braceKind);
+  } else if (b.dataset.deco) {
+    const was = deco;
     deco = b.dataset.deco;
     if (deco === "braces") {
-      clinic.bracesOn = !clinic.bracesOn;
-      clinic.braces(clinic.bracesOn);
-      Sound.sparkle();
-      say("hint/braces");
+      // Первое касание надевает брекеты и показывает их виды, повторное — снимает
+      if (was === "braces" && clinic.bracesKind) clinic.braces(null);
+      else if (!clinic.bracesKind) {
+        clinic.braces(braceKind);
+        Sound.sparkle();
+        say("hint/braces-" + braceKind);
+      }
     } else if (!heard.has(deco)) {
       heard.add(deco);
       say("hint/" + deco);
@@ -252,31 +276,33 @@ el("tray").addEventListener("click", (e) => {
 let press = null,
   lastScrub = 0;
 const R = () => Math.max(34, clinic.pixelRadius(0.3));
+// 3D-инструмент в руке: кончик чуть выше пальца, чтобы палец его не закрывал
 function cursor(x, y, show) {
-  const c = el("cursor");
-  c.hidden = !show;
-  if (!show) return;
-  c.innerHTML = deco ? gems[deco] : TOOL_ART[tool] || "";
-  c.style.transform = `translate(${x - 30}px, ${y - 64}px)`;
+  if (!show) return clinic.hidePointer();
+  const name = steps[stepAt] === "decorate" ? (deco && deco !== "braces" ? deco : null) : tool;
+  clinic.pointer(name, x, y, !!press);
 }
+const lift = (e) => (e.pointerType === "touch" ? 46 : 0);
 function down(e) {
   if (!e.isPrimary) return;
   unlock();
   if (busy) return;
   idleAt = performance.now();
-  press = { x: e.clientX, y: e.clientY, id: e.pointerId };
+  const y = e.clientY - lift(e);
+  press = { x: e.clientX, y, id: e.pointerId, lift: lift(e) };
   el("stage").setPointerCapture(e.pointerId);
-  cursor(e.clientX, e.clientY, true);
-  act("down", e.clientX, e.clientY, 0);
+  cursor(e.clientX, y, true);
+  act("down", e.clientX, y, 0);
 }
 function move(e) {
   if (!press || press.id !== e.pointerId) return;
-  const dist = Math.hypot(e.clientX - press.x, e.clientY - press.y);
+  const y = e.clientY - press.lift;
+  const dist = Math.hypot(e.clientX - press.x, y - press.y);
   press.x = e.clientX;
-  press.y = e.clientY;
+  press.y = y;
   idleAt = performance.now();
-  cursor(e.clientX, e.clientY, true);
-  act("move", e.clientX, e.clientY, dist);
+  cursor(e.clientX, y, true);
+  act("move", e.clientX, y, dist);
 }
 function up(e) {
   if (!press || press.id !== e.pointerId) return;
@@ -477,6 +503,11 @@ el("count").textContent = save.served;
 buttons();
 try {
   clinic = new Clinic(el("stage"));
+  try {
+    pics = clinic.icons();
+  } catch (e) {
+    console.warn("иконки", e);
+  }
   const stage = el("stage");
   stage.addEventListener("pointerdown", down);
   stage.addEventListener("pointermove", move);
