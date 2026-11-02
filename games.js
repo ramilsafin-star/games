@@ -49,4 +49,11 @@ const GAMES = [
     cover: "covers/listik.jpg",
     color: "#2f8a5f",
   },
+  {
+    id: "sharokat",
+    title: "Шарокат",
+    url: "sharokat/",
+    cover: "covers/sharokat.jpg",
+    color: "#4a8cff",
+  },
 ];

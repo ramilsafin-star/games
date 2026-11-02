@@ -1,0 +1,619 @@
+// Всё, что видно вокруг шара: небо, острова, облака, арки, препятствия, кристаллы, шар и эффекты
+import * as T from "../vendor/three/three.module.min.js";
+import { HALF, rng } from "./track.js";
+
+const pie = Math.PI;
+export const R = 0.6; // радиус шара
+const candy = ["#ff4f7b", "#ffc93c", "#2fd0a6", "#4aa3ff", "#b06cff", "#ff8a3d"];
+function canvasTexture(w, h, draw) {
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  draw(c.getContext("2d"), w, h);
+  const t = new T.CanvasTexture(c);
+  t.colorSpace = T.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+// Поставить объект в кадр трассы: x — вбок, y — вверх, z — вперёд
+export function place(obj, fr, x = 0, y = 0, z = 0) {
+  obj.position.copy(fr.p).addScaledVector(fr.r, x).addScaledVector(fr.u, y).addScaledVector(fr.f, z);
+  const m = new T.Matrix4().makeBasis(fr.r, fr.u, fr.f.clone().negate());
+  obj.quaternion.setFromRotationMatrix(m);
+  return obj;
+}
+
+// ---------- Небо ----------
+export function sky(scene) {
+  const geo = new T.SphereGeometry(700, 32, 20);
+  const colors = [],
+    c = new T.Color();
+  const stops = [
+    [-1, "#ffc6e0"],
+    [-0.08, "#ffd6ea"],
+    [0.03, "#fff0f6"],
+    [0.16, "#9fd8ff"],
+    [0.45, "#4aa8ff"],
+    [1, "#2a6fe0"],
+  ];
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i) / 700;
+    let k = 0;
+    while (k < stops.length - 2 && y > stops[k + 1][0]) k++;
+    const [y0, c0] = stops[k],
+      [y1, c1] = stops[k + 1];
+    c.set(c0).lerp(new T.Color(c1), Math.min(1, Math.max(0, (y - y0) / (y1 - y0))));
+    colors.push(c.r, c.g, c.b);
+  }
+  geo.setAttribute("color", new T.Float32BufferAttribute(colors, 3));
+  const dome = new T.Mesh(geo, new T.MeshBasicMaterial({ vertexColors: true, side: T.BackSide, fog: false, depthWrite: false }));
+  dome.renderOrder = -1;
+  scene.add(dome);
+  // Солнце
+  const sun = new T.Mesh(new T.SphereGeometry(30, 24, 16), new T.MeshBasicMaterial({ color: "#fff3b0", fog: false }));
+  sun.position.set(-260, 260, -420);
+  dome.add(sun);
+  return dome;
+}
+
+// ---------- Пейзаж вокруг трассы: острова, деревья, облака, шары, радуги ----------
+export function scenery(scene, track) {
+  const rand = rng(77 + track.level * 13);
+  const group = new T.Group();
+  scene.add(group);
+  const islands = [],
+    clouds = [],
+    balloons = [];
+  const free = (p, gap) => track.samples.every((a, i) => i % 6 || a.p.distanceToSquared(p) > gap * gap);
+  for (let s = 10; s < track.length; s += 18 + rand() * 14) {
+    const fr = track.at(s),
+      side = rand() < 0.5 ? -1 : 1;
+    const p = fr.p.clone().add(new T.Vector3(fr.r.x, 0, fr.r.z).normalize().multiplyScalar(side * (11 + rand() * 24)));
+    p.y -= 5 + rand() * 16;
+    if (free(p, 11)) islands.push({ p, size: 4 + rand() * 6, hue: rand() });
+    const q = fr.p.clone().add(new T.Vector3((rand() - 0.5) * 110, -14 + rand() * 34, (rand() - 0.5) * 110));
+    if (free(q, 14)) clouds.push({ p: q, size: 3 + rand() * 6 });
+    if (rand() < 0.35) {
+      const b = fr.p.clone().add(new T.Vector3((rand() - 0.5) * 60, 6 + rand() * 18, (rand() - 0.5) * 60));
+      if (free(b, 8)) balloons.push({ p: b, c: candy[Math.floor(rand() * candy.length)], phase: rand() * 6 });
+    }
+  }
+  const m = new T.Matrix4(),
+    q = new T.Quaternion(),
+    sc = new T.Vector3(),
+    color = new T.Color();
+  // Острова: каменный конус снизу, травяная шапка, деревья-леденцы
+  const rock = new T.InstancedMesh(
+    new T.ConeGeometry(1, 1.6, 7).rotateX(pie),
+    new T.MeshStandardMaterial({ roughness: 0.8, flatShading: true }),
+    islands.length,
+  );
+  const grass = new T.InstancedMesh(new T.CylinderGeometry(1.05, 1, 0.35, 16), new T.MeshStandardMaterial({ roughness: 0.6 }), islands.length);
+  const trunks = new T.InstancedMesh(new T.CylinderGeometry(0.12, 0.16, 1, 6), new T.MeshStandardMaterial({ color: "#a3704a" }), islands.length * 3);
+  const crowns = new T.InstancedMesh(new T.SphereGeometry(1, 14, 10), new T.MeshPhysicalMaterial({ roughness: 0.4, clearcoat: 0.5 }), islands.length * 3);
+  islands.forEach((it, i) => {
+    sc.set(it.size, it.size, it.size);
+    m.compose(it.p.clone().add(new T.Vector3(0, -it.size * 0.8, 0)), q.identity(), sc);
+    rock.setMatrixAt(i, m);
+    rock.setColorAt(i, color.setHSL(0.05 + it.hue * 0.08, 0.45, 0.6));
+    m.compose(it.p, q, sc.set(it.size, it.size * 0.6, it.size));
+    grass.setMatrixAt(i, m);
+    grass.setColorAt(i, color.setHSL(0.28 + it.hue * 0.12, 0.65, 0.55));
+    for (let k = 0; k < 3; k++) {
+      const a = k * 2.1 + it.hue * 6,
+        d = it.size * 0.5,
+        tp = it.p.clone().add(new T.Vector3(Math.cos(a) * d, 0, Math.sin(a) * d)),
+        h = 1.4 + ((k + it.hue * 3) % 1) * 1.6;
+      m.compose(tp.clone().add(new T.Vector3(0, h / 2, 0)), q, sc.set(1, h, 1));
+      trunks.setMatrixAt(i * 3 + k, m);
+      m.compose(tp.clone().add(new T.Vector3(0, h + 0.6, 0)), q, sc.setScalar(0.9 + (k % 2) * 0.3));
+      crowns.setMatrixAt(i * 3 + k, m);
+      crowns.setColorAt(i * 3 + k, color.set(["#5ccf73", "#ff8fc0", "#9be04f", "#ffd24f"][(i + k) % 4]));
+    }
+  });
+  group.add(rock, grass, trunks, crowns);
+  // Облака: несколько шаров в кучке
+  const puffs = new T.InstancedMesh(new T.SphereGeometry(1, 14, 10), new T.MeshStandardMaterial({ color: "#ffffff", roughness: 1 }), clouds.length * 4);
+  clouds.forEach((c, i) => {
+    for (let k = 0; k < 4; k++) {
+      m.compose(
+        c.p.clone().add(new T.Vector3((k - 1.5) * c.size * 0.6, (k % 2) * c.size * 0.25, (k % 3) * 0.6)),
+        q.identity(),
+        sc.set(c.size * (0.7 + (k % 2) * 0.3), c.size * 0.55, c.size * 0.6),
+      );
+      puffs.setMatrixAt(i * 4 + k, m);
+    }
+  });
+  group.add(puffs);
+  // Воздушные шары с корзинкой
+  const balls = new T.InstancedMesh(new T.SphereGeometry(1.6, 18, 14), new T.MeshPhysicalMaterial({ roughness: 0.25, clearcoat: 1 }), balloons.length);
+  const baskets = new T.InstancedMesh(new T.BoxGeometry(0.7, 0.5, 0.7), new T.MeshStandardMaterial({ color: "#b8814f" }), balloons.length);
+  balloons.forEach((b, i) => {
+    m.compose(b.p, q.identity(), sc.set(1, 1.2, 1));
+    balls.setMatrixAt(i, m);
+    balls.setColorAt(i, color.set(b.c));
+    m.compose(b.p.clone().add(new T.Vector3(0, -2.6, 0)), q, sc.set(1, 1, 1));
+    baskets.setMatrixAt(i, m);
+  });
+  group.add(balls, baskets);
+  // Две радуги вдали
+  const bands = ["#ff5c7a", "#ff9e4a", "#ffd84a", "#5ed69a", "#58b4ff", "#a67cff"];
+  for (const [s, side] of [
+    [track.length * 0.3, 1],
+    [track.length * 0.75, -1],
+  ]) {
+    const fr = track.at(s);
+    const center = fr.p.clone().add(new T.Vector3(fr.r.x, 0, fr.r.z).normalize().multiplyScalar(side * 90));
+    center.y -= 30;
+    bands.forEach((c, i) => {
+      const arc = new T.Mesh(new T.TorusGeometry(60 - i * 2.4, 1.2, 8, 60, pie), new T.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.75 }));
+      arc.position.copy(center);
+      arc.lookAt(fr.p.x, center.y, fr.p.z);
+      group.add(arc);
+    });
+  }
+  group.traverse((o) => {
+    if (o.isInstancedMesh && o.instanceColor) o.instanceColor.needsUpdate = true;
+  });
+  return { group, balls, balloons };
+}
+
+// ---------- Опоры горок и море облаков внизу ----------
+export function supports(scene, track) {
+  const legs = [];
+  let low = Infinity;
+  for (const a of track.samples) low = Math.min(low, a.p.y);
+  const floor = low - 34;
+  for (let i = 0; i < track.samples.length; i += 14) {
+    const a = track.samples[i];
+    // Опоры только под дорожкой, которая лежит «нормально» (не в петле, не в трубе, не в прыжке)
+    if (a.air || a.u.y < 0.8 || a.kind === "loop") continue;
+    for (const side of [-1, 1]) legs.push([a.p.clone().addScaledVector(a.r, side * (a.half * 0.7)).addScaledVector(a.u, -0.4), a.hue]);
+  }
+  const mesh = new T.InstancedMesh(
+    new T.CylinderGeometry(0.16, 0.24, 1, 8),
+    new T.MeshPhysicalMaterial({ roughness: 0.3, clearcoat: 0.8 }),
+    legs.length,
+  );
+  const m = new T.Matrix4(),
+    q = new T.Quaternion(),
+    sc = new T.Vector3(),
+    color = new T.Color();
+  legs.forEach(([top, hue], i) => {
+    const h = top.y - floor;
+    m.compose(new T.Vector3(top.x, floor + h / 2, top.z), q, sc.set(1, h, 1));
+    mesh.setMatrixAt(i, m);
+    mesh.setColorAt(i, color.setHSL(hue, 0.85, 0.6));
+  });
+  scene.add(mesh);
+  // Облачное море: большой мягкий диск и кучевые облака на нём
+  const c = track.samples[Math.floor(track.samples.length / 2)].p;
+  const sea = new T.Mesh(new T.CircleGeometry(900, 48), new T.MeshBasicMaterial({ color: "#fff4fa" }));
+  sea.rotation.x = -Math.PI / 2;
+  sea.position.set(c.x, floor + 2, c.z);
+  scene.add(sea);
+  const rand = rng(31 + track.level);
+  const n = 260;
+  const puffs = new T.InstancedMesh(new T.SphereGeometry(1, 12, 8), new T.MeshStandardMaterial({ color: "#ffffff", roughness: 1 }), n);
+  for (let i = 0; i < n; i++) {
+    const a = track.samples[Math.floor(rand() * track.samples.length)].p;
+    const r = 6 + rand() * 12;
+    m.compose(new T.Vector3(a.x + (rand() - 0.5) * 160, floor + 2 + r * 0.25, a.z + (rand() - 0.5) * 160), q, sc.set(r * 1.4, r * 0.55, r));
+    puffs.setMatrixAt(i, m);
+  }
+  scene.add(puffs);
+  return floor;
+}
+
+// ---------- Арки: чекпойнты и финиш ----------
+export function gates(scene, track) {
+  const list = [];
+  for (const g of track.gates) {
+    const fr = track.at(g.s),
+      arch = new T.Group();
+    const big = g.kind === "finish";
+    const r = HALF + 0.9;
+    const colors = big ? candy : ["#ffffff", "#ffd84a", "#ffffff"];
+    colors.forEach((c, i) => {
+      const band = new T.Mesh(
+        new T.TorusGeometry(r + i * 0.32, 0.17, 10, 40, pie),
+        new T.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: big ? 0.35 : 0.2, roughness: 0.3 }),
+      );
+      arch.add(band);
+    });
+    if (big) {
+      // Клетчатая лента «финиш» и связки шаров по бокам
+      const flag = new T.Mesh(
+        new T.PlaneGeometry(2 * r, 0.9),
+        new T.MeshBasicMaterial({
+          side: T.DoubleSide,
+          map: canvasTexture(256, 64, (ctx) => {
+            for (let x = 0; x < 16; x++)
+              for (let y = 0; y < 4; y++) {
+                ctx.fillStyle = (x + y) % 2 ? "#1d1d2b" : "#ffffff";
+                ctx.fillRect(x * 16, y * 16, 16, 16);
+              }
+          }),
+        }),
+      );
+      flag.position.y = r + 1.5;
+      arch.add(flag);
+      for (const side of [-1, 1])
+        for (let k = 0; k < 4; k++) {
+          const b = new T.Mesh(new T.SphereGeometry(0.55, 14, 10), new T.MeshPhysicalMaterial({ color: candy[(k + (side > 0 ? 3 : 0)) % 6], clearcoat: 1, roughness: 0.2 }));
+          b.position.set(side * (r + 1 + (k % 2) * 0.7), 1.5 + k * 0.9, 0);
+          arch.add(b);
+        }
+    }
+    place(arch, fr, 0, 0, 0);
+    scene.add(arch);
+    list.push({ ...g, arch });
+  }
+  return list;
+}
+
+// ---------- Ускорители: светящиеся стрелки на дорожке ----------
+const chevrons = canvasTexture(128, 128, (ctx) => {
+  ctx.clearRect(0, 0, 128, 128);
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 18;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (const y of [40, 96]) {
+    ctx.beginPath();
+    ctx.moveTo(20, y);
+    ctx.lineTo(64, y - 30);
+    ctx.lineTo(108, y);
+    ctx.stroke();
+  }
+});
+chevrons.wrapT = T.RepeatWrapping;
+chevrons.repeat.set(1, 2);
+export function boostPads(scene, track) {
+  const look = new T.MeshBasicMaterial({ map: chevrons, color: "#ffe14d", transparent: true, depthWrite: false, side: T.DoubleSide });
+  for (const b of track.boosts) {
+    const fr = track.at(b.s + 2),
+      pad = new T.Mesh(new T.PlaneGeometry(HALF * 1.6, 4), look);
+    place(pad, fr, 0, 0.06, 0);
+    pad.rotateX(-pie / 2);
+    pad.renderOrder = 1;
+    scene.add(pad);
+  }
+  return chevrons;
+}
+
+// ---------- Препятствия: меш и столкновение в координатах дорожки ----------
+// a — расстояние вдоль трассы от препятствия, u — вбок, y — высота центра шара над дорожкой
+const glossy = (c, e = 0) => new T.MeshPhysicalMaterial({ color: c, roughness: 0.25, clearcoat: 1, emissive: c, emissiveIntensity: e });
+export function obstacles(scene, track) {
+  return track.obstacles.map((o, k) => {
+    const fr = track.at(o.s),
+      g = new T.Group();
+    place(g, fr);
+    scene.add(g);
+    const c = candy[k % candy.length];
+    if (o.kind === "hammer") {
+      // Арка и молот на маятнике поперёк дорожки
+      for (const side of [-1, 1]) {
+        const post = new T.Mesh(new T.CylinderGeometry(0.16, 0.2, 4.6, 10), glossy("#ffffff"));
+        post.position.set(side * (HALF + 0.5), 2.3, 0);
+        g.add(post);
+      }
+      const beam = new T.Mesh(new T.CylinderGeometry(0.16, 0.16, 2 * HALF + 1.2, 10), glossy("#ffffff"));
+      beam.rotation.z = pie / 2;
+      beam.position.y = 4.6;
+      g.add(beam);
+      const swing = new T.Group();
+      swing.position.y = 4.6;
+      const arm = new T.Mesh(new T.CylinderGeometry(0.07, 0.07, 3.3, 8), glossy("#d8dde6"));
+      arm.position.y = -1.65;
+      const head = new T.Mesh(new T.CylinderGeometry(0.62, 0.62, 1.3, 20), glossy(c, 0.15));
+      head.rotation.x = pie / 2;
+      head.position.y = -3.3;
+      swing.add(arm, head);
+      g.add(swing);
+      o.update = (t) => (swing.rotation.z = Math.sin(t * 1.7 + o.phase) * 1.05);
+      o.hit = (a, u, y) => {
+        const th = swing.rotation.z,
+          hx = Math.sin(th) * 3.3,
+          hy = 4.6 - Math.cos(th) * 3.3;
+        if (Math.abs(a) > 0.65 + R) return null;
+        const dx = u - hx,
+          dy = y - hy;
+        return Math.hypot(dx, dy) < 0.62 + R ? { push: Math.sign(dx || 1) * 10, slow: 0.6, hop: 4 } : null;
+      };
+    } else if (o.kind === "sweeper") {
+      // Вертушка: столбик в середине и вращающаяся перекладина
+      const pole = new T.Mesh(new T.CylinderGeometry(0.3, 0.38, 1.1, 14), glossy("#ffffff"));
+      pole.position.y = 0.55;
+      const spin = new T.Group();
+      spin.position.y = 0.7;
+      const bar = new T.Mesh(new T.BoxGeometry(2 * HALF - 0.2, 0.36, 0.36), glossy(c, 0.15));
+      spin.add(bar);
+      g.add(pole, spin);
+      o.update = (t) => (spin.rotation.y = t * 1.5 * o.side + o.phase);
+      o.hit = (a, u, y) => {
+        if (y > 1.4) return null;
+        if (Math.hypot(a, u) < 0.38 + R) return { push: Math.sign(u || 1) * 9, slow: 0.5, hop: 3 };
+        // Перекладина в плоскости дорожки направлена как (cos φ вбок, sin φ вперёд)
+        const phi = spin.rotation.y,
+          along = u * Math.cos(phi) + a * Math.sin(phi),
+          across = -u * Math.sin(phi) + a * Math.cos(phi);
+        return Math.abs(along) < HALF - 0.1 && Math.abs(across) < 0.18 + R ? { push: Math.sign(u || o.side) * 9, slow: 0.55, hop: 3 } : null;
+      };
+    } else if (o.kind === "slider") {
+      // Блок ездит поперёк дорожки
+      const block = new T.Mesh(new T.BoxGeometry(1.7, 1.1, 1.0), glossy(c, 0.12));
+      block.position.y = 0.55;
+      g.add(block);
+      o.update = (t) => (block.position.x = Math.sin(t * 1.4 + o.phase) * (HALF - 0.9));
+      o.hit = (a, u, y) =>
+        Math.abs(a) < 0.5 + R && Math.abs(u - block.position.x) < 0.85 + R && y < 1.4
+          ? { push: Math.sign(u - block.position.x || 1) * 9, slow: 0.5, hop: 3 }
+          : null;
+    } else {
+      // Пружинные бамперы, как в пинболе
+      const spots = [
+        [o.side * 1.1, -1.8],
+        [-o.side * 1.0, 1.8],
+      ];
+      const caps = spots.map(([x, z]) => {
+        const cap = new T.Group();
+        const body = new T.Mesh(new T.CylinderGeometry(0.55, 0.6, 0.7, 20), glossy("#ffffff"));
+        body.position.y = 0.35;
+        const ring = new T.Mesh(new T.TorusGeometry(0.58, 0.12, 8, 24), glossy(c, 0.6));
+        ring.rotation.x = pie / 2;
+        ring.position.y = 0.7;
+        cap.add(body, ring);
+        // Локальная ось z смотрит назад по трассе, поэтому «вперёд на z» — это -z
+        cap.position.set(x, 0, -z);
+        g.add(cap);
+        return cap;
+      });
+      o.bumpAt = -9;
+      o.update = (t) => {
+        const k = Math.max(0, 1 - (t - o.bumpAt) / 0.3);
+        for (const cap of caps) cap.scale.set(1 + k * 0.25, 1 - k * 0.15, 1 + k * 0.25);
+      };
+      o.hit = (a, u, y, t) => {
+        for (const [x, z] of spots) {
+          const d = Math.hypot(a - z, u - x);
+          if (d < 0.6 + R && y < 1.4) {
+            o.bumpAt = t;
+            return { push: Math.sign(u - x || 1) * 12, slow: 0.85, hop: 2, boing: true };
+          }
+        }
+        return null;
+      };
+    }
+    return o;
+  });
+}
+
+// ---------- Кристаллы ----------
+export function gemField(scene, track) {
+  const geo = new T.OctahedronGeometry(0.36, 0);
+  geo.scale(1, 1.35, 1);
+  const mesh = new T.InstancedMesh(
+    geo,
+    new T.MeshPhysicalMaterial({ roughness: 0.08, metalness: 0.15, clearcoat: 1, iridescence: 0.5, emissive: 0x442266, emissiveIntensity: 0.3 }),
+    track.gems.length,
+  );
+  const color = new T.Color();
+  const fr = {};
+  track.gems.forEach((g, i) => {
+    track.at(g.s, fr);
+    g.pos = fr.p.clone().addScaledVector(fr.r, g.u).addScaledVector(fr.u, R + 0.25 + g.h);
+    g.taken = false;
+    mesh.setColorAt(i, color.setHSL((g.s * 0.004 + (i % 5) * 0.12) % 1, 1, 0.55));
+  });
+  mesh.instanceColor.needsUpdate = true;
+  scene.add(mesh);
+  const m = new T.Matrix4(),
+    q = new T.Quaternion(),
+    sc = new T.Vector3(),
+    axis = new T.Vector3(0, 1, 0);
+  return {
+    mesh,
+    // Крутятся и покачиваются только кристаллы рядом с шаром
+    update(t, near) {
+      track.gems.forEach((g, i) => {
+        if (g.taken) sc.setScalar(0);
+        else sc.setScalar(1);
+        if (Math.abs(g.s - near) > 90 && !g.dirty) return;
+        g.dirty = Math.abs(g.s - near) <= 90;
+        q.setFromAxisAngle(axis, t * 2.4 + i);
+        m.compose(g.pos.clone().setY(g.pos.y + Math.sin(t * 3 + i) * 0.12), q, sc);
+        mesh.setMatrixAt(i, m);
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+    },
+  };
+}
+
+// ---------- Шар и его раскраски ----------
+export const skins = [
+  { id: "rainbow", name: "Радуга", cost: 0 },
+  { id: "melon", name: "Арбуз", cost: 60 },
+  { id: "beach", name: "Мячик", cost: 150 },
+  { id: "planet", name: "Планета", cost: 280 },
+  { id: "disco", name: "Диско", cost: 450 },
+  { id: "candy", name: "Леденец", cost: 650 },
+  { id: "lava", name: "Лава", cost: 900 },
+  { id: "stars", name: "Звёздочка", cost: 1200 },
+];
+const skinLooks = new Map();
+export function skinMaterial(id) {
+  if (skinLooks.has(id)) return skinLooks.get(id);
+  const paint = (draw) => canvasTexture(512, 256, draw);
+  let mat;
+  if (id === "rainbow") {
+    const map = paint((ctx) => candy.concat(candy).forEach((c, i) => ((ctx.fillStyle = c), ctx.fillRect(i * 43, 0, 44, 256))));
+    mat = new T.MeshPhysicalMaterial({ map, roughness: 0.2, clearcoat: 1 });
+  } else if (id === "melon") {
+    const map = paint((ctx) => {
+      ctx.fillStyle = "#3fa34d";
+      ctx.fillRect(0, 0, 512, 256);
+      ctx.fillStyle = "#1f6e2c";
+      for (let x = 0; x < 512; x += 64) {
+        ctx.beginPath();
+        for (let y = 0; y <= 256; y += 8) ctx.lineTo(x + 14 + Math.sin(y * 0.08) * 8, y);
+        for (let y = 256; y >= 0; y -= 8) ctx.lineTo(x + 30 + Math.sin(y * 0.08) * 8, y);
+        ctx.fill();
+      }
+    });
+    mat = new T.MeshPhysicalMaterial({ map, roughness: 0.35, clearcoat: 0.8 });
+  } else if (id === "beach") {
+    const map = paint((ctx) => ["#ff4f5e", "#ffffff", "#ffcf3c", "#ffffff", "#3fa2ff", "#ffffff"].forEach((c, i) => ((ctx.fillStyle = c), ctx.fillRect((i * 512) / 6, 0, 512 / 6 + 1, 256))));
+    mat = new T.MeshPhysicalMaterial({ map, roughness: 0.25, clearcoat: 1 });
+  } else if (id === "planet") {
+    const r = rng(5);
+    const map = paint((ctx) => {
+      ctx.fillStyle = "#2f7fe0";
+      ctx.fillRect(0, 0, 512, 256);
+      for (let i = 0; i < 26; i++) {
+        ctx.fillStyle = i % 4 ? "#4ec46a" : "#e8d27a";
+        ctx.beginPath();
+        ctx.ellipse(r() * 512, 40 + r() * 176, 18 + r() * 40, 10 + r() * 22, r() * 3, 0, pie * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = "rgba(255,255,255,.7)";
+      for (let i = 0; i < 14; i++) ctx.fillRect(r() * 512, r() * 256, 40 + r() * 60, 6);
+    });
+    mat = new T.MeshPhysicalMaterial({ map, roughness: 0.4, clearcoat: 0.6 });
+  } else if (id === "disco") {
+    const map = paint((ctx) => {
+      for (let x = 0; x < 512; x += 16)
+        for (let y = 0; y < 256; y += 16) {
+          ctx.fillStyle = `hsl(${(x + y) % 360},30%,${70 + ((x * y) % 25)}%)`;
+          ctx.fillRect(x + 1, y + 1, 14, 14);
+        }
+    });
+    mat = new T.MeshPhysicalMaterial({ map, metalness: 1, roughness: 0.12 });
+  } else if (id === "candy") {
+    const map = paint((ctx) => {
+      ctx.fillStyle = "#fff4f8";
+      ctx.fillRect(0, 0, 512, 256);
+      ctx.fillStyle = "#ff4f8e";
+      for (let x = -256; x < 512; x += 48) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x + 24, 0);
+        ctx.lineTo(x + 280, 256);
+        ctx.lineTo(x + 256, 256);
+        ctx.fill();
+      }
+    });
+    mat = new T.MeshPhysicalMaterial({ map, roughness: 0.15, clearcoat: 1 });
+  } else if (id === "lava") {
+    const r = rng(9);
+    const draw = (ctx) => {
+      ctx.fillStyle = "#3a1712";
+      ctx.fillRect(0, 0, 512, 256);
+      ctx.strokeStyle = "#ffb12b";
+      ctx.lineWidth = 5;
+      for (let i = 0; i < 40; i++) {
+        ctx.beginPath();
+        let x = r() * 512,
+          y = r() * 256;
+        ctx.moveTo(x, y);
+        for (let k = 0; k < 5; k++) ctx.lineTo((x += (r() - 0.5) * 60), (y += (r() - 0.5) * 60));
+        ctx.stroke();
+      }
+    };
+    const map = paint(draw);
+    mat = new T.MeshPhysicalMaterial({ map, emissiveMap: map, emissive: 0xff7a1a, emissiveIntensity: 0.9, roughness: 0.5 });
+  } else {
+    const r = rng(3);
+    const map = paint((ctx) => {
+      ctx.fillStyle = "#5b35c9";
+      ctx.fillRect(0, 0, 512, 256);
+      ctx.fillStyle = "#ffe14d";
+      for (let i = 0; i < 30; i++) {
+        const x = r() * 512,
+          y = 20 + r() * 216,
+          s = 6 + r() * 10;
+        ctx.beginPath();
+        for (let k = 0; k < 10; k++) {
+          const a = (k * pie) / 5,
+            d = k % 2 ? s * 0.45 : s;
+          ctx.lineTo(x + Math.cos(a) * d, y + Math.sin(a) * d);
+        }
+        ctx.fill();
+      }
+    });
+    mat = new T.MeshPhysicalMaterial({ map, emissiveMap: map, emissive: 0xffe14d, emissiveIntensity: 0.5, roughness: 0.2, clearcoat: 1 });
+  }
+  skinLooks.set(id, mat);
+  return mat;
+}
+export function ballMesh(scene, skin) {
+  const ball = new T.Mesh(new T.SphereGeometry(R, 48, 32), skinMaterial(skin));
+  ball.castShadow = true;
+  scene.add(ball);
+  return ball;
+}
+
+// ---------- Эффекты: след, искры, фейерверк ----------
+export function effects(scene) {
+  // След за шаром: цепочка светящихся бусин
+  const trailCount = 16;
+  const trail = new T.InstancedMesh(
+    new T.SphereGeometry(R * 0.4, 12, 8),
+    new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3, depthWrite: false }),
+    trailCount,
+  );
+  trail.frustumCulled = false;
+  scene.add(trail);
+  const history = [];
+  // Искры: общий запас частиц на вспышки
+  const sparkCount = 160;
+  const sparks = new T.InstancedMesh(new T.OctahedronGeometry(0.13, 0), new T.MeshBasicMaterial({ color: 0xffffff }), sparkCount);
+  sparks.frustumCulled = false;
+  const pool = Array.from({ length: sparkCount }, () => ({ p: new T.Vector3(), v: new T.Vector3(), life: 0, max: 1 }));
+  const color = new T.Color(),
+    m = new T.Matrix4(),
+    q = new T.Quaternion(),
+    sc = new T.Vector3();
+  for (let i = 0; i < sparkCount; i++) sparks.setColorAt(i, color.set(candy[i % candy.length]));
+  scene.add(sparks);
+  let next = 0;
+  return {
+    burst(at, count = 12, speed = 5, life = 0.7, up = 2) {
+      for (let k = 0; k < count; k++) {
+        const s = pool[next];
+        next = (next + 1) % sparkCount;
+        s.p.copy(at);
+        s.v.set((Math.random() - 0.5) * 2, Math.random() * 0.8 + 0.2, (Math.random() - 0.5) * 2).normalize().multiplyScalar(speed * (0.5 + Math.random() * 0.6));
+        s.v.y += up;
+        s.life = s.max = life * (0.7 + Math.random() * 0.5);
+      }
+    },
+    update(dt, ballPos, show, tint) {
+      history.unshift(ballPos.clone());
+      if (history.length > trailCount * 2) history.length = trailCount * 2;
+      trail.material.color.set(tint);
+      for (let i = 0; i < trailCount; i++) {
+        const p = history[i * 2 + 2];
+        const k = 1 - i / trailCount;
+        m.compose(p || ballPos, q.identity(), sc.setScalar(show && p ? k * 0.9 : 0));
+        trail.setMatrixAt(i, m);
+      }
+      trail.instanceMatrix.needsUpdate = true;
+      for (let i = 0; i < sparkCount; i++) {
+        const s = pool[i];
+        if (s.life > 0) {
+          s.life -= dt;
+          s.v.y -= 9 * dt;
+          s.p.addScaledVector(s.v, dt);
+        }
+        const k = Math.max(0, s.life / s.max);
+        q.setFromAxisAngle(sc.set(0.3, 1, 0.2).normalize(), s.life * 12);
+        m.compose(s.p, q, sc.setScalar(k * 1.4));
+        sparks.setMatrixAt(i, m);
+      }
+      sparks.instanceMatrix.needsUpdate = true;
+    },
+  };
+}
