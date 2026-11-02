@@ -479,9 +479,62 @@ const Music = {
 
 // Голосовые подсказки вместо текста: игрок ещё не читает.
 // Если русского голоса нет, просто молчим: чужой голос читает русский непонятно.
+// Голос: записанные фразы Google (voices/<имя>.mp3, см. games-portal/tools/voices.mjs).
+// Если записи нет или звук ещё не разрешён — встроенный голос устройства, как раньше.
 const Voice = {
-  say(text) {
-    if (!Sound.on || !("speechSynthesis" in window)) return;
+  cache: new Map(),
+  token: 0,
+  current: null,
+  // Та же транслитерация, что в tools/voices.mjs: «Выбери дерево!» → vyberi-derevo
+  slug(text) {
+    const map = { а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "yo", ж: "zh", з: "z", и: "i", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u", ф: "f", х: "h", ц: "ts", ч: "ch", ш: "sh", щ: "sch", ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya" };
+    return text
+      .toLowerCase()
+      .split("")
+      .map((c) => map[c] ?? c)
+      .join("")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 60);
+  },
+  async say(text) {
+    if (!Sound.on) return;
+    this.stop();
+    const token = this.token,
+      ctx = Sound.ctx;
+    if (ctx) {
+      try {
+        const id = this.slug(text);
+        if (!this.cache.has(id)) {
+          const loading = fetch("./voices/" + id + ".mp3")
+            .then((r) => {
+              if (!r.ok) throw Error("voice");
+              return r.arrayBuffer();
+            })
+            .then((data) => ctx.decodeAudioData(data));
+          loading.catch(() => {});
+          this.cache.set(id, loading);
+        }
+        const clip = await this.cache.get(id);
+        if (token !== this.token) return;
+        const source = ctx.createBufferSource(),
+          gain = ctx.createGain();
+        source.buffer = clip;
+        gain.gain.value = Math.min(1, Sound.effectsLevel + 0.15);
+        source.connect(gain);
+        gain.connect(Sound.master);
+        source.start();
+        this.current = source;
+        Music.duck(clip.duration + 0.3);
+        return;
+      } catch (_) {
+        if (token !== this.token) return;
+      }
+    }
+    this.speak(text);
+  },
+  speak(text) {
+    if (!("speechSynthesis" in window)) return;
     try {
       const voices = speechSynthesis.getVoices(),
         russian = voices.find((v) => /^ru/i.test(v.lang));
@@ -497,6 +550,11 @@ const Voice = {
     } catch (_) {}
   },
   stop() {
+    this.token++;
+    try {
+      if (this.current) this.current.stop();
+    } catch (_) {}
+    this.current = null;
     try {
       if ("speechSynthesis" in window) speechSynthesis.cancel();
     } catch (_) {}

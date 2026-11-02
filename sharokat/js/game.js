@@ -195,7 +195,8 @@ function step(dt) {
   ball.rotateOnWorldAxis(F.r, -(b.v * dt) / R);
   ball.rotateOnWorldAxis(F.f, ((b.uTarget - b.u) * dt * 3) / R);
   // Кристаллы рядом
-  for (const g of tr.gems) if (!g.taken && Math.abs(g.s - b.s) < 3 && g.pos.distanceToSquared(pos) < 1.1) collect(g);
+  // Кристаллы крупные, поэтому и ловятся щедро
+  for (const g of tr.gems) if (!g.taken && Math.abs(g.s - b.s) < 3 && g.pos.distanceToSquared(pos) < 1.7) collect(g);
   // Ускорители
   for (const p of tr.boosts)
     if (before < p.s + 2 && b.s >= p.s + 2) {

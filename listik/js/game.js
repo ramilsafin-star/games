@@ -6,12 +6,12 @@ import { icon } from "./icons.js";
 const el = (id) => document.getElementById(id);
 // pal — номер модели зверька в models.js. Первые трое — покупатели из первой версии лавки.
 const customers = [
-  { pal: 1, name: "Лисёнок Рыжик", hello: "hello-fox", likes: ["milk", "bread", "eggs", "cheese", "apple"] },
-  { pal: 2, name: "Зайка Тося", hello: "hello-bunny", likes: ["carrot", "cabbage", "pear", "apple"] },
-  { pal: 0, name: "Мишка Топтыж", hello: "hello-bear", likes: ["honey", "jam", "bread", "fish", "mushroom"] },
-  { pal: 3, name: "Котёнок Мурка", hello: "hello-cat", likes: ["fish", "milk", "cheese"] },
-  { pal: 4, name: "Поросёнок Хрюня", hello: "hello-pig", likes: ["apple", "banana", "mushroom", "juice"] },
-  { pal: 5, name: "Панда Бусинка", hello: "hello-panda", likes: ["banana", "cabbage", "juice", "pear"] },
+  { pal: 1, name: "Лисёнок Рыжик", voice: "fox", likes: ["milk", "bread", "eggs", "cheese", "apple"] },
+  { pal: 2, name: "Зайка Тося", voice: "bunny", likes: ["carrot", "cabbage", "pear", "apple"] },
+  { pal: 0, name: "Мишка Топтыж", voice: "bear", likes: ["honey", "jam", "bread", "fish", "mushroom"] },
+  { pal: 3, name: "Котёнок Мурка", voice: "cat", likes: ["fish", "milk", "cheese"] },
+  { pal: 4, name: "Поросёнок Хрюня", voice: "pig", likes: ["apple", "banana", "mushroom", "juice"] },
+  { pal: 5, name: "Панда Бусинка", voice: "panda", likes: ["banana", "cabbage", "juice", "pear"] },
 ];
 const steps = [
   { id: "scan", title: "Пробей покупки" },
@@ -81,6 +81,8 @@ function clip(id, ctx) {
   }
   return recordings.get(id);
 }
+// Записи голосов Google: у каждого покупателя своя папка, счёт и сумма — в папке кассы
+const mine = (id) => guest.voice + "/" + id;
 async function talk(ids, delay = 0) {
   stopVoice();
   if (!sound || !Sound.ctx) return;
@@ -202,7 +204,7 @@ async function nextCustomer() {
   store.focusOn("customer");
   Sound.door();
   await store.enter(guest.pal, order.items);
-  talk([guest.hello]);
+  talk([mine("hello")]);
   setStep(0);
   busy = false;
 }
@@ -210,7 +212,7 @@ function onScanned(it) {
   it.scanned = true;
   scanned++;
   Sound.beep();
-  talk(["n" + Math.min(scanned, 5)]);
+  talk(["register/n" + Math.min(scanned, 5)]);
   idleAt = performance.now();
   screen();
   if (scanned === order.items.length) {
@@ -218,7 +220,7 @@ function onScanned(it) {
     // Всё пробито: касса звенит и называет сумму
     setTimeout(() => {
       Sound.ching();
-      talk(["total-" + order.total], 0.35);
+      talk(["register/total-" + order.total], 0.35);
       setStep(1);
       busy = false;
     }, 700);
@@ -237,13 +239,13 @@ async function packOne(it) {
 async function startPay() {
   setStep(2);
   if (order.cash) {
-    talk(["pay-cash"]);
+    talk([mine("pay-cash")]);
     await store.offerCash(order.notes);
     Sound.ching();
   } else {
     store.offerCard();
     store.terminalScreen("amount", order.total);
-    talk(["pay-card"]);
+    talk([mine("pay-card")]);
   }
   busy = false;
 }
@@ -261,7 +263,7 @@ async function giveCoin() {
   const n = coins;
   idleAt = performance.now();
   Sound.coin(n);
-  talk(["n" + n]);
+  talk(["register/n" + n]);
   changeBar();
   screen();
   store.giveCoin(n - 1);
@@ -287,7 +289,7 @@ async function giveReceipt() {
   store.hint(null);
   await store.giveReceipt();
   const shiftEnd = (served + 1) % 3 === 0;
-  talk([served % 2 ? "bye2" : "bye1"]);
+  talk([mine(served % 2 ? "bye2" : "bye1")]);
   store.cheer(shiftEnd);
   if (shiftEnd) Sound.fanfare();
   else Sound.gift();
@@ -380,7 +382,7 @@ function onDown(e) {
   } else if (step === 3) {
     if (store.hit("receipt", x, y) || store.hit("register", x, y) || store.hit("customer", x, y)) return giveReceipt();
   }
-  if (store.hit("customer", x, y)) talk([guest.hello]);
+  if (store.hit("customer", x, y)) talk([mine("hello")]);
 }
 function onMove(e) {
   if (!press || press.pointer !== e.pointerId) return;

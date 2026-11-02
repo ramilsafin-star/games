@@ -432,42 +432,76 @@ export function obstacles(scene, track) {
 }
 
 // ---------- Кристаллы ----------
+// Крупные гранёные кристаллы светятся своим цветом (видны и в ночных темах) и окружены ореолом.
+// Все стоят на своих местах с самого начала; крутятся только те, что рядом с шаром.
 export function gemField(scene, track) {
-  const geo = new T.OctahedronGeometry(0.36, 0);
+  const geo = new T.OctahedronGeometry(0.5, 0);
   geo.scale(1, 1.35, 1);
-  const mesh = new T.InstancedMesh(
-    geo,
-    new T.MeshPhysicalMaterial({ roughness: 0.08, metalness: 0.15, clearcoat: 1, iridescence: 0.5, emissive: 0x442266, emissiveIntensity: 0.3 }),
-    track.gems.length,
+  const look = new T.MeshStandardMaterial({ roughness: 0.15, metalness: 0.15, flatShading: true });
+  // Свечение цветом самого кристалла: цвет экземпляра добавляется к собственному свету
+  look.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <emissivemap_fragment>",
+      "#include <emissivemap_fragment>\n#ifdef USE_COLOR\n totalEmissiveRadiance += vColor * 0.55;\n#endif",
+    );
+  };
+  const n = track.gems.length;
+  const mesh = new T.InstancedMesh(geo, look, n);
+  const halo = new T.InstancedMesh(
+    new T.SphereGeometry(0.95, 16, 12),
+    new T.MeshBasicMaterial({ transparent: true, opacity: 0.3, blending: T.AdditiveBlending, depthWrite: false }),
+    n,
   );
-  const color = new T.Color();
-  const fr = {};
-  track.gems.forEach((g, i) => {
-    track.at(g.s, fr);
-    g.pos = fr.p.clone().addScaledVector(fr.r, g.u).addScaledVector(fr.u, R + 0.25 + g.h);
-    g.taken = false;
-    mesh.setColorAt(i, color.setHSL((g.s * 0.004 + (i % 5) * 0.12) % 1, 1, 0.55));
-  });
-  mesh.instanceColor.needsUpdate = true;
-  scene.add(mesh);
-  const m = new T.Matrix4(),
+  mesh.frustumCulled = halo.frustumCulled = false;
+  halo.renderOrder = 2;
+  const color = new T.Color(),
+    m = new T.Matrix4(),
     q = new T.Quaternion(),
     sc = new T.Vector3(),
-    axis = new T.Vector3(0, 1, 0);
+    up = new T.Vector3(0, 1, 0),
+    at = new T.Vector3(),
+    fr = {};
+  track.gems.forEach((g, i) => {
+    track.at(g.s, fr);
+    g.pos = fr.p.clone().addScaledVector(fr.r, g.u).addScaledVector(fr.u, R + 0.4 + g.h);
+    g.taken = false;
+    g.shown = true;
+    color.setHSL((g.s * 0.004 + (i % 5) * 0.12) % 1, 1, 0.58);
+    mesh.setColorAt(i, color);
+    halo.setColorAt(i, color);
+    q.setFromAxisAngle(up, i);
+    m.compose(g.pos, q, sc.setScalar(1));
+    mesh.setMatrixAt(i, m);
+    m.compose(g.pos, q, sc.setScalar(1));
+    halo.setMatrixAt(i, m);
+  });
+  mesh.instanceColor.needsUpdate = halo.instanceColor.needsUpdate = true;
+  scene.add(mesh, halo);
   return {
     mesh,
-    // Крутятся и покачиваются только кристаллы рядом с шаром
     update(t, near) {
+      let changed = false;
       track.gems.forEach((g, i) => {
-        if (g.taken) sc.setScalar(0);
-        else sc.setScalar(1);
-        if (Math.abs(g.s - near) > 90 && !g.dirty) return;
-        g.dirty = Math.abs(g.s - near) <= 90;
-        q.setFromAxisAngle(axis, t * 2.4 + i);
-        m.compose(g.pos.clone().setY(g.pos.y + Math.sin(t * 3 + i) * 0.12), q, sc);
+        if (g.taken) {
+          if (!g.shown) return;
+          g.shown = false;
+          m.compose(g.pos, q.identity(), sc.setScalar(0));
+          mesh.setMatrixAt(i, m);
+          halo.setMatrixAt(i, m);
+          changed = true;
+          return;
+        }
+        // Крутятся и покачиваются кристаллы впереди шара, ореол мягко дышит
+        if (g.s < near - 10 || g.s > near + 160) return;
+        q.setFromAxisAngle(up, t * 2.4 + i);
+        at.copy(g.pos).setY(g.pos.y + Math.sin(t * 3 + i) * 0.15);
+        m.compose(at, q, sc.setScalar(1));
         mesh.setMatrixAt(i, m);
+        m.compose(at, q, sc.setScalar(0.9 + 0.2 * Math.sin(t * 5 + i)));
+        halo.setMatrixAt(i, m);
+        changed = true;
       });
-      mesh.instanceMatrix.needsUpdate = true;
+      if (changed) mesh.instanceMatrix.needsUpdate = halo.instanceMatrix.needsUpdate = true;
     },
   };
 }

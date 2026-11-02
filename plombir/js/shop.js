@@ -181,15 +181,17 @@ async function talk(ids, delay = 0) {
     Music.duck(at - ctx.currentTime + 0.2);
   } catch {}
 }
+// Записи голосов Google лежат по папкам гостей: voices/bear/berry.mp3 и т. п.
 function orderVoice(delay = 0) {
-  if (step === 3) return talk([perfect ? "perfect" : guest.voice], delay);
+  const own = (id) => guest.voice + "/" + id;
+  if (step === 3) return talk([own(perfect ? "perfect" : "thanks")], delay);
   const ids = !order.scoops.length
     ? ["surprise"]
     : order.scoops.length === 1
       ? [flavors[order.scoops[0]].id]
       : ["two-" + order.scoops.map((i) => flavors[i].id).join("-")];
   if (order.top) ids.push("top-" + order.top);
-  talk(ids, delay);
+  talk(ids.map(own), delay);
 }
 function wishText() {
   if (!order.scoops.length) return "Хочу сюрприз!";
