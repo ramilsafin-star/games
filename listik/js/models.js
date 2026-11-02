@@ -1,6 +1,6 @@
-import * as T from "../vendor/three/three.module.min.js";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js";
-import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js";
+import * as T from "../vendor/three/three.module.min.js?v=a2db44a6";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=a2db44a6";
+import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js?v=a2db44a6";
 
 const materials = new Map(),
   boxes = new Map();

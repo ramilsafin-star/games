@@ -1,7 +1,7 @@
 // «Лавка Листик»: ход покупки, касания, голоса, наклейки. Всё, что видно в 3D, — в store.js.
-import { Store } from "./store.js";
-import { goods } from "./models.js";
-import { icon } from "./icons.js";
+import { Store } from "./store.js?v=a2db44a6";
+import { goods } from "./models.js?v=a2db44a6";
+import { icon } from "./icons.js?v=a2db44a6";
 
 const el = (id) => document.getElementById(id);
 // pal — номер модели зверька в models.js. Первые трое — покупатели из первой версии лавки.

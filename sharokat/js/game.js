@@ -1,9 +1,9 @@
 // «Шарокат»: шар катится по радужным горкам в небе. Здесь игровой цикл, физика шара, камера, меню.
-import * as T from "../vendor/three/three.module.min.js";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js";
-import { Track, trackMesh, railLights, tubeMeshes, HALF } from "./track.js";
-import { R, sky, scenery, supports, gates, boostPads, obstacles, gemField, skins, skinMaterial, ballMesh, effects } from "./world.js";
-import { themeFor } from "./themes.js";
+import * as T from "../vendor/three/three.module.min.js?v=d712f43b";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=d712f43b";
+import { Track, trackMesh, railLights, tubeMeshes, HALF } from "./track.js?v=d712f43b";
+import { R, sky, scenery, supports, gates, boostPads, obstacles, gemField, skins, skinMaterial, ballMesh, effects } from "./world.js?v=d712f43b";
+import { themeFor } from "./themes.js?v=d712f43b";
 
 const LEVELS = 12;
 const el = (id) => document.getElementById(id);

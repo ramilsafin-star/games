@@ -1,6 +1,6 @@
 // Трасса «Шароката»: путь строится «черепашкой» из кусков (холм, поворот, петля, прыжок…),
 // каждые полметра — кадр (точка, вперёд, вверх, вправо). По кадрам строятся меш и физика шара.
-import * as T from "../vendor/three/three.module.min.js";
+import * as T from "../vendor/three/three.module.min.js?v=d712f43b";
 
 export const DS = 0.5;
 export const HALF = 2.2; // половина ширины дорожки
@@ -71,6 +71,43 @@ export class Track {
     this.hue = (level * 0.13) % 1;
     for (const seg of plan(level)) this[seg.type](seg);
     this.length = this.s;
+    this.fillGems();
+  }
+  // Дорожки кристаллов по всей трассе: где их нет, ставим группами по пять,
+  // и каждая следующая группа переходит в другой ряд — есть чем рулить
+  fillGems() {
+    const lanes = [0, -1.3, 1.3, 0, 1.3, -1.3];
+    const taken = this.gems.map((g) => g.s).sort((a, b) => a - b);
+    const near = (s, gap) => {
+      let lo = 0,
+        hi = taken.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (taken[mid] < s - gap) lo = mid + 1;
+        else hi = mid;
+      }
+      return lo < taken.length && taken[lo] <= s + gap;
+    };
+    let run = 0,
+      lane = 0;
+    for (let s = 12; s < this.finishAt - 4; s += 2) {
+      const a = this.samples[Math.round(s / DS)];
+      const blocked =
+        a.air || a.kind === "loop" || a.kind === "ramp" || near(s, 4) || this.obstacles.some((o) => Math.abs(o.s - s) < 2.5);
+      if (blocked) {
+        run = 0;
+        continue;
+      }
+      if (run === 5) {
+        run = 0;
+        lane++;
+        s += 2; // промежуток между группами
+        continue;
+      }
+      const half = a.half - 0.9;
+      this.gems.push({ s, u: Math.max(-half, Math.min(half, lanes[lane % lanes.length])), h: 0 });
+      run++;
+    }
   }
   frame(h, p, b) {
     const fwd = new T.Vector3(Math.sin(h), 0, -Math.cos(h));

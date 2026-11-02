@@ -1,6 +1,6 @@
 // Темы трасс: у каждого уровня своя — небо, дорожка, бортики, острова, облака, море внизу.
 // Уровень n берёт тему themes[n % themes.length].
-import * as T from "../vendor/three/three.module.min.js";
+import * as T from "../vendor/three/three.module.min.js?v=d712f43b";
 
 function tile(draw) {
   const c = document.createElement("canvas");

@@ -1,5 +1,5 @@
-import * as T from "../vendor/three/three.module.min.js";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js";
+import * as T from "../vendor/three/three.module.min.js?v=c154e7bd";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=c154e7bd";
 import {
   scenery,
   truck,
@@ -18,7 +18,7 @@ import {
   balloons,
   butterfly,
   bulbs,
-} from "./models.js";
+} from "./models.js?v=c154e7bd";
 
 const clamp = T.MathUtils.clamp,
   mix = T.MathUtils.lerp;

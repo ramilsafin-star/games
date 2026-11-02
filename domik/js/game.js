@@ -1,8 +1,8 @@
 // Ход игры: шаги стройки, касания, подсказки, сохранение. Читать ребёнку ничего не нужно.
-import * as T from "../vendor/three/three.module.min.js";
-import { World, TREES } from "./world.js";
-import { TreeHouse, DECK_Y } from "./house.js";
-import { Room, CATS, ITEMS, WALLPAPERS, FLOORS, swatchOf } from "./room.js";
+import * as T from "../vendor/three/three.module.min.js?v=92e09217";
+import { World, TREES } from "./world.js?v=92e09217";
+import { TreeHouse, DECK_Y } from "./house.js?v=92e09217";
+import { Room, CATS, ITEMS, WALLPAPERS, FLOORS, swatchOf } from "./room.js?v=92e09217";
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("game");

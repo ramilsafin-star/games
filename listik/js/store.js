@@ -1,6 +1,6 @@
 // Сцена магазина на Three.js: всё, что видно и что движется. Правила покупки живут в game.js.
-import * as T from "../vendor/three/three.module.min.js";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js";
+import * as T from "../vendor/three/three.module.min.js?v=a2db44a6";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=a2db44a6";
 import {
   shop,
   counter,
@@ -20,7 +20,7 @@ import {
   heart,
   group,
   orb,
-} from "./models.js";
+} from "./models.js?v=a2db44a6";
 
 const clamp = T.MathUtils.clamp,
   mix = T.MathUtils.lerp,
