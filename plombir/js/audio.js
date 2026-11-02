@@ -26,6 +26,7 @@ const Sound = {
       this.sfxBus.gain.value = 0.82;
       this.sfxBus.connect(comp);
       comp.connect(this.master);
+      this.comp = comp;
       this.master.connect(c.destination);
       this.master.gain.value = this.on ? 0.9 : 0;
       const len = c.sampleRate;
@@ -149,5 +150,140 @@ const Sound = {
     });
     // Хлопушка с конфетти
     this.noise({ f0: 2600, f1: 600, dur: 0.25, vol: 0.16, filter: "bandpass" });
+    Music.duck(1.9);
+  },
+};
+
+// =====================================================
+// ФОНОВАЯ МУЗЫКА как у фургона мороженого: звенящая музыкальная шкатулка
+// поверх «умпа-умпа». Мелодия своя, играется кодом по кругу (16 тактов, около 31 с).
+// =====================================================
+const Music = {
+  on: true,
+  level: 1,
+  bus: null,
+  timer: null,
+  events: null,
+  loop: 0,
+  index: 0,
+  start0: 0,
+  eighth: 0.24,
+  // Мелодия по тактам: нота или «-» (пауза), после двоеточия длина в восьмых
+  tune: [
+    "E5 G5 C6:2 B5 A5 G5:2",
+    "A5 G5 E5:2 D5:2 G5:2",
+    "E5 G5 C6:2 B5 C6 D6:2",
+    "C6:4 G5:2 -:2",
+    "F5 A5 C6:2 A5 F5 A5:2",
+    "G5 E5 C5:2 E5:2 G5:2",
+    "F5 E5 D5:2 G5 F5 E5 D5",
+    "C5:4 -:4",
+    "G5 G5 A5 G5 E5:2 C5:2",
+    "D5 D5 E5 D5 B4:2 G4:2",
+    "C5 E5 G5 C6 B5 A5 G5:2",
+    "A5:2 F5:2 D5:2 -:2",
+    "G5 G5 A5 G5 E5:2 C6:2",
+    "B5 A5 G5 F5 E5:2 G5:2",
+    "F5 A5 G5 F5 D5:2 B4:2",
+    "C5:2 G4 C5 -:4",
+  ],
+  // Аккорды на каждую половину такта
+  harmony: [
+    "C G", "Am G", "C G", "C C", "F F", "C C", "Dm G7", "C C",
+    "C C", "G G", "C G", "F Dm", "C C", "G7 C", "F G7", "C C",
+  ],
+  chords: {
+    C: { bass: ["C3", "G2"], notes: ["C4", "E4", "G4"] },
+    Am: { bass: ["A2", "E3"], notes: ["A3", "C4", "E4"] },
+    G: { bass: ["G2", "D3"], notes: ["G3", "B3", "D4"] },
+    G7: { bass: ["G2", "D3"], notes: ["G3", "B3", "F4"] },
+    F: { bass: ["F2", "C3"], notes: ["F3", "A3", "C4"] },
+    Dm: { bass: ["D3", "A2"], notes: ["D4", "F4", "A4"] },
+  },
+  hz(name) {
+    const steps = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+    const midi = 12 * (Number(name.slice(-1)) + 1) + steps[name[0]];
+    return 440 * Math.pow(2, (midi - 69) / 12);
+  },
+  // Все ноты одного круга: время в восьмых и что звучит
+  build() {
+    const events = [];
+    let at = 0;
+    for (const bar of this.tune)
+      for (const token of bar.split(" ")) {
+        const [note, len = "1"] = token.split(":");
+        if (note !== "-") events.push({ at, kind: "box", f: this.hz(note), len: +len });
+        at += +len;
+      }
+    this.harmony.forEach((pair, bar) =>
+      pair.split(" ").forEach((name, half) => {
+        const chord = this.chords[name],
+          same = pair.split(" ")[0] === pair.split(" ")[1];
+        const base = bar * 8 + half * 4;
+        // Бас на сильную долю, на повторе аккорда — квинта, как у шарманки
+        events.push({ at: base, kind: "bass", f: this.hz(chord.bass[same && half ? 1 : 0]) });
+        events.push({ at: base + 2, kind: "stab", fs: chord.notes.map((n) => this.hz(n)) });
+      }),
+    );
+    events.sort((a, b) => a.at - b.at);
+    this.loop = this.tune.length * 8;
+    return events;
+  },
+  play(e, when) {
+    const at = Math.max(0, when - Sound.ctx.currentTime),
+      bus = this.bus;
+    if (e.kind === "box") {
+      // Шкатулка: мягкий треугольник, октава выше и короткий «динь» молоточка
+      const dur = Math.max(0.42, e.len * this.eighth * 0.95);
+      Sound.tone({ type: "triangle", f0: e.f, dur, vol: 0.15, at, attack: 0.004 }, bus);
+      Sound.tone({ type: "sine", f0: e.f * 2, dur: dur * 0.6, vol: 0.06, at, attack: 0.003 }, bus);
+      Sound.tone({ type: "sine", f0: e.f * 4.2, dur: 0.06, vol: 0.024, at }, bus);
+    } else if (e.kind === "bass") {
+      Sound.tone({ type: "triangle", f0: e.f, dur: 0.24, vol: 0.17, at }, bus);
+    } else
+      for (const f of e.fs)
+        Sound.tone({ type: "triangle", f0: f, dur: 0.14, vol: 0.045, at }, bus);
+  },
+  start() {
+    if (!this.on || this.timer || !Sound.ctx || !Sound.on) return;
+    if (!this.bus) {
+      this.bus = Sound.ctx.createGain();
+      this.bus.gain.value = this.level;
+      this.bus.connect(Sound.comp);
+      this.events = this.build();
+    }
+    this.index = 0;
+    this.start0 = Sound.ctx.currentTime + 0.15;
+    this.timer = setInterval(() => this.tick(), 60);
+    this.tick();
+  },
+  stop() {
+    clearInterval(this.timer);
+    this.timer = null;
+  },
+  // Ноты ставятся в очередь на четверть секунды вперёд, чтобы не было запинок
+  tick() {
+    const ctx = Sound.ctx;
+    if (!ctx || ctx.state !== "running") return;
+    for (;;) {
+      const e = this.events[this.index],
+        when = this.start0 + e.at * this.eighth;
+      if (when > ctx.currentTime + 0.25) break;
+      if (when > ctx.currentTime - 0.05) this.play(e, when);
+      this.index++;
+      if (this.index >= this.events.length) {
+        this.index = 0;
+        this.start0 += this.loop * this.eighth;
+      }
+    }
+  },
+  // Пока говорит гость или играет фанфара, музыка становится тише
+  duck(seconds, depth = 0.25) {
+    if (!this.bus) return;
+    const g = this.bus.gain,
+      now = Sound.ctx.currentTime;
+    g.cancelScheduledValues(now);
+    g.setTargetAtTime(this.level * depth, now, 0.05);
+    g.setTargetAtTime(this.level, now + seconds, 0.35);
   },
 };

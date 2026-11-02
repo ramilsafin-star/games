@@ -900,10 +900,15 @@ h1 em {
     font-size: 14px;
   }
 }
-/* Отдельная игра: слева место под кнопку «Все игры» от портала */
+/* Отдельная игра: слева место под кнопку «Все игры» от портала,
+   справа кнопки музыки и звука; ширина слева равна правой, чтобы название было по центру */
 .home-slot {
-  min-width: 42px;
+  min-width: 92px;
   display: flex;
+}
+.tools {
+  display: flex;
+  gap: 8px;
 }
 .home-slot a {
   border: 1.5px solid #584153;
@@ -936,4 +941,16 @@ h1 em {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+.wordmark {
+  white-space: nowrap;
+}
+@media (max-width: 400px) {
+  .home-slot {
+    min-width: 46px;
+  }
+  .wordmark {
+    font-size: 13px;
+    letter-spacing: 0;
+  }
 }

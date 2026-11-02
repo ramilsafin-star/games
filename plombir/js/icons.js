@@ -18,6 +18,11 @@ export const icon = (id) =>
   '<svg viewBox="0 0 62 62" aria-hidden="true" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' +
   drawings[id] +
   "</svg>";
+// Нота: музыка играет; перечёркнутая нота — музыка выключена
+export const tune = (on) =>
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 17.5V5.5l10-2v12"/><circle cx="6.6" cy="17.6" r="2.4"/><circle cx="16.6" cy="15.6" r="2.4"/>' +
+  (on ? "" : '<path d="M3.5 3.5l17 17"/>') +
+  "</svg>";
 export const speaker = (on) =>
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9h4l5-4v14l-5-4H3z"/>' +
   (on

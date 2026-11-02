@@ -1,6 +1,6 @@
 import { flavors } from "./models.js";
 import { Park } from "./park.js";
-import { icon, speaker, picto } from "./icons.js";
+import { icon, speaker, picto, tune } from "./icons.js";
 
 const el = (id) => document.getElementById(id);
 // Порядок гостей совпадает с pals в models.js. voice — файл в voices/ со словами из thanks.
@@ -68,6 +68,7 @@ let round = served,
   guest,
   order;
 let sound = read("sound") !== "off",
+  music = read("music") !== "off",
   park,
   noteTimer,
   drag,
@@ -116,8 +117,20 @@ function soundButton() {
   );
   el("sound").setAttribute("aria-pressed", String(sound));
 }
+// Звук на iPad включается только от касания; музыка стартует вместе с ним
 function unlock() {
-  if (sound) Sound.unlock();
+  if (!sound) return;
+  Sound.unlock();
+  if (music) Music.start();
+}
+function musicButton() {
+  Music.on = music;
+  el("music").innerHTML = tune(music);
+  el("music").setAttribute(
+    "aria-label",
+    music ? "Выключить музыку" : "Включить музыку",
+  );
+  el("music").setAttribute("aria-pressed", String(music));
 }
 function stopVoice() {
   utterance++;
@@ -164,6 +177,8 @@ async function talk(ids, delay = 0) {
       voices.push(source);
       at += buffer.duration + 0.06;
     }
+    // Пока гость говорит, музыка затихает
+    Music.duck(at - ctx.currentTime + 0.2);
   } catch {}
 }
 function orderVoice(delay = 0) {
@@ -485,14 +500,30 @@ el("sound").onclick = () => {
   if (sound) {
     unlock();
     orderVoice();
-  } else stopVoice();
+  } else {
+    stopVoice();
+    Music.stop();
+  }
+};
+el("music").onclick = () => {
+  music = !music;
+  save("music", music ? "on" : "off");
+  musicButton();
+  if (music) unlock();
+  else Music.stop();
 };
 window.addEventListener("pagehide", () => {
   clearDrag();
   stopVoice();
+  Music.stop();
 });
+// В свёрнутой вкладке музыка молчит, а при возвращении играет снова
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) stopVoice();
+  if (document.hidden) {
+    stopVoice();
+    Music.stop();
+  } else if (sound && music && Sound.ctx) Music.start();
 });
 begin();
 soundButton();
+musicButton();
