@@ -3,15 +3,24 @@ import * as T from "../vendor/three/three.module.min.js";
 import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js";
 import { Track, trackMesh, railLights, tubeMeshes, HALF } from "./track.js";
 import { R, sky, scenery, supports, gates, boostPads, obstacles, gemField, skins, skinMaterial, ballMesh, effects } from "./world.js";
+import { themeFor } from "./themes.js";
 
 const LEVELS = 12;
 const el = (id) => document.getElementById(id);
 const clamp = T.MathUtils.clamp;
 const KEY = "sharokat-v1";
+// gems — кошелёк кристаллов, owned — купленные шары
 let save = { open: 1, stars: [], gems: 0, skin: "rainbow", sound: true, music: true };
 try {
   Object.assign(save, JSON.parse(localStorage.getItem(KEY)) || {});
 } catch {}
+if (!Array.isArray(save.owned)) {
+  // Раньше шары открывались сами по сумме кристаллов: открытые тогда остаются подарком
+  const old = { rainbow: 0, melon: 60, beach: 150, planet: 280, disco: 450, candy: 650, lava: 900, stars: 1200 };
+  save.owned = Object.keys(old).filter((id) => old[id] <= save.gems);
+}
+if (!save.owned.includes("rainbow")) save.owned.push("rainbow");
+if (!save.owned.includes(save.skin)) save.skin = "rainbow";
 function store() {
   try {
     localStorage.setItem(KEY, JSON.stringify(save));
@@ -37,7 +46,8 @@ const pmrem = new T.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 scene.environmentIntensity = 0.55;
 const camera = new T.PerspectiveCamera(64, 1, 0.1, 900);
-scene.add(new T.HemisphereLight(0xffffff, 0xffd6e6, 1.25));
+const hemi = new T.HemisphereLight(0xffffff, 0xffd6e6, 1.25);
+scene.add(hemi);
 // Солнце едет вместе с шаром, чтобы у шара всегда была тень на дорожке
 const sun = new T.DirectionalLight(0xfff4dc, 2.1);
 sun.castShadow = true;
@@ -45,7 +55,7 @@ sun.shadow.mapSize.set(1024, 1024);
 Object.assign(sun.shadow.camera, { left: -14, right: 14, top: 14, bottom: -14, near: 1, far: 80 });
 sun.shadow.bias = -0.0004;
 scene.add(sun, sun.target);
-sky(scene);
+const heaven = sky(scene);
 const fx = effects(scene);
 const ball = ballMesh(scene, save.skin);
 
@@ -66,11 +76,19 @@ function loadLevel(n) {
   world = new T.Group();
   scene.add(world);
   const track = new Track(n);
-  world.add(trackMesh(track), railLights(track), tubeMeshes(track));
-  const view = scenery(world, track);
-  supports(world, track);
+  const theme = themeFor(n);
+  // Тема уровня: небо, туман, свет, дорожка, острова
+  heaven.setTheme(theme);
+  scene.fog.color.set(theme.fog);
+  hemi.intensity = theme.light[0];
+  sun.intensity = theme.light[1];
+  sun.color.set(theme.light[2]);
+  world.add(trackMesh(track, theme), railLights(track, theme), tubeMeshes(track));
+  const view = scenery(world, track, theme);
+  supports(world, track, theme);
   lvl = {
     n,
+    theme,
     track,
     view,
     gates: gates(world, track),
@@ -80,7 +98,7 @@ function loadLevel(n) {
     total: track.gems.length,
   };
   resetBall(0);
-  el("level-name").textContent = "Уровень " + (n + 1);
+  el("level-name").textContent = "Уровень " + (n + 1) + " · " + theme.name;
 }
 // ---------- Шар ----------
 const b = { s: 0, u: 0, uTarget: 0, v: 0, h: 0, vh: 0, knock: 0, boost: 0, checkpoint: 0, gems: 0, state: "menu", fallT: 0, grace: 0 };
@@ -89,8 +107,9 @@ const F = {},
   pos = new T.Vector3(),
   vel = new T.Vector3();
 let hitCooldown = new Map();
+// Крейсерская скорость: 15 м/с на первом уровне, до 21 на последних
 function cruise() {
-  return Math.min(11 + lvl.n * 0.35, 15);
+  return Math.min(15 + lvl.n * 0.5, 21);
 }
 function resetBall(s) {
   Object.assign(b, { s, u: 0, uTarget: 0, v: s ? cruise() * 0.7 : 0, h: 0, vh: 0, knock: 0, boost: 0, fallT: 0, grace: 0.8 });
@@ -130,14 +149,14 @@ function step(dt) {
   const before = b.s;
   tr.at(b.s, F);
   // Скорость: держится у крейсерской, на спусках разгон, на подъёмах и в петлях замедление
-  const goal = b.boost > 0 ? 20 : cruise();
+  const goal = b.boost > 0 ? 28 : cruise();
   b.v += ((goal - b.v) * (b.boost > 0 ? 3 : 1.1) - 15 * F.f.y * 0.75) * dt;
-  b.v = clamp(b.v, 6, 25);
+  b.v = clamp(b.v, 8, 32);
   b.boost -= dt;
   b.grace -= dt;
   b.s += b.v * dt;
   // Руль: шар тянется к месту под пальцем, удар от препятствия сбивает его в сторону
-  b.u += (b.uTarget - b.u) * Math.min(1, dt * 9) + b.knock * dt;
+  b.u += (b.uTarget - b.u) * Math.min(1, dt * 12) + b.knock * dt;
   b.uTarget += b.knock * dt * 0.8;
   b.knock *= Math.exp(-dt * 4);
   tr.at(b.s, F);
@@ -226,8 +245,8 @@ const camPos = new T.Vector3(),
   look = new T.Vector3();
 function aim(dt) {
   const tall = camera.aspect < 1;
-  const back = tall ? 8.6 : 7,
-    high = tall ? 4.2 : 3.2;
+  const back = tall ? 9.4 : 8,
+    high = tall ? 4.4 : 3.4;
   const tr = lvl.track;
   if (b.state === "menu") {
     // В меню камера медленно облетает шар на старте
@@ -260,7 +279,8 @@ function aim(dt) {
   }
   camera.up.copy(camUp);
   camera.lookAt(look);
-  const base = tall ? 74 : 62;
+  // Чем быстрее шар, тем шире обзор: так скорость чувствуется сильнее
+  const base = (tall ? 76 : 64) + clamp((b.v - 15) / 13, 0, 1) * 6;
   fovKick = Math.max(0, fovKick - dt * 0.6);
   const fov = calm.matches ? base : base + (b.boost > 0 ? 9 : 0) * Math.min(1, b.boost * 2) + fovKick * 3;
   if (Math.abs(camera.fov - fov) > 0.05) {
@@ -277,18 +297,19 @@ function finishLevel() {
   Music.duck(3);
   const share = lvl.total ? b.gems / lvl.total : 1;
   const stars = share >= 0.85 ? 3 : share >= 0.55 ? 2 : 1;
-  const had = save.gems;
   save.stars[lvl.n] = Math.max(save.stars[lvl.n] || 0, stars);
   save.gems += b.gems;
   save.open = Math.max(save.open, Math.min(LEVELS, lvl.n + 2));
   store();
-  const fresh = skins.filter((s) => s.cost > had && s.cost <= save.gems);
+  // Хватает ли теперь кристаллов на новый шар
+  const fresh = skins.filter((s) => !save.owned.includes(s.id) && s.cost <= save.gems);
   setTimeout(() => {
     el("result-stars").innerHTML = [1, 2, 3].map((k) => '<span class="' + (k <= stars ? "on" : "") + '">★</span>').join("");
     el("result-gems").textContent = "+" + b.gems;
     el("next").hidden = lvl.n + 1 >= LEVELS;
     el("unlocked").hidden = !fresh.length;
-    if (fresh.length) el("unlocked").textContent = "Новый шар: " + fresh.map((s) => s.name).join(", ") + "!";
+    if (fresh.length) el("unlocked").textContent = "Хватает на новый шар: " + fresh[0].name + "!";
+    el("wallet-finish").textContent = save.gems;
     show("finish");
   }, 1600);
 }
@@ -300,9 +321,8 @@ function frame(ms) {
   clock += dt;
   if (lvl) {
     if (b.state === "play") {
-      // Два шага на кадр: столкновения не проскакивают на скорости
-      step(dt / 2);
-      if (b.state === "play") step(dt / 2);
+      // Три шага на кадр: на большой скорости столкновения не проскакивают
+      for (let k = 0; k < 3 && b.state === "play"; k++) step(dt / 3);
     } else if (b.state === "fall") {
       vel.y -= 22 * dt;
       ball.position.addScaledVector(vel, dt);
@@ -327,6 +347,7 @@ function frame(ms) {
     lvl.chevrons.offset.y -= dt * 1.8;
     Sound.roll(b.state === "play" ? b.v : 0, b.state === "play" && !b.flying);
     aim(dt);
+    heaven.follow(camera.position);
     sun.position.copy(ball.position).add(new T.Vector3(-14, 30, 10));
     sun.target.position.copy(ball.position);
     fx.update(dt, ball.position, b.state === "play" || b.state === "finish", trailTint());
@@ -421,37 +442,69 @@ function toMenu() {
 }
 function menu() {
   el("total").textContent = save.gems;
+  // Плитка уровня раскрашена под его тему
   el("levels").innerHTML = Array.from({ length: LEVELS }, (_, i) => {
     const open = i < save.open,
-      stars = save.stars[i] || 0;
+      stars = save.stars[i] || 0,
+      theme = themeFor(i);
     return (
-      '<button class="lvl' + (open ? "" : " locked") + '" data-level="' + i + '"' + (open ? "" : " disabled") + ">" +
+      '<button class="lvl' + (open ? "" : " locked") + '" data-level="' + i + '"' + (open ? "" : " disabled") +
+      ' style="--theme:' + theme.ui + '" aria-label="Уровень ' + (i + 1) + ", " + theme.name + '">' +
       "<b>" + (open ? i + 1 : "🔒") + "</b><small>" + (open ? "★".repeat(stars) + "☆".repeat(3 - stars) : "") + "</small></button>"
     );
   }).join("");
+  el("shop-ball").className = "ball-" + save.skin;
+  const affordable = skins.some((s) => !save.owned.includes(s.id) && s.cost <= save.gems);
+  el("shop-open").classList.toggle("ping", affordable);
+}
+// ---------- Магазин шаров ----------
+function shop() {
+  el("wallet-shop").textContent = save.gems;
   el("skins").innerHTML = skins
     .map((s) => {
-      const own = save.gems >= s.cost;
+      const own = save.owned.includes(s.id),
+        can = save.gems >= s.cost;
       return (
-        '<button class="skin' + (s.id === save.skin ? " on" : "") + (own ? "" : " locked") + '" data-skin="' + s.id + '"' + (own ? "" : " disabled") +
-        ' aria-label="' + s.name + '"><i class="ball-' + s.id + '"></i><small>' + (own ? s.name : "💎 " + s.cost) + "</small></button>"
+        '<button class="skin' + (s.id === save.skin ? " on" : "") + (own ? "" : can ? " can" : " locked") + '" data-skin="' + s.id + '" aria-label="' + s.name + (own ? "" : ", " + s.cost + " кристаллов") + '">' +
+        '<i class="ball-' + s.id + '"></i><small>' + (own ? s.name : "💎 " + s.cost) + "</small></button>"
       );
     })
     .join("");
 }
-el("levels").onclick = (e) => {
-  const btn = e.target.closest("[data-level]");
-  if (btn && !btn.disabled) startLevel(Number(btn.dataset.level));
+el("shop-open").onclick = () => {
+  unlock();
+  Sound.tick();
+  shop();
+  el("shop").hidden = false;
+};
+el("shop-close").onclick = () => {
+  el("shop").hidden = true;
+  menu();
 };
 el("skins").onclick = (e) => {
   const btn = e.target.closest("[data-skin]");
-  if (!btn || btn.disabled) return;
-  save.skin = btn.dataset.skin;
+  if (!btn) return;
+  const skin = skins.find((s) => s.id === btn.dataset.skin);
+  Sound.unlock();
+  if (!save.owned.includes(skin.id)) {
+    if (save.gems < skin.cost) {
+      // Не хватает: шар вздрагивает и показывает, сколько ещё собрать
+      btn.classList.remove("shake");
+      void btn.offsetWidth;
+      btn.classList.add("shake");
+      el("shop-note").textContent = "Нужно ещё 💎 " + (skin.cost - save.gems);
+      Sound.bump();
+      return;
+    }
+    save.gems -= skin.cost;
+    save.owned.push(skin.id);
+    el("shop-note").textContent = "Новый шар: " + skin.name + "!";
+    Sound.checkpoint();
+  } else Sound.tick();
+  save.skin = skin.id;
   store();
   ball.material = skinMaterial(save.skin);
-  Sound.unlock();
-  Sound.tick();
-  menu();
+  shop();
 };
 el("play").onclick = () => startLevel(Math.min(save.open, LEVELS) - 1);
 el("home").onclick = toMenu;

@@ -39,14 +39,26 @@
     <section id="menu" class="menu" hidden>
       <h1>Шаро<em>кат</em></h1>
       <button id="play" class="play" aria-label="Играть">▶</button>
-      <div class="total">💎 <b id="total">0</b></div>
+      <div class="row">
+        <div class="total">💎 <b id="total">0</b></div>
+        <button id="shop-open" class="shop-open" aria-label="Магазин шаров"><i id="shop-ball"></i><span>Шары</span></button>
+      </div>
       <div id="levels" class="levels"></div>
-      <div id="skins" class="skins"></div>
+    </section>
+    <!-- Магазин шаров: покупка за кристаллы -->
+    <section id="shop" class="shop" hidden>
+      <div class="shop-card">
+        <button id="shop-close" class="round close" aria-label="Закрыть">✕</button>
+        <h3>Шары</h3>
+        <div class="total">💎 <b id="wallet-shop">0</b></div>
+        <div id="skins" class="skins"></div>
+        <p id="shop-note" class="shop-note"></p>
+      </div>
     </section>
     <section id="finish" class="finish" hidden>
       <h2>Финиш!</h2>
       <div id="result-stars" class="stars"></div>
-      <div class="result-gems">💎 <b id="result-gems"></b></div>
+      <div class="result-gems">💎 <b id="result-gems"></b> <small>всего <b id="wallet-finish"></b></small></div>
       <p id="unlocked" class="unlocked" hidden></p>
       <div class="actions">
         <button id="to-menu" class="round big" aria-label="В меню">⌂</button>

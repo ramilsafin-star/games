@@ -23,42 +23,57 @@ export function place(obj, fr, x = 0, y = 0, z = 0) {
   return obj;
 }
 
-// ---------- Небо ----------
+// ---------- Небо: купол с градиентом темы, солнце или луна, звёзды ночью ----------
 export function sky(scene) {
   const geo = new T.SphereGeometry(700, 32, 20);
-  const colors = [],
-    c = new T.Color();
-  const stops = [
-    [-1, "#ffc6e0"],
-    [-0.08, "#ffd6ea"],
-    [0.03, "#fff0f6"],
-    [0.16, "#9fd8ff"],
-    [0.45, "#4aa8ff"],
-    [1, "#2a6fe0"],
-  ];
-  const pos = geo.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    const y = pos.getY(i) / 700;
-    let k = 0;
-    while (k < stops.length - 2 && y > stops[k + 1][0]) k++;
-    const [y0, c0] = stops[k],
-      [y1, c1] = stops[k + 1];
-    c.set(c0).lerp(new T.Color(c1), Math.min(1, Math.max(0, (y - y0) / (y1 - y0))));
-    colors.push(c.r, c.g, c.b);
-  }
-  geo.setAttribute("color", new T.Float32BufferAttribute(colors, 3));
+  geo.setAttribute("color", new T.Float32BufferAttribute(new Float32Array(geo.attributes.position.count * 3), 3));
   const dome = new T.Mesh(geo, new T.MeshBasicMaterial({ vertexColors: true, side: T.BackSide, fog: false, depthWrite: false }));
   dome.renderOrder = -1;
   scene.add(dome);
-  // Солнце
   const sun = new T.Mesh(new T.SphereGeometry(30, 24, 16), new T.MeshBasicMaterial({ color: "#fff3b0", fog: false }));
   sun.position.set(-260, 260, -420);
   dome.add(sun);
-  return dome;
+  // Звёзды: точки на куполе, видны только в ночных темах
+  const starPos = [];
+  const r = rng(11);
+  for (let i = 0; i < 900; i++) {
+    const v = new T.Vector3(r() * 2 - 1, r() * 1.1 - 0.1, r() * 2 - 1).normalize().multiplyScalar(650);
+    starPos.push(v.x, v.y, v.z);
+  }
+  const starGeo = new T.BufferGeometry();
+  starGeo.setAttribute("position", new T.Float32BufferAttribute(starPos, 3));
+  const stars = new T.Points(starGeo, new T.PointsMaterial({ color: "#ffffff", size: 2.2, sizeAttenuation: false, fog: false }));
+  dome.add(stars);
+  return {
+    dome,
+    setTheme(theme) {
+      const pos = geo.attributes.position,
+        col = geo.attributes.color,
+        c = new T.Color(),
+        stops = theme.sky;
+      for (let i = 0; i < pos.count; i++) {
+        const y = pos.getY(i) / 700;
+        let k = 0;
+        while (k < stops.length - 2 && y > stops[k + 1][0]) k++;
+        const [y0, c0] = stops[k],
+          [y1, c1] = stops[k + 1];
+        c.set(c0).lerp(new T.Color(c1), Math.min(1, Math.max(0, (y - y0) / (y1 - y0))));
+        col.setXYZ(i, c.r, c.g, c.b);
+      }
+      col.needsUpdate = true;
+      stars.visible = !!theme.stars;
+      // Ночью вместо солнца — бледная луна
+      sun.material.color.set(theme.stars ? "#e8ecff" : theme.id === "lava" ? "#ffcf6b" : "#fff3b0");
+      sun.scale.setScalar(theme.stars ? 0.7 : 1);
+    },
+    follow(p) {
+      dome.position.copy(p);
+    },
+  };
 }
 
-// ---------- Пейзаж вокруг трассы: острова, деревья, облака, шары, радуги ----------
-export function scenery(scene, track) {
+// ---------- Пейзаж вокруг трассы: острова, деревья, облака, шары, радуги или планеты ----------
+export function scenery(scene, track, theme) {
   const rand = rng(77 + track.level * 13);
   const group = new T.Group();
   scene.add(group);
@@ -66,7 +81,7 @@ export function scenery(scene, track) {
     clouds = [],
     balloons = [];
   const free = (p, gap) => track.samples.every((a, i) => i % 6 || a.p.distanceToSquared(p) > gap * gap);
-  for (let s = 10; s < track.length; s += 18 + rand() * 14) {
+  for (let s = 10; s < track.length; s += 16 + rand() * 12) {
     const fr = track.at(s),
       side = rand() < 0.5 ? -1 : 1;
     const p = fr.p.clone().add(new T.Vector3(fr.r.x, 0, fr.r.z).normalize().multiplyScalar(side * (11 + rand() * 24)));
@@ -83,23 +98,22 @@ export function scenery(scene, track) {
     q = new T.Quaternion(),
     sc = new T.Vector3(),
     color = new T.Color();
-  // Острова: каменный конус снизу, травяная шапка, деревья-леденцы
-  const rock = new T.InstancedMesh(
-    new T.ConeGeometry(1, 1.6, 7).rotateX(pie),
-    new T.MeshStandardMaterial({ roughness: 0.8, flatShading: true }),
-    islands.length,
-  );
+  // Острова: каменный конус снизу, шапка травы (или снега, или карамели) и деревья
+  const rock = new T.InstancedMesh(new T.ConeGeometry(1, 1.6, 7).rotateX(pie), new T.MeshStandardMaterial({ roughness: 0.8, flatShading: true }), islands.length);
   const grass = new T.InstancedMesh(new T.CylinderGeometry(1.05, 1, 0.35, 16), new T.MeshStandardMaterial({ roughness: 0.6 }), islands.length);
   const trunks = new T.InstancedMesh(new T.CylinderGeometry(0.12, 0.16, 1, 6), new T.MeshStandardMaterial({ color: "#a3704a" }), islands.length * 3);
-  const crowns = new T.InstancedMesh(new T.SphereGeometry(1, 14, 10), new T.MeshPhysicalMaterial({ roughness: 0.4, clearcoat: 0.5 }), islands.length * 3);
+  // У ёлок на льду крона — конус, у ночных тем кроны светятся
+  const crownGeo = theme.pines ? new T.ConeGeometry(0.9, 2, 9) : new T.SphereGeometry(1, 14, 10);
+  const crownMat = theme.glowCrowns ? new T.MeshBasicMaterial() : new T.MeshPhysicalMaterial({ roughness: 0.4, clearcoat: 0.5 });
+  const crowns = new T.InstancedMesh(crownGeo, crownMat, islands.length * 3);
   islands.forEach((it, i) => {
     sc.set(it.size, it.size, it.size);
     m.compose(it.p.clone().add(new T.Vector3(0, -it.size * 0.8, 0)), q.identity(), sc);
     rock.setMatrixAt(i, m);
-    rock.setColorAt(i, color.setHSL(0.05 + it.hue * 0.08, 0.45, 0.6));
+    rock.setColorAt(i, theme.rock(it.hue));
     m.compose(it.p, q, sc.set(it.size, it.size * 0.6, it.size));
     grass.setMatrixAt(i, m);
-    grass.setColorAt(i, color.setHSL(0.28 + it.hue * 0.12, 0.65, 0.55));
+    grass.setColorAt(i, theme.grass(it.hue));
     for (let k = 0; k < 3; k++) {
       const a = k * 2.1 + it.hue * 6,
         d = it.size * 0.5,
@@ -109,12 +123,12 @@ export function scenery(scene, track) {
       trunks.setMatrixAt(i * 3 + k, m);
       m.compose(tp.clone().add(new T.Vector3(0, h + 0.6, 0)), q, sc.setScalar(0.9 + (k % 2) * 0.3));
       crowns.setMatrixAt(i * 3 + k, m);
-      crowns.setColorAt(i * 3 + k, color.set(["#5ccf73", "#ff8fc0", "#9be04f", "#ffd24f"][(i + k) % 4]));
+      crowns.setColorAt(i * 3 + k, color.set(theme.crowns[(i + k) % theme.crowns.length]));
     }
   });
   group.add(rock, grass, trunks, crowns);
-  // Облака: несколько шаров в кучке
-  const puffs = new T.InstancedMesh(new T.SphereGeometry(1, 14, 10), new T.MeshStandardMaterial({ color: "#ffffff", roughness: 1 }), clouds.length * 4);
+  // Облака: несколько шаров в кучке, цвет по теме (у вулкана — дым)
+  const puffs = new T.InstancedMesh(new T.SphereGeometry(1, 14, 10), new T.MeshStandardMaterial({ color: theme.cloud, roughness: 1 }), clouds.length * 4);
   clouds.forEach((c, i) => {
     for (let k = 0; k < 4; k++) {
       m.compose(
@@ -126,8 +140,12 @@ export function scenery(scene, track) {
     }
   });
   group.add(puffs);
-  // Воздушные шары с корзинкой
-  const balls = new T.InstancedMesh(new T.SphereGeometry(1.6, 18, 14), new T.MeshPhysicalMaterial({ roughness: 0.25, clearcoat: 1 }), balloons.length);
+  // Воздушные шары (ночью — светящиеся фонарики)
+  const balls = new T.InstancedMesh(
+    new T.SphereGeometry(1.6, 18, 14),
+    theme.stars ? new T.MeshBasicMaterial() : new T.MeshPhysicalMaterial({ roughness: 0.25, clearcoat: 1 }),
+    balloons.length,
+  );
   const baskets = new T.InstancedMesh(new T.BoxGeometry(0.7, 0.5, 0.7), new T.MeshStandardMaterial({ color: "#b8814f" }), balloons.length);
   balloons.forEach((b, i) => {
     m.compose(b.p, q.identity(), sc.set(1, 1.2, 1));
@@ -137,20 +155,39 @@ export function scenery(scene, track) {
     baskets.setMatrixAt(i, m);
   });
   group.add(balls, baskets);
-  // Две радуги вдали
-  const bands = ["#ff5c7a", "#ff9e4a", "#ffd84a", "#5ed69a", "#58b4ff", "#a67cff"];
-  for (const [s, side] of [
-    [track.length * 0.3, 1],
-    [track.length * 0.75, -1],
-  ]) {
-    const fr = track.at(s);
-    const center = fr.p.clone().add(new T.Vector3(fr.r.x, 0, fr.r.z).normalize().multiplyScalar(side * 90));
-    center.y -= 30;
-    bands.forEach((c, i) => {
-      const arc = new T.Mesh(new T.TorusGeometry(60 - i * 2.4, 1.2, 8, 60, pie), new T.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.75 }));
-      arc.position.copy(center);
-      arc.lookAt(fr.p.x, center.y, fr.p.z);
-      group.add(arc);
+  if (theme.decor === "rainbow") {
+    // Две радуги вдали
+    const bands = ["#ff5c7a", "#ff9e4a", "#ffd84a", "#5ed69a", "#58b4ff", "#a67cff"];
+    for (const [s, side] of [
+      [track.length * 0.3, 1],
+      [track.length * 0.75, -1],
+    ]) {
+      const fr = track.at(s);
+      const center = fr.p.clone().add(new T.Vector3(fr.r.x, 0, fr.r.z).normalize().multiplyScalar(side * 90));
+      center.y -= 30;
+      bands.forEach((c, i) => {
+        const arc = new T.Mesh(new T.TorusGeometry(60 - i * 2.4, 1.2, 8, 60, pie), new T.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.75 }));
+        arc.position.copy(center);
+        arc.lookAt(fr.p.x, center.y, fr.p.z);
+        group.add(arc);
+      });
+    }
+  } else if (theme.decor === "planets") {
+    // Планеты с кольцами в ночном небе
+    const planets = [
+      ["#ff8ff0", "#ffd36b", 26],
+      ["#2ff3ff", "#b47cff", 18],
+      ["#ffb36b", "#ffffff", 12],
+    ];
+    planets.forEach(([body, ringColor, size], i) => {
+      const fr = track.at(track.length * (0.2 + i * 0.3));
+      const p = fr.p.clone().add(new T.Vector3((i % 2 ? 1 : -1) * 140, 40 + i * 20, -60));
+      const ball = new T.Mesh(new T.SphereGeometry(size, 32, 20), new T.MeshStandardMaterial({ color: body, emissive: body, emissiveIntensity: 0.35, fog: false }));
+      const ring = new T.Mesh(new T.TorusGeometry(size * 1.6, size * 0.12, 8, 60), new T.MeshBasicMaterial({ color: ringColor, fog: false }));
+      ring.rotation.x = 1.2;
+      ball.add(ring);
+      ball.position.copy(p);
+      group.add(ball);
     });
   }
   group.traverse((o) => {
@@ -159,8 +196,8 @@ export function scenery(scene, track) {
   return { group, balls, balloons };
 }
 
-// ---------- Опоры горок и море облаков внизу ----------
-export function supports(scene, track) {
+// ---------- Опоры горок, море облаков (или лавы) внизу, кольца в полёте ----------
+export function supports(scene, track, theme) {
   const legs = [];
   let low = Infinity;
   for (const a of track.samples) low = Math.min(low, a.p.y);
@@ -171,31 +208,25 @@ export function supports(scene, track) {
     if (a.air || a.u.y < 0.8 || a.kind === "loop") continue;
     for (const side of [-1, 1]) legs.push([a.p.clone().addScaledVector(a.r, side * (a.half * 0.7)).addScaledVector(a.u, -0.4), a.hue]);
   }
-  const mesh = new T.InstancedMesh(
-    new T.CylinderGeometry(0.16, 0.24, 1, 8),
-    new T.MeshPhysicalMaterial({ roughness: 0.3, clearcoat: 0.8 }),
-    legs.length,
-  );
+  const mesh = new T.InstancedMesh(new T.CylinderGeometry(0.16, 0.24, 1, 8), new T.MeshPhysicalMaterial({ roughness: 0.3, clearcoat: 0.8 }), legs.length);
   const m = new T.Matrix4(),
     q = new T.Quaternion(),
-    sc = new T.Vector3(),
-    color = new T.Color();
+    sc = new T.Vector3();
   legs.forEach(([top, hue], i) => {
     const h = top.y - floor;
     m.compose(new T.Vector3(top.x, floor + h / 2, top.z), q, sc.set(1, h, 1));
     mesh.setMatrixAt(i, m);
-    mesh.setColorAt(i, color.setHSL(hue, 0.85, 0.6));
+    mesh.setColorAt(i, theme.leg(hue));
   });
   scene.add(mesh);
-  // Облачное море: большой мягкий диск и кучевые облака на нём
   const c = track.samples[Math.floor(track.samples.length / 2)].p;
-  const sea = new T.Mesh(new T.CircleGeometry(900, 48), new T.MeshBasicMaterial({ color: "#fff4fa" }));
+  const sea = new T.Mesh(new T.CircleGeometry(900, 48), new T.MeshBasicMaterial({ color: theme.sea }));
   sea.rotation.x = -Math.PI / 2;
   sea.position.set(c.x, floor + 2, c.z);
   scene.add(sea);
   const rand = rng(31 + track.level);
   const n = 260;
-  const puffs = new T.InstancedMesh(new T.SphereGeometry(1, 12, 8), new T.MeshStandardMaterial({ color: "#ffffff", roughness: 1 }), n);
+  const puffs = new T.InstancedMesh(new T.SphereGeometry(1, 12, 8), new T.MeshStandardMaterial({ color: theme.cloud, roughness: 1 }), n);
   for (let i = 0; i < n; i++) {
     const a = track.samples[Math.floor(rand() * track.samples.length)].p;
     const r = 6 + rand() * 12;
@@ -203,6 +234,15 @@ export function supports(scene, track) {
     puffs.setMatrixAt(i, m);
   }
   scene.add(puffs);
+  // Радужные кольца над катапультой: шар пролетает сквозь них
+  const bands = ["#ff4f7b", "#ffc93c", "#2fd0a6", "#4aa3ff", "#b06cff"];
+  for (const s of track.rings) {
+    const fr = track.at(s),
+      ring = new T.Group();
+    bands.forEach((color, i) => ring.add(new T.Mesh(new T.TorusGeometry(2.4 + i * 0.22, 0.1, 8, 40), new T.MeshBasicMaterial({ color }))));
+    place(ring, fr, 0, R + 0.4, 0);
+    scene.add(ring);
+  }
   return floor;
 }
 
@@ -432,119 +472,207 @@ export function gemField(scene, track) {
   };
 }
 
-// ---------- Шар и его раскраски ----------
+// ---------- Шар и его раскраски: покупаются за кристаллы ----------
 export const skins = [
   { id: "rainbow", name: "Радуга", cost: 0 },
-  { id: "melon", name: "Арбуз", cost: 60 },
-  { id: "beach", name: "Мячик", cost: 150 },
-  { id: "planet", name: "Планета", cost: 280 },
+  { id: "melon", name: "Арбуз", cost: 40 },
+  { id: "beach", name: "Мячик", cost: 70 },
+  { id: "candy", name: "Леденец", cost: 100 },
+  { id: "planet", name: "Планета", cost: 140 },
+  { id: "ladybug", name: "Божья коровка", cost: 180 },
+  { id: "soccer", name: "Футбол", cost: 220 },
+  { id: "tiger", name: "Тигр", cost: 270 },
+  { id: "moon", name: "Луна", cost: 320 },
+  { id: "donut", name: "Пончик", cost: 380 },
   { id: "disco", name: "Диско", cost: 450 },
-  { id: "candy", name: "Леденец", cost: 650 },
-  { id: "lava", name: "Лава", cost: 900 },
-  { id: "stars", name: "Звёздочка", cost: 1200 },
+  { id: "pearl", name: "Жемчуг", cost: 520 },
+  { id: "gold", name: "Золото", cost: 600 },
+  { id: "neon", name: "Неон", cost: 700 },
+  { id: "lava", name: "Лава", cost: 820 },
+  { id: "stars", name: "Звёздочка", cost: 950 },
 ];
+// Рисунки на шаре: развёртка 512×256, по горизонтали — вокруг шара
+const painters = {
+  rainbow: (ctx) => candy.concat(candy).forEach((c, i) => ((ctx.fillStyle = c), ctx.fillRect(i * 43, 0, 44, 256))),
+  melon: (ctx) => {
+    ctx.fillStyle = "#3fa34d";
+    ctx.fillRect(0, 0, 512, 256);
+    ctx.fillStyle = "#1f6e2c";
+    for (let x = 0; x < 512; x += 64) {
+      ctx.beginPath();
+      for (let y = 0; y <= 256; y += 8) ctx.lineTo(x + 14 + Math.sin(y * 0.08) * 8, y);
+      for (let y = 256; y >= 0; y -= 8) ctx.lineTo(x + 30 + Math.sin(y * 0.08) * 8, y);
+      ctx.fill();
+    }
+  },
+  beach: (ctx) => ["#ff4f5e", "#ffffff", "#ffcf3c", "#ffffff", "#3fa2ff", "#ffffff"].forEach((c, i) => ((ctx.fillStyle = c), ctx.fillRect((i * 512) / 6, 0, 512 / 6 + 1, 256))),
+  candy: (ctx) => {
+    ctx.fillStyle = "#fff4f8";
+    ctx.fillRect(0, 0, 512, 256);
+    ctx.fillStyle = "#ff4f8e";
+    for (let x = -256; x < 512; x += 48) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x + 24, 0);
+      ctx.lineTo(x + 280, 256);
+      ctx.lineTo(x + 256, 256);
+      ctx.fill();
+    }
+  },
+  planet: (ctx) => {
+    const r = rng(5);
+    ctx.fillStyle = "#2f7fe0";
+    ctx.fillRect(0, 0, 512, 256);
+    for (let i = 0; i < 26; i++) {
+      ctx.fillStyle = i % 4 ? "#4ec46a" : "#e8d27a";
+      ctx.beginPath();
+      ctx.ellipse(r() * 512, 40 + r() * 176, 18 + r() * 40, 10 + r() * 22, r() * 3, 0, pie * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = "rgba(255,255,255,.7)";
+    for (let i = 0; i < 14; i++) ctx.fillRect(r() * 512, r() * 256, 40 + r() * 60, 6);
+  },
+  ladybug: (ctx) => {
+    ctx.fillStyle = "#e8302f";
+    ctx.fillRect(0, 0, 512, 256);
+    ctx.fillStyle = "#1d1416";
+    ctx.fillRect(0, 0, 512, 34);
+    for (const x of [0, 256]) ctx.fillRect(x - 6, 0, 12, 256);
+    const r = rng(8);
+    for (let i = 0; i < 16; i++) {
+      ctx.beginPath();
+      ctx.arc(20 + r() * 472, 70 + r() * 150, 14 + r() * 10, 0, pie * 2);
+      ctx.fill();
+    }
+  },
+  soccer: (ctx) => {
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, 512, 256);
+    ctx.fillStyle = "#1d1d26";
+    for (let row = 0; row < 4; row++)
+      for (let k = 0; k < 6; k++) {
+        const x = k * 86 + (row % 2) * 43,
+          y = 32 + row * 64;
+        ctx.beginPath();
+        for (let j = 0; j < 5; j++) ctx.lineTo(x + Math.cos((j * 2 * pie) / 5 - pie / 2) * 20, y + Math.sin((j * 2 * pie) / 5 - pie / 2) * 20);
+        ctx.fill();
+      }
+  },
+  tiger: (ctx) => {
+    ctx.fillStyle = "#ff9a1f";
+    ctx.fillRect(0, 0, 512, 256);
+    ctx.fillStyle = "#1d1416";
+    for (let x = 10; x < 512; x += 42) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      for (let y = 0; y <= 256; y += 16) ctx.lineTo(x + Math.sin(y * 0.05 + x) * 10 + (y % 32 ? 8 : 0), y);
+      for (let y = 256; y >= 0; y -= 16) ctx.lineTo(x + 6 + Math.sin(y * 0.05 + x) * 10, y);
+      ctx.fill();
+    }
+  },
+  moon: (ctx) => {
+    const r = rng(12);
+    ctx.fillStyle = "#cfd3dc";
+    ctx.fillRect(0, 0, 512, 256);
+    for (let i = 0; i < 40; i++) {
+      const x = r() * 512,
+        y = r() * 256,
+        s = 5 + r() * 22;
+      ctx.fillStyle = "#a9aebb";
+      ctx.beginPath();
+      ctx.arc(x, y, s, 0, pie * 2);
+      ctx.fill();
+      ctx.fillStyle = "#e6e9ef";
+      ctx.beginPath();
+      ctx.arc(x - s * 0.2, y - s * 0.2, s * 0.6, 0, pie * 2);
+      ctx.fill();
+    }
+  },
+  donut: (ctx) => {
+    ctx.fillStyle = "#e3a35f";
+    ctx.fillRect(0, 0, 512, 256);
+    ctx.fillStyle = "#ff8fc4";
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    for (let x = 0; x <= 512; x += 16) ctx.lineTo(x, 130 + Math.sin(x * 0.07) * 14 + (x % 32 ? 8 : 0));
+    ctx.lineTo(512, 0);
+    ctx.fill();
+    const r = rng(4);
+    for (let i = 0; i < 90; i++) {
+      ctx.fillStyle = candy[i % candy.length];
+      ctx.save();
+      ctx.translate(r() * 512, 10 + r() * 105);
+      ctx.rotate(r() * 3);
+      ctx.fillRect(-6, -2, 12, 4);
+      ctx.restore();
+    }
+  },
+  disco: (ctx) => {
+    for (let x = 0; x < 512; x += 16)
+      for (let y = 0; y < 256; y += 16) {
+        ctx.fillStyle = `hsl(${(x + y) % 360},30%,${70 + ((x * y) % 25)}%)`;
+        ctx.fillRect(x + 1, y + 1, 14, 14);
+      }
+  },
+  neon: (ctx) => {
+    ctx.fillStyle = "#0d0a2a";
+    ctx.fillRect(0, 0, 512, 256);
+    ctx.lineWidth = 4;
+    for (let x = 0; x <= 512; x += 32) {
+      ctx.strokeStyle = x % 64 ? "#2ff3ff" : "#ff2fd6";
+      ctx.strokeRect(x, -2, 0.1, 260);
+    }
+    for (let y = 0; y <= 256; y += 32) {
+      ctx.strokeStyle = "#2ff3ff";
+      ctx.strokeRect(-2, y, 516, 0.1);
+    }
+  },
+  lava: (ctx) => {
+    const r = rng(9);
+    ctx.fillStyle = "#3a1712";
+    ctx.fillRect(0, 0, 512, 256);
+    ctx.strokeStyle = "#ffb12b";
+    ctx.lineWidth = 5;
+    for (let i = 0; i < 40; i++) {
+      ctx.beginPath();
+      let x = r() * 512,
+        y = r() * 256;
+      ctx.moveTo(x, y);
+      for (let k = 0; k < 5; k++) ctx.lineTo((x += (r() - 0.5) * 60), (y += (r() - 0.5) * 60));
+      ctx.stroke();
+    }
+  },
+  stars: (ctx) => {
+    const r = rng(3);
+    ctx.fillStyle = "#5b35c9";
+    ctx.fillRect(0, 0, 512, 256);
+    ctx.fillStyle = "#ffe14d";
+    for (let i = 0; i < 30; i++) {
+      const x = r() * 512,
+        y = 20 + r() * 216,
+        s = 6 + r() * 10;
+      ctx.beginPath();
+      for (let k = 0; k < 10; k++) {
+        const a = (k * pie) / 5,
+          d = k % 2 ? s * 0.45 : s;
+        ctx.lineTo(x + Math.cos(a) * d, y + Math.sin(a) * d);
+      }
+      ctx.fill();
+    }
+  },
+};
 const skinLooks = new Map();
 export function skinMaterial(id) {
   if (skinLooks.has(id)) return skinLooks.get(id);
-  const paint = (draw) => canvasTexture(512, 256, draw);
+  const map = painters[id] ? canvasTexture(512, 256, painters[id]) : null;
   let mat;
-  if (id === "rainbow") {
-    const map = paint((ctx) => candy.concat(candy).forEach((c, i) => ((ctx.fillStyle = c), ctx.fillRect(i * 43, 0, 44, 256))));
-    mat = new T.MeshPhysicalMaterial({ map, roughness: 0.2, clearcoat: 1 });
-  } else if (id === "melon") {
-    const map = paint((ctx) => {
-      ctx.fillStyle = "#3fa34d";
-      ctx.fillRect(0, 0, 512, 256);
-      ctx.fillStyle = "#1f6e2c";
-      for (let x = 0; x < 512; x += 64) {
-        ctx.beginPath();
-        for (let y = 0; y <= 256; y += 8) ctx.lineTo(x + 14 + Math.sin(y * 0.08) * 8, y);
-        for (let y = 256; y >= 0; y -= 8) ctx.lineTo(x + 30 + Math.sin(y * 0.08) * 8, y);
-        ctx.fill();
-      }
-    });
-    mat = new T.MeshPhysicalMaterial({ map, roughness: 0.35, clearcoat: 0.8 });
-  } else if (id === "beach") {
-    const map = paint((ctx) => ["#ff4f5e", "#ffffff", "#ffcf3c", "#ffffff", "#3fa2ff", "#ffffff"].forEach((c, i) => ((ctx.fillStyle = c), ctx.fillRect((i * 512) / 6, 0, 512 / 6 + 1, 256))));
-    mat = new T.MeshPhysicalMaterial({ map, roughness: 0.25, clearcoat: 1 });
-  } else if (id === "planet") {
-    const r = rng(5);
-    const map = paint((ctx) => {
-      ctx.fillStyle = "#2f7fe0";
-      ctx.fillRect(0, 0, 512, 256);
-      for (let i = 0; i < 26; i++) {
-        ctx.fillStyle = i % 4 ? "#4ec46a" : "#e8d27a";
-        ctx.beginPath();
-        ctx.ellipse(r() * 512, 40 + r() * 176, 18 + r() * 40, 10 + r() * 22, r() * 3, 0, pie * 2);
-        ctx.fill();
-      }
-      ctx.fillStyle = "rgba(255,255,255,.7)";
-      for (let i = 0; i < 14; i++) ctx.fillRect(r() * 512, r() * 256, 40 + r() * 60, 6);
-    });
-    mat = new T.MeshPhysicalMaterial({ map, roughness: 0.4, clearcoat: 0.6 });
-  } else if (id === "disco") {
-    const map = paint((ctx) => {
-      for (let x = 0; x < 512; x += 16)
-        for (let y = 0; y < 256; y += 16) {
-          ctx.fillStyle = `hsl(${(x + y) % 360},30%,${70 + ((x * y) % 25)}%)`;
-          ctx.fillRect(x + 1, y + 1, 14, 14);
-        }
-    });
-    mat = new T.MeshPhysicalMaterial({ map, metalness: 1, roughness: 0.12 });
-  } else if (id === "candy") {
-    const map = paint((ctx) => {
-      ctx.fillStyle = "#fff4f8";
-      ctx.fillRect(0, 0, 512, 256);
-      ctx.fillStyle = "#ff4f8e";
-      for (let x = -256; x < 512; x += 48) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x + 24, 0);
-        ctx.lineTo(x + 280, 256);
-        ctx.lineTo(x + 256, 256);
-        ctx.fill();
-      }
-    });
-    mat = new T.MeshPhysicalMaterial({ map, roughness: 0.15, clearcoat: 1 });
-  } else if (id === "lava") {
-    const r = rng(9);
-    const draw = (ctx) => {
-      ctx.fillStyle = "#3a1712";
-      ctx.fillRect(0, 0, 512, 256);
-      ctx.strokeStyle = "#ffb12b";
-      ctx.lineWidth = 5;
-      for (let i = 0; i < 40; i++) {
-        ctx.beginPath();
-        let x = r() * 512,
-          y = r() * 256;
-        ctx.moveTo(x, y);
-        for (let k = 0; k < 5; k++) ctx.lineTo((x += (r() - 0.5) * 60), (y += (r() - 0.5) * 60));
-        ctx.stroke();
-      }
-    };
-    const map = paint(draw);
-    mat = new T.MeshPhysicalMaterial({ map, emissiveMap: map, emissive: 0xff7a1a, emissiveIntensity: 0.9, roughness: 0.5 });
-  } else {
-    const r = rng(3);
-    const map = paint((ctx) => {
-      ctx.fillStyle = "#5b35c9";
-      ctx.fillRect(0, 0, 512, 256);
-      ctx.fillStyle = "#ffe14d";
-      for (let i = 0; i < 30; i++) {
-        const x = r() * 512,
-          y = 20 + r() * 216,
-          s = 6 + r() * 10;
-        ctx.beginPath();
-        for (let k = 0; k < 10; k++) {
-          const a = (k * pie) / 5,
-            d = k % 2 ? s * 0.45 : s;
-          ctx.lineTo(x + Math.cos(a) * d, y + Math.sin(a) * d);
-        }
-        ctx.fill();
-      }
-    });
-    mat = new T.MeshPhysicalMaterial({ map, emissiveMap: map, emissive: 0xffe14d, emissiveIntensity: 0.5, roughness: 0.2, clearcoat: 1 });
-  }
+  if (id === "disco") mat = new T.MeshPhysicalMaterial({ map, metalness: 1, roughness: 0.12 });
+  else if (id === "gold") mat = new T.MeshPhysicalMaterial({ color: "#ffcf4a", metalness: 1, roughness: 0.16, clearcoat: 1 });
+  else if (id === "pearl") mat = new T.MeshPhysicalMaterial({ color: "#fff8fb", roughness: 0.12, iridescence: 1, iridescenceIOR: 1.4, clearcoat: 1, sheen: 1, sheenColor: new T.Color("#ffd6f0") });
+  else if (id === "neon" || id === "lava" || id === "stars")
+    mat = new T.MeshPhysicalMaterial({ map, emissiveMap: map, emissive: 0xffffff, emissiveIntensity: id === "lava" ? 0.9 : 0.6, roughness: 0.25, clearcoat: 1 });
+  else mat = new T.MeshPhysicalMaterial({ map, roughness: id === "moon" ? 0.8 : 0.22, clearcoat: id === "moon" ? 0 : 1 });
+  mat.userData.keep = true;
   skinLooks.set(id, mat);
   return mat;
 }

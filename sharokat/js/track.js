@@ -16,8 +16,9 @@ const unlock = {
   hill: 0,
   turn: 0,
   glitter: 0,
+  jump: 0,
+  launch: 0,
   slalom: 1,
-  jump: 1,
   sliders: 1,
   drop: 2,
   loop: 2,
@@ -32,7 +33,8 @@ const unlock = {
 export function plan(level) {
   const rand = rng(1000 + level * 7919);
   const kinds = Object.keys(unlock).filter((k) => unlock[k] <= level);
-  const count = Math.min(7 + level, 18);
+  // Шар быстрый, поэтому трассы длинные: от 9 кусков на первом уровне до 22
+  const count = Math.min(9 + Math.round(level * 1.2), 22);
   const segs = [{ type: "start" }];
   let last = "";
   for (let i = 0; i < count; i++) {
@@ -57,6 +59,7 @@ export class Track {
     this.gems = [];
     this.boosts = [];
     this.checkpoints = [0];
+    this.rings = [];
     this.gates = [];
     this.tubes = [];
     // Черепашка: курс, наклон вверх-вниз, крен, сдвиг вбок для петель
@@ -253,9 +256,34 @@ export class Track {
       this.p = 0.42 - (0.84 * (i + 1)) / n;
       this.step({ air: true });
     }
-    this.gemLine(s0 + 2, s0 + 16, 0, 0.5, 2);
+    // Кристаллы волной по всей дуге: в полёте можно рулить и собирать
+    this.gemLine(s0 + 1, s0 + n * DS - 1, (s) => Math.sin((s - s0) * 0.5) * 1.3, 0.5, 1.3);
     this.landing = this.s;
     this.settle(10, { kind: "land" });
+    this.p = 0;
+  }
+  // Катапульта: крутой трамплин и долгий высокий полёт сквозь радужные кольца
+  launch(seg) {
+    this.nextHue();
+    this.settle(6);
+    this.boosts.push({ s: this.s }, { s: this.s + 10 });
+    for (let i = 0; i < 24; i++) this.step();
+    for (let i = 0; i < 16; i++) {
+      this.p = 0.62 * smooth((i + 1) / 16);
+      this.step({ kind: "ramp" });
+    }
+    const s0 = this.s,
+      n = 76;
+    for (let i = 0; i < n; i++) {
+      this.p = 0.62 - (1.24 * (i + 1)) / n;
+      this.step({ air: true });
+    }
+    const len = n * DS;
+    // Две змейки кристаллов в разных ритмах и кольца на подъёме, на вершине и на спуске
+    this.gemLine(s0 + 1, s0 + len - 1, (s) => seg.side * 1.4 * Math.sin((s - s0) * 0.35), 0.5, 1.1);
+    this.gemLine(s0 + 3, s0 + len - 3, (s) => -seg.side * 1.4 * Math.sin((s - s0) * 0.35), 0.9, 3.3);
+    for (const k of [0.25, 0.5, 0.75]) this.rings.push(s0 + len * k);
+    this.settle(14, { kind: "land" });
     this.p = 0;
   }
   narrow() {
@@ -357,7 +385,7 @@ const stripe = (() => {
   t.anisotropy = 8;
   return t;
 })();
-export function trackMesh(track) {
+export function trackMesh(track, theme) {
   const pos = [],
     col = [],
     uv = [],
@@ -383,7 +411,7 @@ export function trackMesh(track) {
     }
     const ring = profile(a.half);
     const start = pos.length / 3;
-    color.setHSL(a.hue, 0.95, 0.55);
+    color.copy(theme.road.color(a.hue));
     for (const [x, y, u, dark] of ring) {
       const p = a.p.clone().addScaledVector(a.r, x).addScaledVector(a.u, y);
       pos.push(p.x, p.y, p.z);
@@ -412,11 +440,16 @@ export function trackMesh(track) {
   const mesh = new T.Mesh(
     geo,
     new T.MeshPhysicalMaterial({
-      map: stripe,
+      map: theme.road.tex || stripe,
       vertexColors: true,
-      roughness: 0.35,
-      clearcoat: 0.6,
+      roughness: theme.road.roughness ?? 0.35,
+      metalness: theme.road.metalness ?? 0,
+      clearcoat: theme.road.clearcoat ?? 0.6,
       clearcoatRoughness: 0.2,
+      // Светящиеся узоры у ночных тем: края, пунктир, трещины лавы
+      emissive: theme.road.glow ? 0xffffff : 0x000000,
+      emissiveMap: theme.road.glow || null,
+      emissiveIntensity: theme.road.glow ? 1 : 0,
       side: T.DoubleSide,
     }),
   );
@@ -424,7 +457,7 @@ export function trackMesh(track) {
   return mesh;
 }
 // Бортики: цепочка светящихся бусин вдоль краёв, где есть бортик
-export function railLights(track) {
+export function railLights(track, theme) {
   const spots = [];
   for (const a of track.samples) {
     if (!a.rails || a.tube || Math.round(a.s / DS) % 3) continue;
@@ -432,7 +465,10 @@ export function railLights(track) {
   }
   const mesh = new T.InstancedMesh(
     new T.SphereGeometry(0.14, 10, 8),
-    new T.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.25, roughness: 0.3 }),
+    // Ночью бусины без освещения: цвет горит в полную силу, как неон
+    theme.railGlow
+      ? new T.MeshBasicMaterial({ color: 0xffffff })
+      : new T.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.25, roughness: 0.3 }),
     spots.length,
   );
   const m = new T.Matrix4(),
@@ -441,7 +477,7 @@ export function railLights(track) {
     const p = a.p.clone().addScaledVector(a.r, side * (a.half + 0.1)).addScaledVector(a.u, 0.3);
     m.makeTranslation(p.x, p.y, p.z);
     mesh.setMatrixAt(i, m);
-    color.setHSL((a.hue + 0.5 + (i % 6) * 0.08) % 1, 1, 0.55);
+    color.copy(theme.rail(a.hue, i));
     mesh.setColorAt(i, color);
   });
   return mesh;
