@@ -19,9 +19,19 @@ body {
     system-ui,
     -apple-system,
     sans-serif;
-  background-color: #fff4d9;
-  background-image: radial-gradient(#eacc934e 1.4px, transparent 1.5px);
-  background-size: 13px 13px;
+  /* Фон в разноцветной посыпке */
+  background-color: #fff3ea;
+  background-image:
+    radial-gradient(#ff7aa266 2px, transparent 2.4px),
+    radial-gradient(#3fcfab55 2px, transparent 2.4px),
+    radial-gradient(#ffc93c77 2px, transparent 2.4px),
+    radial-gradient(#9b7bff55 2px, transparent 2.4px);
+  background-size: 44px 44px;
+  background-position:
+    0 0,
+    22px 11px,
+    11px 30px,
+    33px 36px;
   -webkit-tap-highlight-color: transparent;
 }
 button,
@@ -196,7 +206,8 @@ h1 em {
   max-height: min(125vw, 1100px);
   border: 2px solid var(--edge);
   border-radius: 24px;
-  background: linear-gradient(#6bd5e3, #b7efe4 74%, #9ed78f);
+  /* Небо: насыщенная синева сверху, к горизонту светлее с розовым отливом */
+  background: linear-gradient(#36b6f2, #7fd3f7 38%, #c8ecf8 62%, #ffe3ef 80%, #a6df7c);
   box-shadow: 0 4px 0 var(--shadow);
 }
 #park {
@@ -888,4 +899,41 @@ h1 em {
   .happy > span {
     font-size: 14px;
   }
+}
+/* Отдельная игра: слева место под кнопку «Все игры» от портала */
+.home-slot {
+  min-width: 42px;
+  display: flex;
+}
+.home-slot a {
+  border: 1.5px solid #584153;
+  border-radius: 30px;
+  background: #fffaf0;
+  min-height: 36px;
+  width: 46px;
+  display: inline-grid;
+  place-items: center;
+  text-decoration: none;
+  font-size: 20px;
+}
+.wordmark {
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #7b493b;
+}
+.wordmark i {
+  background: linear-gradient(135deg, #ff7aa2, #ffc93c);
+  font-style: normal;
+  font-size: 17px;
+  line-height: 26px;
+  padding: 0 4px 1px;
+  border-radius: 9px;
+}
+/* «чик» в названии переливается конфетными цветами */
+h1 em {
+  background: linear-gradient(90deg, #ff4f7b, #ff8a3d 45%, #ffb400);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }

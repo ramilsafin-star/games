@@ -46,14 +46,34 @@ export const flavors = [
     fleck: "#3e9e83",
   },
 ];
+// Отделка: soft — бархатистые зверята и парк, gloss — лакированный фургон и леденцы
+let finish = "soft";
 function mat(color) {
   if (typeof color !== "string") return color;
-  if (!materials.has(color))
+  const key = color + finish;
+  if (!materials.has(key))
     materials.set(
-      color,
-      new T.MeshStandardMaterial({ color, roughness: 0.44 }),
+      key,
+      finish === "gloss"
+        ? new T.MeshPhysicalMaterial({
+            color,
+            roughness: 0.3,
+            clearcoat: 1,
+            clearcoatRoughness: 0.1,
+          })
+        : new T.MeshStandardMaterial({ color, roughness: 0.44 }),
     );
-  return materials.get(color);
+  return materials.get(key);
+}
+// Всё, что построено внутри, блестит как леденец
+function glossy(build) {
+  const was = finish;
+  finish = "gloss";
+  try {
+    return build();
+  } finally {
+    finish = was;
+  }
 }
 export function group(parent, x = 0, y = 0, z = 0) {
   const g = new T.Group();
@@ -189,10 +209,18 @@ const creams = flavors.map((flavor, index) => {
     },
     true,
   );
-  material.roughness = 0.63;
-  material.bumpMap = material.map;
-  material.bumpScale = 0.016;
-  return material;
+  // Сливочный бархат по краям шарика и тонкий влажный блеск сверху
+  return new T.MeshPhysicalMaterial({
+    map: material.map,
+    bumpMap: material.map,
+    bumpScale: 0.016,
+    roughness: 0.6,
+    sheen: 0.8,
+    sheenRoughness: 0.45,
+    sheenColor: new T.Color("#fff4e4"),
+    clearcoat: 0.35,
+    clearcoatRoughness: 0.4,
+  });
 });
 const coneGeo = new T.CylinderGeometry(0.43, 0.028, 0.92, 50, 1);
 export function cone(p) {
@@ -237,6 +265,9 @@ export function scoop(p, flavor, index = 0) {
   return bake(g);
 }
 export function topping(p, kind, height) {
+  return glossy(() => toppingParts(p, kind, height));
+}
+function toppingParts(p, kind, height) {
   const g = group(p, 0, height, 0);
   if (kind === "syrup") {
     const path = [];
@@ -284,7 +315,8 @@ export function topping(p, kind, height) {
   return bake(g);
 }
 export function syrupStroke(p, points) {
-  if (points.length > 1) return line(p, points, 0.031, "#a33e63");
+  if (points.length > 1)
+    return glossy(() => line(p, points, 0.031, "#a33e63"));
 }
 function label(p, x, y, z, w, h, draw) {
   return mesh(p, new T.PlaneGeometry(w, h), painted(768, 192, draw), x, y, z);
@@ -299,7 +331,29 @@ function wheel(p, x) {
     disk(p, x, 0.55, z, r, h, c).rotation.x = pie / 2;
   }
 }
+// Лампочки гирлянды: у каждого цвета свой материал, park.js заставляет их перемигиваться
+export const bulbs = ["#ff4f7b", "#ffcc33", "#3fc8ff", "#6eea8e", "#c27dff"].map(
+  (color) =>
+    new T.MeshStandardMaterial({
+      color,
+      emissive: color,
+      emissiveIntensity: 0.8,
+      roughness: 0.25,
+    }),
+);
 export function truck(p) {
+  const g = glossy(() => truckBody(p));
+  // Рожок-вывеска на крыше крутится отдельно от фургона
+  const sign = group(g, -1.4, 2.78, 0.24);
+  sign.scale.setScalar(0.82);
+  const spin = group(sign);
+  cone(spin);
+  scoop(spin, 0);
+  topping(spin, "cherry", 1.11);
+  bake(spin);
+  return { body: g, spin };
+}
+function truckBody(p) {
   const g = group(p, -2.05, 0, -0.25);
   g.rotation.y = 0.18;
   box(g, 0, 0.73, 0, 4.85, 0.34, 1.8, "#176f77", 0.14);
@@ -370,12 +424,9 @@ export function truck(p) {
     ctx.font = 'italic 900 145px "Avenir Next", system-ui';
     ctx.fillText("Пломбир", 384, 89, 710);
   });
-  const topper = group(g, -1.4, 2.78, 0.24);
-  topper.scale.setScalar(0.82);
-  topper.rotation.z = 0.24;
-  cone(topper);
-  scoop(topper, 0);
-  topping(topper, "cherry", 1.11);
+  // Гирлянда по переднему краю крыши
+  for (let i = 0; i < 14; i++)
+    mesh(g, bead, bulbs[i % bulbs.length], -1.62 + i * 0.3, 2.83, 1.07).scale.setScalar(0.075);
   return bake(g);
 }
 // Гости по кругу. Порядок совпадает со списком гостей в shop.js.
@@ -613,26 +664,75 @@ export function shadow(p, x, z, w, d, y = 0.012) {
   m.rotation.x = -pie / 2;
   return m;
 }
+// Конфетные цвета парка: из них плитка, клумбы, флажки и шары
+const candy = ["#ff6f96", "#ffc93c", "#38cfa9", "#5aa8ff", "#b47cff", "#ff8f4a"];
+const pastel = ["#ffc4d6", "#ffe7a1", "#bdf0de", "#c6dcff", "#e3cdff", "#ffd2b5"];
+// Леденец на палочке: спираль нарисована на круглой крышке диска
+function swirl(a, b, c) {
+  const material = painted(
+    256,
+    256,
+    (ctx) => {
+      ctx.fillStyle = a;
+      ctx.fillRect(0, 0, 256, 256);
+      ctx.lineWidth = 17;
+      ctx.lineCap = "round";
+      for (const [color, shift] of [
+        [b, 0],
+        [c, pie],
+      ]) {
+        ctx.strokeStyle = color;
+        ctx.beginPath();
+        for (let i = 0; i <= 160; i++) {
+          const k = i / 160,
+            ang = shift + k * pie * 7,
+            r = 6 + k * 120;
+          const x = 128 + Math.cos(ang) * r,
+            y = 128 + Math.sin(ang) * r;
+          if (i) ctx.lineTo(x, y);
+          else ctx.moveTo(x, y);
+        }
+        ctx.stroke();
+      }
+    },
+    true,
+  );
+  return new T.MeshPhysicalMaterial({
+    map: material.map,
+    roughness: 0.25,
+    clearcoat: 1,
+    clearcoatRoughness: 0.08,
+  });
+}
+function lollipop(p, x, z, h, look) {
+  const g = group(p, x, 0, z);
+  disk(g, 0, h / 2, 0, 0.06, h, "#fff7ec");
+  const head = mesh(g, tube, look, 0, h + 0.55, 0);
+  head.scale.set(0.62, 0.16, 0.62);
+  head.rotation.x = pie / 2;
+  return g;
+}
 export function scenery(p) {
   const g = group(p);
-  box(g, 0, -0.19, -4, 100, 0.35, 29, "#b3df92", 0.02);
-  box(g, 0, -0.075, 0.2, 100, 0.15, 4.8, "#f1cf9a", 0.02);
-  box(g, 0, -0.077, 4.15, 100, 0.15, 3.12, "#f8b5a4", 0.02);
-  for (let i = -5; i < 6; i++)
-    for (let j = 0; j < 2; j++) {
-      if ((i + j) % 2 === 0)
-        box(
-          g,
-          i * 1.62,
-          0.002,
-          2.79 + j * 1.38,
-          1.61,
-          0.009,
-          1.38,
-          "#ffe1b8",
-          0.002,
-        );
-    }
+  box(g, 0, -0.19, -4, 100, 0.35, 29, "#a6df7c", 0.02);
+  box(g, 0, -0.075, 0.2, 100, 0.15, 4.8, "#f7d8a6", 0.02);
+  box(g, 0, -0.077, 5.1, 100, 0.15, 5.0, "#fff4e6", 0.02);
+  // Мозаика всех цветов радуги у переднего края сцены
+  for (let i = -8; i <= 8; i++)
+    for (let j = 0; j < 4; j++)
+      box(
+        g,
+        i * 1.3 + (j % 2) * 0.65,
+        0.004,
+        3.2 + j * 1.25,
+        1.18,
+        0.012,
+        1.12,
+        pastel[(i + j * 2 + 24) % pastel.length],
+        0.03,
+      );
+  // Дальние холмы разных конфетных цветов, туман делает их нежнее
+  const hills = ["#86d8a4", "#b8a3f5", "#ffaecb", "#8fd3f7", "#ffd27f", "#9be6c2"];
   for (let i = -8; i < 9; i++) {
     const x = i * 2.1;
     orb(
@@ -643,7 +743,7 @@ export function scenery(p) {
       3.1,
       1.8 + Math.cos(i * 4) * 0.7,
       2.1,
-      i % 2 ? "#91cfa5" : "#9bd7b4",
+      hills[(i + 16) % hills.length],
     );
     if (i % 2 === 0)
       tree(
@@ -651,51 +751,39 @@ export function scenery(p) {
         x + 0.45,
         -6 + Math.sin(i * 3) * 0.7,
         1 + Math.cos(i) * 0.27,
-        i % 3 ? "#66c599" : "#83d69e",
+        ["#55c78f", "#ff9cc6", "#9bdc5f", "#6fd2c0"][(i + 8) % 4],
       );
   }
   for (const [x, z, s, c] of [
-    [-6.3, -1.9, 1.22, "#66bf8b"],
-    [5.9, -2.4, 1.29, "#64c599"],
-    [8, -0.7, 1.02, "#90d594"],
-    [-8, 0.1, 0.9, "#8ad192"],
+    [-6.3, -1.9, 1.22, "#5cc48a"],
+    [5.9, -2.4, 1.29, "#ff9ec8"],
+    [8, -0.7, 1.02, "#8fd65f"],
+    [-8, 0.1, 0.9, "#ffb3d4"],
   ])
     tree(g, x, z, s, c);
+  // Забор в цветную полоску
   for (let i = -14; i <= 14; i++)
-    box(g, i * 0.65, 0.49, -3.45, 0.16, 0.94, 0.12, "#fff0c3", 0.075);
+    box(g, i * 0.65, 0.49, -3.45, 0.16, 0.94, 0.12, i % 3 ? "#fff3d4" : pastel[(i + 15) % 6], 0.075);
   for (const y of [0.3, 0.65])
-    box(g, 0, y, -3.5, 20, 0.1, 0.1, "#f5dfb1", 0.035);
+    box(g, 0, y, -3.5, 20, 0.1, 0.1, "#f8dcb0", 0.035);
   for (let i = -13; i <= 14; i++)
     if (i < -6 || i > 6)
-      flower(
-        g,
-        i * 0.64,
-        -0.56 + Math.sin(i) * 0.74,
-        i % 2 ? "#fa929a" : "#fff2b7",
-      );
-  for (const [x, y, z, s] of [
-    [-6, 3.3, -10, 1.2],
-    [1, 3.1, -11, 0.85],
-    [7.8, 3, -10, 0.8],
-    [-11, 2.9, -9, 0.6],
-  ]) {
-    const cloud = group(g, x, y, z);
-    cloud.scale.setScalar(s);
-    orb(cloud, 0, 0, 0, 0.99, 0.22, 0.34, "#fff8e8");
-    orb(cloud, -0.21, 0.15, 0, 0.4, 0.3, 0.32, "#fff8e8");
-    orb(cloud, 0.23, 0.12, 0, 0.36, 0.24, 0.29, "#fff8e8");
-  }
-  // Candy-striped rainbow peeking over the far treetops.
+      flower(g, i * 0.64, -0.56 + Math.sin(i) * 0.74, candy[(i + 13) % candy.length]);
+  // Клумбы у забора
+  for (let i = -15; i <= 15; i++)
+    flower(g, i * 0.6 + 0.3, -3.05 + Math.sin(i * 1.7) * 0.12, candy[(i + 30) % candy.length]);
+  // Карамельная радуга над деревьями
   for (const [i, c] of [
-    "#ef8290",
-    "#ffc088",
-    "#ffdf80",
-    "#83d9b4",
-    "#93c9e9",
+    "#ff6f8e",
+    "#ffa35c",
+    "#ffd84d",
+    "#5fd6a0",
+    "#5bb8f5",
+    "#a98bff",
   ].entries()) {
     const band = mesh(
       g,
-      new T.TorusGeometry(3.65 - i * 0.15, 0.094, 8, 66, pie),
+      new T.TorusGeometry(3.75 - i * 0.15, 0.094, 8, 66, pie),
       c,
       5.2,
       -0.12,
@@ -703,10 +791,12 @@ export function scenery(p) {
     );
     band.rotation.y = -0.1;
   }
-  // A garland behind the serving window, strung between two striped poles.
+  // Гирлянда флажков над окошком на двух полосатых столбиках
   for (const x of [-5.3, 5.6]) {
-    disk(g, x, 1.76, -2.6, 0.057, 3.52, "#e2bc82");
-    orb(g, x, 3.57, -2.6, 0.11, 0.11, 0.11, "#ffd763");
+    disk(g, x, 1.76, -2.6, 0.057, 3.52, "#ffe2b8");
+    for (let k = 0; k < 6; k++)
+      disk(g, x, 0.3 + k * 0.58, -2.6, 0.062, 0.22, candy[k]);
+    orb(g, x, 3.57, -2.6, 0.12, 0.12, 0.12, "#ffd23f");
   }
   const rope = [];
   for (let i = 0; i <= 22; i++) {
@@ -718,7 +808,7 @@ export function scenery(p) {
       const flag = mesh(
         g,
         new T.ConeGeometry(0.19, 0.37, 3),
-        [berry, "#ffc854", teal, "#b695de"][(i >> 1) % 4],
+        candy[(i >> 1) % candy.length],
         x,
         y - 0.17,
         -2.6,
@@ -727,11 +817,91 @@ export function scenery(p) {
     }
   }
   line(g, rope, 0.018, "#b88e66");
+  // Огромные леденцы за забором
+  for (const [x, z, h, look] of [
+    [-4.4, -4.6, 2.3, swirl("#fff4f7", "#ff5f8a", "#ffb3c8")],
+    [5.3, -5.2, 2.7, swirl("#fffbea", "#5aa8ff", "#ffc93c")],
+    [7.9, -4.3, 2.0, swirl("#f4fff9", "#38cfa9", "#b47cff")],
+    [-8.6, -4.4, 2.6, swirl("#fff7ef", "#ff8f4a", "#ffd84d")],
+  ])
+    lollipop(g, x, z, h, look);
   bake(g);
   shadow(p, -1.9, -0.13, 6.3, 2.8);
   shadow(p, 2.65, 0.68, 2.7, 1.7);
 }
+// Облака плывут по небу, park.js двигает их по кругу
+export function clouds(p) {
+  return [
+    [-6, 3.3, -10, 1.2],
+    [1, 3.1, -11, 0.85],
+    [7.8, 3, -10, 0.8],
+    [-11, 2.9, -9, 0.6],
+    [12, 3.4, -11, 1],
+  ].map(([x, y, z, s]) => {
+    const cloud = group(p, x, y, z);
+    cloud.scale.setScalar(s);
+    orb(cloud, 0, 0, 0, 0.99, 0.22, 0.34, "#ffffff");
+    orb(cloud, -0.21, 0.15, 0, 0.4, 0.3, 0.32, "#ffffff");
+    orb(cloud, 0.23, 0.12, 0, 0.36, 0.24, 0.29, "#ffffff");
+    bake(cloud);
+    cloud.traverse((m) => (m.castShadow = false));
+    return cloud;
+  });
+}
+// Связка воздушных шаров, привязанная к заднему углу крыши фургона
+export function balloons(p) {
+  const root = group(p, 0.17, 2.95, -1.47);
+  glossy(() => {
+    const tops = [
+      [-0.55, 1.35, 0.1],
+      [0.1, 1.65, -0.15],
+      [0.65, 1.3, 0.05],
+      [-0.2, 1.05, 0.35],
+      [0.35, 0.95, 0.4],
+      [-0.75, 0.85, -0.2],
+    ];
+    tops.forEach(([x, y, z], i) => {
+      orb(root, x, y, z, 0.3, 0.37, 0.3, candy[i]);
+      // Узелок внизу шарика
+      orb(root, x, y - 0.38, z, 0.05, 0.05, 0.05, candy[i]);
+      line(root, [[0, 0, 0], [x * 0.4, y * 0.45, z * 0.4], [x, y - 0.4, z]], 0.007, "#fffaf2");
+    });
+  });
+  bake(root);
+  return root;
+}
+// Бабочка: тельце и два крылышка, park.js машет крыльями и водит её над цветами
+const wingShape = new T.Shape();
+wingShape.moveTo(0, 0);
+wingShape.bezierCurveTo(0.08, 0.32, 0.42, 0.36, 0.4, 0.1);
+wingShape.bezierCurveTo(0.42, -0.08, 0.3, -0.12, 0.22, -0.06);
+wingShape.bezierCurveTo(0.3, -0.3, 0.06, -0.34, 0, -0.05);
+const wingGeo = new T.ShapeGeometry(wingShape, 10);
+export function butterfly(p, color) {
+  const root = group(p);
+  const look = new T.MeshPhysicalMaterial({
+    color,
+    roughness: 0.35,
+    side: T.DoubleSide,
+    iridescence: 0.6,
+    sheen: 0.5,
+  });
+  orb(root, 0, 0, 0, 0.026, 0.026, 0.075, "#5b3f5e");
+  const wings = [-1, 1].map((s) => {
+    const hinge = group(root);
+    const w = new T.Mesh(wingGeo, look);
+    w.rotation.x = -pie / 2;
+    w.scale.set(s * 0.55, 0.55, 0.55);
+    hinge.add(w);
+    return hinge;
+  });
+  root.traverse((m) => (m.castShadow = false));
+  return { root, wings };
+}
 export function stand(p, x, z) {
+  return glossy(() => standParts(p, x, z));
+}
+function standParts(p, x, z) {
   const g = group(p, x, 0, z);
   disk(g, 0, 0.1, 0, 0.95, 0.2, "#dc8794");
   disk(g, 0, 0.215, 0, 0.91, 0.1, "#fff1cf");

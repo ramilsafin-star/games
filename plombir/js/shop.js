@@ -41,16 +41,20 @@ const requests = [
   { scoops: [2], top: "syrup" },
   { scoops: [0, 2], top: "stars" },
 ];
+// Раньше игра жила внутри «Бибики» с ключами bibika-ice-*: счёт оттуда не теряется
 function read(key) {
   try {
-    return localStorage.getItem("bibika-ice-" + key);
+    return (
+      localStorage.getItem("plombir-" + key) ??
+      localStorage.getItem("bibika-ice-" + key)
+    );
   } catch {
     return null;
   }
 }
 function save(key, value) {
   try {
-    localStorage.setItem("bibika-ice-" + key, String(value));
+    localStorage.setItem("plombir-" + key, String(value));
   } catch {}
 }
 const saved = Number(read("served"));
@@ -73,6 +77,8 @@ let utterance = 0,
 const recordings = new Map();
 try {
   park = new Park(scene);
+  // Для проверок: адрес с ?debug открывает сцену из консоли
+  if (new URLSearchParams(location.search).has("debug")) window.park = park;
 } catch (error) {
   console.warn("Парк переключён в плоский режим", error);
   el("fallback").hidden = false;
@@ -406,6 +412,11 @@ for (const t of toppings) {
 scene.addEventListener("pointerdown", (e) => {
   if (!park || !e.isPrimary || e.button !== 0) return;
   unlock();
+  // Мыльные пузыри лопаются от касания
+  if (park.popBubble(e.clientX, e.clientY)) {
+    Sound.bubble();
+    return;
+  }
   // Касание гостя с готовым рожком — угостить, без рожка — послушать заказ
   if (park.nearGuest(e.clientX, e.clientY)) {
     if (step !== 3 && stack.length) give();
@@ -459,11 +470,8 @@ el("next").onclick = () => {
   round++;
   begin();
   unlock();
-  // Колокольчик: динь-дон, и новый гость говорит заказ, когда добежит
-  if (Sound.ready()) {
-    Sound.tone({ type: "sine", f0: 1175, dur: 0.5, vol: 0.2 });
-    Sound.tone({ type: "sine", f0: 932, dur: 0.7, vol: 0.2, at: 0.22 });
-  }
+  // Колокольчик фургона, и новый гость говорит заказ, когда добежит
+  Sound.bell();
   orderVoice(0.75);
 };
 el("order").onclick = () => {
@@ -488,5 +496,3 @@ document.addEventListener("visibilitychange", () => {
 });
 begin();
 soundButton();
-if ("serviceWorker" in navigator && window.isSecureContext)
-  navigator.serviceWorker.register("../sw.js").catch(() => {});

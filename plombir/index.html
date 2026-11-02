@@ -6,18 +6,19 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#fff3d7" />
-    <title>Мороженое на колёсах · Бибика</title>
-    <link rel="icon" href="../icons/icon-192.png" />
-    <link rel="stylesheet" href="./shop.css" />
+    <meta name="theme-color" content="#ffe4ef" />
+    <title>Пломбирчик</title>
+    <meta name="description" content="Фургон мороженого в парке: собери рожок по заказу зверят." />
+    <link rel="icon" href="./icon-192.png" />
+    <link rel="apple-touch-icon" href="./icon-180.png" />
+    <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
     <main class="shop">
       <header>
-        <a class="back" href="../index.html" aria-label="Вернуться в гараж"
-          ><span aria-hidden="true">←</span> Гараж</a
-        >
-        <span class="wordmark"><i aria-hidden="true">b.</i> бибика</span>
+        <!-- Сюда портал вставляет кнопку «Все игры» (games-portal/build.mjs) -->
+        <nav class="home-slot"><a href="../" aria-label="Все игры">🎮</a></nav>
+        <span class="wordmark"><i aria-hidden="true">🍦</i> парк лакомка</span>
         <button
           id="sound"
           class="sound"
@@ -27,8 +28,8 @@
       </header>
       <div class="mast">
         <div>
-          <div class="eyebrow"><i></i> ПАРК ЛАКОМКА</div>
-          <h1>Мороженое <em>на колёсах</em></h1>
+          <div class="eyebrow"><i></i> ФУРГОН МОРОЖЕНОГО</div>
+          <h1>Пломбир<em>чик</em></h1>
         </div>
         <div class="ticket" aria-label="Угощено гостей">
           <span aria-hidden="true">★</span>
@@ -92,7 +93,7 @@
         </div>
       </section>
     </main>
-    <script src="../js/audio.js"></script>
-    <script type="module" src="./shop.js"></script>
+    <script src="./js/audio.js"></script>
+    <script type="module" src="./js/shop.js"></script>
   </body>
 </html>

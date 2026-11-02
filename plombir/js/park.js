@@ -1,4 +1,5 @@
 import * as T from "../vendor/three/three.module.min.js";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js";
 import {
   scenery,
   truck,
@@ -13,12 +14,21 @@ import {
   syrupStroke,
   heart,
   pals,
+  clouds,
+  balloons,
+  butterfly,
+  bulbs,
 } from "./models.js";
 
 const clamp = T.MathUtils.clamp,
   mix = T.MathUtils.lerp;
 const worktop = new T.Vector3(0.45, 0.48, 2.53),
   paw = new T.Vector3(2.14, 0.97, 1.27);
+// Камера смотрит на середину сцены; offset — откуда, зум и покачивание считаются в aimCamera
+const center = new T.Vector3(-0.48, 1.89, 0.0),
+  offset = new T.Vector3(-3.05, 2.75, 14.25),
+  guestSpot = new T.Vector3(2.6, 1.7, 0.6);
+const confettiColors = ["#ff4f7b", "#ffcc33", "#2fd0a6", "#4aa3ff", "#b06cff", "#ff8a3d"];
 function dropMeshes(root) {
   root.traverse((m) => {
     if (m.isMesh) m.geometry.dispose();
@@ -35,12 +45,19 @@ export class Park {
       powerPreference: "low-power",
     });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.65));
+    // Мягкая тональная кривая сохраняет яркие цвета, а отражения комнаты дают блики и объём
+    this.renderer.toneMapping = T.NeutralToneMapping;
+    this.renderer.toneMappingExposure = 1.04;
     this.scene = new T.Scene();
-    this.scene.fog = new T.Fog(0xa0e6e3, 19, 48);
+    const pmrem = new T.PMREMGenerator(this.renderer);
+    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.scene.environmentIntensity = 0.42;
+    pmrem.dispose();
+    this.scene.fog = new T.Fog(0xd6ecf6, 19, 48);
     this.camera = new T.PerspectiveCamera();
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = T.PCFSoftShadowMap;
-    this.scene.add(new T.HemisphereLight(0xfff6e7, 0xffc8a9, 1.12));
+    this.scene.add(new T.HemisphereLight(0xfff6e7, 0xffc3c8, 0.95));
     const sun = new T.DirectionalLight(0xfff3db, 2.58);
     sun.position.set(-5, 9, 6);
     sun.castShadow = true;
@@ -62,7 +79,8 @@ export class Park {
     const background = group(this.scene);
     scenery(background);
 
-    truck(this.scene);
+    this.sign = truck(this.scene).spin;
+    this.bunch = balloons(this.scene);
     stand(this.scene, worktop.x, worktop.z);
     this.guests = pals.map((_, i) => animal(this.scene, i));
     this.dog = puppy(this.scene);
@@ -78,6 +96,73 @@ export class Park {
     background.traverse((m) => {
       if (m.isMesh) m.castShadow = false;
     });
+    this.clouds = clouds(background);
+    this.flutter = [
+      [-6.2, -0.7, "#ff6fa8"],
+      [6.7, -1.3, "#ffc22e"],
+      [1.4, -2.9, "#5aa8ff"],
+    ].map(([x, z, color], k) => {
+      const fly = butterfly(this.scene, color);
+      fly.root.scale.setScalar(1.8);
+      return { ...fly, x, z, k };
+    });
+    // Мыльные пузыри: у каждого свой материал, чтобы лопался и таял отдельно
+    const bubbleGeo = new T.SphereGeometry(1, 28, 18);
+    this.bubbles = [];
+    for (let i = 0; i < 7; i++) {
+      const look = new T.MeshPhysicalMaterial({
+        color: 0xffffff,
+        roughness: 0.03,
+        transparent: true,
+        opacity: 0.42,
+        // Лёгкая радужная плёнка, чтобы пузырь был виден и на светлом небе
+        emissive: 0xd8c8ff,
+        emissiveIntensity: 0.12,
+        depthWrite: false,
+        iridescence: 1,
+        iridescenceIOR: 1.33,
+        iridescenceThicknessRange: [160, 560],
+        envMapIntensity: 3.2,
+      });
+      const ball = new T.Mesh(bubbleGeo, look);
+      ball.renderOrder = 3;
+      // Белый блик сверху-слева, как на картинке в детской книжке
+      const glint = new T.Mesh(
+        bubbleGeo,
+        new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false }),
+      );
+      glint.position.set(-0.38, 0.42, 0.62);
+      glint.scale.set(0.2, 0.13, 0.05);
+      glint.rotation.z = 0.7;
+      glint.renderOrder = 4;
+      ball.add(glint);
+      ball.visible = false;
+      this.scene.add(ball);
+      this.bubbles.push({ ball, born: 0.6 + i * 1.7, popAt: null });
+    }
+    // Конфетти для точного заказа: одна сетка на все кусочки
+    const bits = 90;
+    this.confetti = new T.InstancedMesh(
+      new T.PlaneGeometry(0.09, 0.15),
+      new T.MeshStandardMaterial({ side: T.DoubleSide, roughness: 0.3, metalness: 0.3 }),
+      bits,
+    );
+    this.confetti.frustumCulled = false;
+    this.confetti.visible = false;
+    this.confettiAt = -9;
+    this.flight = [];
+    for (let i = 0; i < bits; i++) {
+      this.confetti.setColorAt(i, new T.Color(confettiColors[i % confettiColors.length]));
+      const a = Math.random() * Math.PI * 2,
+        out = 1 + Math.random() * 2.4;
+      this.flight.push({
+        v: new T.Vector3(Math.cos(a) * out, 3.2 + Math.random() * 3, Math.sin(a) * out * 0.7 + 0.8),
+        spin: new T.Vector3(Math.random() * 9, Math.random() * 9, Math.random() * 9),
+        drift: Math.random() * 6,
+      });
+    }
+    this.scene.add(this.confetti);
+    this.dummy = new T.Object3D();
     this.sparkles = group(this.scene);
     for (let i = 0; i < 12; i++) {
       const bit = orb(
@@ -109,6 +194,16 @@ export class Park {
     this.leaving = null;
     this.perfect = false;
     this.nodAt = -9;
+    this.still = false;
+    this.swayClock = 0;
+    this.look = center.clone();
+    this.zoom = 1;
+    this.focus = new T.Vector3();
+    this.sway = new T.Vector3();
+    this.confettiFrom = new T.Vector3(2.7, 2.3, 0.9);
+    this.frameGap = 15;
+    this.slowFrames = 0;
+    this.prev = 0;
     this.motion = matchMedia("(prefers-reduced-motion: reduce)");
     this.reset(0);
     this.resize = () => {
@@ -119,16 +214,13 @@ export class Park {
       const aspect = w / h,
         wide = mix(9.1, 10.85, clamp((aspect - 0.8) / 0.8, 0, 1)),
         span = Math.max(5.75, wide / aspect);
-      const center = new T.Vector3(-0.48, 1.89, 0.0),
-        offset = new T.Vector3(-3.05, 2.75, 14.25);
       this.camera.fov = T.MathUtils.radToDeg(
         2 * Math.atan(span / (2 * offset.length())),
       );
       this.camera.aspect = aspect;
       this.camera.near = 0.1;
       this.camera.far = 100;
-      this.camera.position.copy(center).add(offset);
-      this.camera.lookAt(center);
+      this.aimCamera(0);
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(w, h, false);
       this.render(performance.now(), true);
@@ -183,6 +275,154 @@ export class Park {
       g.root.visible = i === id || g === this.leaving?.guest;
       if (i === id) g.dab.visible = g.tongue.visible = false;
     });
+  }
+  // Камера медленно покачивается, чтобы была видна глубина сцены,
+  // подъезжает к рожку, пока его собирают, и к гостю, когда он получил угощение
+  aimCamera(dt) {
+    const calm = this.motion.matches,
+      now = performance.now() / 1000;
+    let zoom = 1;
+    this.focus.copy(center);
+    if (!calm && this.delivered !== null && now - this.delivered < 2.8) {
+      this.focus.lerp(guestSpot, 0.38);
+      zoom = 0.88;
+    } else if (!calm && this.scoops.length) {
+      this.focus.lerp(this.treat.position, 0.16);
+      zoom = 0.95;
+    }
+    const k = dt ? 1 - Math.exp(-dt * 2.4) : 1;
+    this.look.lerp(this.focus, k);
+    this.zoom += (zoom - this.zoom) * k;
+    if (!this.still && !calm) this.swayClock += dt;
+    const w = this.swayClock;
+    this.camera.position.copy(this.look).addScaledVector(offset, this.zoom);
+    if (!calm)
+      this.camera.position.add(
+        this.sway.set(
+          Math.sin(w * 0.31) * 0.6 + Math.sin(w * 0.17 + 1.3) * 0.25,
+          Math.sin(w * 0.23 + 0.6) * 0.2,
+          0,
+        ),
+      );
+    this.camera.lookAt(this.look);
+  }
+  spawnBubble(b, born) {
+    b.born = born;
+    b.x = -5.5 + Math.random() * 11;
+    b.z = -1.6 + Math.random() * 3.6;
+    b.r = 0.15 + Math.random() * 0.17;
+    b.rise = 0.32 + Math.random() * 0.25;
+  }
+  // Пузырь под пальцем лопается; пузырь щедро крупнее, чтобы ребёнок попадал
+  popBubble(x, y) {
+    if (this.motion.matches) return false;
+    this.aim(x, y);
+    let best = null,
+      near = Infinity;
+    for (const b of this.bubbles) {
+      if (!b.ball.visible || b.popAt !== null) continue;
+      const reach = b.ball.scale.x * 1.5 + 0.12;
+      if (this.ray.ray.distanceSqToPoint(b.ball.position) > reach * reach) continue;
+      const along = this.ray.ray.origin.distanceTo(b.ball.position);
+      if (along < near) {
+        near = along;
+        best = b;
+      }
+    }
+    if (!best) return false;
+    best.popAt = performance.now() / 1000;
+    return true;
+  }
+  // Всё, что живёт само: облака, бабочки, пузыри, шары, лампочки, конфетти
+  animateWorld(t, dt, motion) {
+    this.sign.rotation.y = motion * t * 0.9;
+    this.bunch.rotation.set(
+      motion * Math.sin(t * 0.7 + 1) * 0.05,
+      0,
+      motion * Math.sin(t * 0.9) * 0.07,
+    );
+    bulbs.forEach((b, i) => {
+      b.emissiveIntensity = motion
+        ? 0.3 + 1.2 * Math.max(0, Math.sin(t * 4 - i * 1.26))
+        : 0.8;
+    });
+    for (const [i, cloud] of this.clouds.entries()) {
+      cloud.position.x += motion * dt * (0.18 + i * 0.04);
+      if (cloud.position.x > 16) cloud.position.x = -16;
+    }
+    for (const f of this.flutter) {
+      const a = t * 0.6 + f.k * 2.1;
+      f.root.position.set(
+        f.x + Math.sin(a) * 1.1,
+        0.95 + Math.sin(a * 1.7) * 0.35 + 0.08 * Math.sin(t * 9 + f.k),
+        f.z + Math.cos(a * 0.8) * 0.7,
+      );
+      f.root.rotation.y = Math.atan2(Math.cos(a) * 1.1, -Math.sin(a * 0.8) * 0.56);
+      const flap = motion ? 0.2 + 0.95 * Math.abs(Math.sin(t * 15 + f.k)) : 0.5;
+      f.wings[0].rotation.z = -flap;
+      f.wings[1].rotation.z = flap;
+    }
+    for (const [i, b] of this.bubbles.entries()) {
+      if (!motion) {
+        b.ball.visible = false;
+        continue;
+      }
+      if (b.x === undefined) this.spawnBubble(b, b.born);
+      if (b.popAt !== null) {
+        const q = (t - b.popAt) / 0.16;
+        if (q >= 1) {
+          b.popAt = null;
+          b.ball.visible = false;
+          this.spawnBubble(b, t + 1.2 + Math.random() * 2.5);
+          continue;
+        }
+        b.ball.scale.setScalar(b.r * (1 + q * 0.7));
+        b.ball.material.opacity = 0.42 * (1 - q);
+        b.ball.children[0].material.opacity = 0.9 * (1 - q);
+        continue;
+      }
+      const age = t - b.born;
+      b.ball.visible = age > 0;
+      if (age <= 0) continue;
+      const y = 0.35 + age * b.rise;
+      if (y > 7.2) {
+        b.ball.visible = false;
+        this.spawnBubble(b, t + Math.random() * 2);
+        continue;
+      }
+      const grow = Math.min(1, age * 2.5),
+        wob = Math.sin(age * 7 + i) * 0.04;
+      b.ball.position.set(
+        b.x + Math.sin(age * 1.3 + i) * 0.35,
+        y,
+        b.z + Math.cos(age * 0.9 + i) * 0.2,
+      );
+      b.ball.scale.set(b.r * grow * (1 + wob), b.r * grow * (1 - wob), b.r * grow);
+      b.ball.material.opacity = 0.42;
+      b.ball.children[0].material.opacity = 0.9;
+    }
+    const age = t - this.confettiAt;
+    this.confetti.visible = !!motion && age >= 0 && age < 2.6;
+    if (this.confetti.visible) {
+      const fade = clamp((2.6 - age) / 0.5, 0, 1),
+        from = this.confettiFrom,
+        drag = 1 - age * 0.18;
+      this.flight.forEach((f, i) => {
+        const y = from.y + f.v.y * age - 3.6 * age * age,
+          landed = y < 0.03;
+        this.dummy.position.set(
+          from.x + f.v.x * age * drag + Math.sin(age * 3 + f.drift) * 0.15,
+          landed ? 0.03 : y,
+          from.z + f.v.z * age * drag,
+        );
+        if (landed) this.dummy.rotation.set(-Math.PI / 2, 0, f.drift);
+        else this.dummy.rotation.set(f.spin.x * age, f.spin.y * age, f.spin.z * age);
+        this.dummy.scale.setScalar(fade);
+        this.dummy.updateMatrix();
+        this.confetti.setMatrixAt(i, this.dummy.matrix);
+      });
+      this.confetti.instanceMatrix.needsUpdate = true;
+    }
   }
   // Гость кивает, когда на рожке появилось то, что он заказал
   nod() {
@@ -262,6 +502,7 @@ export class Park {
     this.delivered = performance.now() / 1000;
     this.perfect = perfect;
     this.guests[this.id].dab.material.color.set(color);
+    if (perfect) this.confettiAt = this.delivered + 0.2;
   }
   missed(flavor) {
     if (this.miss) dropMeshes(this.miss.ball);
@@ -271,7 +512,15 @@ export class Park {
   }
   render(ms, force = false) {
     if (document.hidden && !force) return;
-    if (!force && ms - this.last < 32) return;
+    if (!force && ms - this.last < this.frameGap) return;
+    // Если устройство не успевает 60 кадров в секунду, переходим на ровные 30
+    if (!force && this.last) {
+      const gap = ms - this.last;
+      this.slowFrames =
+        gap > 24 && gap < 200 ? this.slowFrames + 1 : Math.max(0, this.slowFrames - 2);
+      if (this.slowFrames > 90) this.frameGap = 32;
+    }
+    const dt = this.last ? clamp((ms - this.last) / 1000, 0, 0.1) : 0;
     this.last = ms;
     const t = ms / 1000,
       motion = this.motion.matches ? 0 : 1;
@@ -379,6 +628,12 @@ export class Park {
         p = clamp((t - this.bounce) * 3, 0, 1);
       top.position.y =
         1.11 + (this.scoops.length - 1) * 0.51 + motion * 0.48 * (1 - p) ** 2;
+      // Шарик падает вытянутым, а приземлившись сплющивается и пружинит
+      const q = clamp((t - this.bounce - 0.33) / 0.45, 0, 1),
+        squash =
+          motion *
+          (p < 1 ? -0.12 * (1 - p) : Math.sin(q * Math.PI * 2.5) * (1 - q) * 0.2);
+      top.scale.set(1 + squash * 0.6, 1 - squash, 1 + squash * 0.6);
     }
     this.dog.position.y = 0.012 * Math.sin(t * 3.8) * motion;
     if (this.miss) {
@@ -394,6 +649,8 @@ export class Park {
         this.miss = null;
       }
     }
+    this.animateWorld(t, dt, motion);
+    if (!force) this.aimCamera(dt);
     this.renderer.render(this.scene, this.camera);
   }
 }
