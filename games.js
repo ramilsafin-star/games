@@ -42,4 +42,11 @@ const GAMES = [
     cover: "covers/plombir.jpg",
     color: "#ff5f8a",
   },
+  {
+    id: "listik",
+    title: "Лавка Листик",
+    url: "listik/",
+    cover: "covers/listik.jpg",
+    color: "#2f8a5f",
+  },
 ];
