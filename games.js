@@ -91,4 +91,11 @@ const GAMES = [
     cover: "covers/drakosha.jpg",
     color: "#27765f",
   },
+  {
+    id: "dvor-cup",
+    title: "Дворовой кубок",
+    url: "dvor-cup/",
+    cover: "covers/dvor-cup.jpg",
+    color: "#437559",
+  },
 ];
