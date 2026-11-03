@@ -77,4 +77,11 @@ const GAMES = [
     cover: "covers/svetlyachki.jpg",
     color: "#b047d8",
   },
+  {
+    id: "tishka",
+    title: "Звездочёт Тишка",
+    url: "tishka/",
+    cover: "covers/tishka.jpg",
+    color: "#5a4fd8",
+  },
 ];
