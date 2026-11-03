@@ -63,4 +63,11 @@ const GAMES = [
     cover: "covers/zubik.jpg",
     color: "#ff6fa8",
   },
+  {
+    id: "yozhik",
+    title: "Ёжик-почтальон",
+    url: "yozhik/",
+    cover: "covers/yozhik.jpg",
+    color: "#ff7a2f",
+  },
 ];
