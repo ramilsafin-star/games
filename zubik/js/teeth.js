@@ -1,6 +1,6 @@
 // Зубы и дёсны «Зубика»: каждая коронка строится по своей форме (резец, клык, малый и большой коренной),
 // зубы стоят вплотную по параболической дуге, десна изгибается дугой над каждым зубом.
-import * as T from "../vendor/three/three.module.min.js?v=230b1332";
+import * as T from "../vendor/three/three.module.min.js?v=1f1cdb42";
 
 const pie = Math.PI;
 const smooth = (t) => t * t * (3 - 2 * t);
