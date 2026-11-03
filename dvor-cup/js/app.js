@@ -1,5 +1,5 @@
-import { Match, STEP } from "./match.js?v=cfd015ee";
-import { Field } from "./field.js?v=cfd015ee";
+import { Match, STEP } from "./match.js?v=56e154f2";
+import { Field } from "./field.js?v=56e154f2";
 const $ = (id) => document.getElementById(id);
 const names = { fox: "Лисёнок", raccoon: "Енот" };
 const renderer = new Field($("field"));

@@ -45,7 +45,9 @@ export class Match {
     if (this.botClock <= 0) {
       this.botClock = 0.3;
       // Выходит к мячу из своей половины. У чужих ворот страхует навес.
-      const intercept = b.x > 39 || b.vx > 4;
+      // С перевесом в два гола бот отходит за центр и встречает следующую атаку.
+      const line = this.score[1] - this.score[0] >= 2 ? 58 : 39;
+      const intercept = b.x > line || b.vx > 4;
       this.botTarget = intercept ? clamp(b.x + b.vx * 0.12 + 1.8, 17, 94) : 64;
       const near = Math.abs(b.x - p.x) < 8 && b.y < p.y + 11;
       this.bot = {
