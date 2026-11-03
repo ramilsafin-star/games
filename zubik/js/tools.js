@@ -1,7 +1,7 @@
 // 3D-инструменты доктора. У каждого кончик в начале координат, ручка вдоль +Y,
 // рабочая сторона (щетина, бор, луч) смотрит в −Z, то есть в ротик.
-import * as T from "../vendor/three/three.module.min.js?v=cc1f2089";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=cc1f2089";
+import * as T from "../vendor/three/three.module.min.js?v=230b1332";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=230b1332";
 
 const pie = Math.PI;
 const plastic = (color, extra = {}) => new T.MeshPhysicalMaterial({ color, roughness: 0.28, clearcoat: 1, clearcoatRoughness: 0.12, ...extra });
