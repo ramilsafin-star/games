@@ -70,4 +70,11 @@ const GAMES = [
     cover: "covers/yozhik.jpg",
     color: "#ff7a2f",
   },
+  {
+    id: "svetlyachki",
+    title: "Светлячковый концерт",
+    url: "svetlyachki/",
+    cover: "covers/svetlyachki.jpg",
+    color: "#b047d8",
+  },
 ];
