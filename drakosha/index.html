@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#17473f" />
+    <meta
+      name="description"
+      content="Помоги Дракоше разгадать слова по буквам и собрать 36 волшебных открыток."
+    />
+    <title>Почта Дракоши</title>
+    <link rel="icon" href="./art/seal.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./style.css?v=429ae180" />
+  </head>
+  <body>
+    <header class="mast">
+      <div class="mast-inner">
+        <nav class="home-slot"><a href="../" aria-label="Все игры">🎮</a></nav>
+        <button
+          id="brand"
+          class="brand"
+          aria-label="Почта Дракоши, к конвертам"
+        >
+          <img src="./art/seal.svg" alt="" /><span>Почта Дракоши</span>
+        </button>
+        <div class="tools">
+          <button
+            id="album-link"
+            class="pill album-link"
+            aria-label="Открыть альбом открыток"
+          >
+            <span aria-hidden="true">▤</span> Альбом
+            <b id="album-count">0/36</b>
+          </button>
+          <button
+            id="sound"
+            class="pill icon"
+            aria-label="Выключить звук"
+            aria-pressed="true"
+          ></button>
+        </div>
+      </div>
+    </header>
+    <main>
+      <section id="lobby" class="screen" aria-labelledby="lobby-title">
+        <div class="hero">
+          <div class="hero-copy">
+            <span class="eyebrow light"><i></i> ВОЛШЕБНОЕ ОТДЕЛЕНИЕ № 4</span>
+            <h1 id="lobby-title">Почта<br /><em>Дракоши</em></h1>
+            <p>
+              На письме пропало слово. Угадывай буквы по подсказке! За каждый
+              промах отклеится одна марка.
+            </p>
+            <button id="welcome-voice" class="ghost-light">
+              <span aria-hidden="true">▷</span> Послушать Дракошу
+            </button>
+          </div>
+        </div>
+        <div class="dispatch-title">
+          <div>
+            <span class="eyebrow">СОРТИРОВОЧНАЯ</span>
+            <h2>Выбери конверт</h2>
+          </div>
+          <span class="pack-note">6 слов в каждом</span>
+        </div>
+        <div id="routes" class="routes"></div>
+        <label class="mode"
+          ><input type="checkbox" id="riddle-mode" /><span
+            ><b>Сначала только загадка</b
+            ><small
+              >Спрячем рисунок. Его можно открыть в любой момент.</small
+            ></span
+          ></label
+        >
+      </section>
+
+      <section id="game" class="screen" aria-label="Письмо" hidden>
+        <div class="game-head">
+          <button id="back" class="back" aria-label="К конвертам">
+            ← <span>К конвертам</span>
+          </button>
+          <div class="route-title">
+            <span id="route-name" class="eyebrow"></span>
+            <h2 id="letter-number"></h2>
+          </div>
+          <div class="stamp-book">
+            <span id="stamp-count"></span>
+            <div id="stamps" aria-hidden="true"></div>
+          </div>
+        </div>
+        <div id="workbench" class="workbench">
+          <div id="scene" class="scene">
+            <canvas id="world" aria-hidden="true"></canvas>
+            <div class="scene-fallback" aria-hidden="true">
+              <div class="fallback-art"><img id="fallback-pic" alt="" /></div>
+              <span class="flight">✉</span>
+            </div>
+            <div class="scene-tag" aria-hidden="true">
+              <i></i> МАСТЕРСКАЯ ДРАКОШИ
+            </div>
+            <div id="tiles" class="tiles" role="img"></div>
+          </div>
+          <div class="desk">
+            <div id="playing-panel">
+              <div class="riddle">
+                <button
+                  id="picture"
+                  class="thumb"
+                  aria-label="Увеличить рисунок"
+                >
+                  <img id="hint-art" alt="" />
+                </button>
+                <div>
+                  <span class="eyebrow">ЗАГАДКА НА МАРКЕ</span>
+                  <p id="riddle"></p>
+                </div>
+              </div>
+              <div class="actions">
+                <button id="listen" class="soft">▷ Послушать</button
+                ><button id="help" class="soft magic">✧ Открыть букву</button>
+              </div>
+              <div class="key-label">
+                <b>Выбери букву</b
+                ><span id="feedback" role="status" aria-live="polite"
+                  >Нажми на экране или на клавиатуре</span
+                >
+              </div>
+              <div
+                id="keyboard"
+                class="keyboard"
+                role="group"
+                aria-label="Русские буквы"
+              ></div>
+            </div>
+            <div id="result" class="result" hidden>
+              <span class="eyebrow" id="result-kicker"></span>
+              <div class="postcard"><img id="result-art" alt="" /></div>
+              <h2 id="answer"></h2>
+              <p id="result-copy" role="status"></p>
+              <button id="say-word" class="soft">▷ Послушать слово</button>
+              <div class="result-actions">
+                <button id="next" class="primary"></button
+                ><button id="retry" class="soft" hidden>Попробовать ещё</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="summary"
+        class="screen"
+        aria-labelledby="summary-title"
+        hidden
+      >
+        <div class="summary-paper">
+          <img class="big-seal" src="./art/seal.svg" alt="" /><span
+            class="eyebrow"
+            >ОТДЕЛЕНИЕ ВОЛШЕБНОЙ ПОЧТЫ</span
+          >
+          <h1 id="summary-title">Конверт разобран!</h1>
+          <p id="summary-count"></p>
+          <div id="summary-cards" class="summary-cards"></div>
+          <div class="summary-actions">
+            <button id="more" class="primary">Ещё один конверт</button
+            ><button id="other" class="soft">Выбрать тему</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="album" class="screen" aria-labelledby="album-title" hidden>
+        <button id="album-back" class="back">← Назад</button>
+        <div class="album-head">
+          <div>
+            <span class="eyebrow">ЛИЧНАЯ КОЛЛЕКЦИЯ</span>
+            <h1 id="album-title">Альбом открыток</h1>
+          </div>
+          <b id="album-score"></b>
+        </div>
+        <p class="album-note">
+          Угадай слово, чтобы вклеить открытку. Нажми на собранную, чтобы
+          рассмотреть её и послушать слово.
+        </p>
+        <div id="pages"></div>
+      </section>
+    </main>
+    <dialog id="detail">
+      <button id="close-detail" class="close" aria-label="Закрыть">×</button
+      ><span class="eyebrow" id="detail-kicker"></span
+      ><img id="detail-art" alt="" />
+      <h2 id="detail-title"></h2>
+      <p id="detail-text"></p>
+      <button class="soft" id="detail-voice"></button>
+    </dialog>
+    <noscript
+      >Чтобы открыть волшебную почту, включи JavaScript в браузере.</noscript
+    >
+    <script type="module" src="./js/app.js?v=429ae180"></script>
+  </body>
+</html>

@@ -1,0 +1,825 @@
+// 3D «Почты Дракоши»: уютная волшебная почта. На столе — подставка с плитками-буквами, картинка-подсказка
+// в рамке, лист с четырьмя марками, дракончик Дракоша; сзади — почтовый ящик, полки с посылками, окно в закат.
+import * as T from "../vendor/three/three.module.min.js?v=429ae180";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=429ae180";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=429ae180";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=429ae180";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=429ae180";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=429ae180";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=429ae180";
+
+const pie = Math.PI;
+const loader = new T.TextureLoader();
+function discardMesh(mesh) {
+  mesh.geometry?.dispose();
+  for (const m of new Set([mesh.material].flat())) m?.dispose();
+}
+const clamp = T.MathUtils.clamp;
+const glossy = (color, extra = {}) => new T.MeshPhysicalMaterial({ color, roughness: 0.35, clearcoat: 0.7, clearcoatRoughness: 0.2, ...extra });
+const matte = (color, extra = {}) => new T.MeshStandardMaterial({ color, roughness: 0.8, ...extra });
+const glowing = (color, k = 2) => new T.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: k, roughness: 0.4 });
+const TILE_W = 0.86,
+  TILE_H = 1.04,
+  STEP = 0.98;
+const FONT = "ui-rounded, 'SF Pro Rounded', 'Nunito', system-ui, sans-serif";
+const EMOJI = "'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif";
+
+function canvasTexture(w, h, draw) {
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  draw(c.getContext("2d"), w, h);
+  const t = new T.CanvasTexture(c);
+  t.colorSpace = T.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+const glowTex = canvasTexture(64, 64, (x) => {
+  const g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, "rgba(255,255,255,1)");
+  g.addColorStop(0.3, "rgba(255,255,255,0.5)");
+  g.addColorStop(1, "rgba(255,255,255,0)");
+  x.fillStyle = g;
+  x.fillRect(0, 0, 64, 64);
+});
+const glowSprite = (color, size, opacity = 0.9) => {
+  const s = new T.Sprite(new T.SpriteMaterial({ map: glowTex, color, transparent: true, opacity, depthWrite: false, blending: T.AdditiveBlending }));
+  s.scale.setScalar(size);
+  return s;
+};
+// Лицо плитки: буква или «?»
+const faces = new Map();
+function tileFace(text, kind) {
+  const key = text + kind;
+  if (faces.has(key)) return faces.get(key);
+  const bg = { hidden: ["#7a5cff", "#5a3fd8"], shown: ["#fffaf0", "#ffe8c8"], lost: ["#ffe0e8", "#ffc4d4"] }[kind];
+  const ink = { hidden: "#ffffffcc", shown: "#3a2470", lost: "#c8305a" }[kind];
+  const tex = canvasTexture(128, 156, (x, w, h) => {
+    const g = x.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, bg[0]);
+    g.addColorStop(1, bg[1]);
+    x.fillStyle = g;
+    x.fillRect(0, 0, w, h);
+    x.strokeStyle = kind === "hidden" ? "#ffffff44" : "#e8c89a";
+    x.lineWidth = 6;
+    x.strokeRect(8, 8, w - 16, h - 16);
+    x.fillStyle = ink;
+    x.font = `900 ${kind === "hidden" ? 84 : 104}px ${FONT}`;
+    x.textAlign = "center";
+    x.textBaseline = "middle";
+    x.fillText(text, w / 2, h / 2 + 6);
+  });
+  faces.set(key, tex);
+  return tex;
+}
+function stampTexture(i) {
+  const colors = ["#ff5f8a", "#ffb02e", "#3fbf7a", "#4f8bff"],
+    pics = ["🌸", "⭐", "🍀", "🌙"];
+  return canvasTexture(128, 150, (x, w, h) => {
+    x.fillStyle = "#ffffff";
+    x.fillRect(0, 0, w, h);
+    // Зубчики по краю
+    x.fillStyle = "#00000000";
+    x.globalCompositeOperation = "destination-out";
+    for (let k = 6; k < w; k += 14) {
+      x.beginPath();
+      x.arc(k, 0, 5, 0, 7);
+      x.arc(k, h, 5, 0, 7);
+      x.fill();
+    }
+    for (let k = 6; k < h; k += 14) {
+      x.beginPath();
+      x.arc(0, k, 5, 0, 7);
+      x.arc(w, k, 5, 0, 7);
+      x.fill();
+    }
+    x.globalCompositeOperation = "source-over";
+    x.fillStyle = colors[i];
+    x.fillRect(14, 14, w - 28, h - 28);
+    x.font = `64px ${EMOJI}`;
+    x.textAlign = "center";
+    x.textBaseline = "middle";
+    x.fillText(pics[i], w / 2, h / 2 - 4);
+    x.fillStyle = "#ffffff";
+    x.font = `900 22px ${FONT}`;
+    x.fillText("ПОЧТА", w / 2, h - 30);
+  });
+}
+
+// ---------- Дракоша ----------
+function dragon() {
+  const g = new T.Group(),
+    body = new T.Group();
+  g.add(body);
+  const skin = glossy("#4fd6b0", { roughness: 0.45, clearcoat: 0.5 }),
+    belly = matte("#fff3c8"),
+    accent = glossy("#ff8fb1", { roughness: 0.4 });
+  const torso = new T.Mesh(new T.SphereGeometry(0.42, 24, 18), skin);
+  torso.scale.set(1, 1.1, 0.95);
+  torso.position.y = 0.45;
+  body.add(torso);
+  const tummy = new T.Mesh(new T.SphereGeometry(0.3, 20, 14), belly);
+  tummy.scale.set(0.9, 1.1, 0.6);
+  tummy.position.set(0, 0.42, 0.26);
+  body.add(tummy);
+  const head = new T.Group();
+  head.position.set(0, 1.08, 0.06);
+  body.add(head);
+  const skull = new T.Mesh(new T.SphereGeometry(0.38, 24, 18), skin);
+  skull.scale.set(1.08, 0.95, 1);
+  head.add(skull);
+  const snout = new T.Mesh(new T.SphereGeometry(0.22, 18, 14), skin);
+  snout.scale.set(1.1, 0.8, 0.9);
+  snout.position.set(0, -0.1, 0.3);
+  head.add(snout);
+  const cap = new T.Mesh(new T.SphereGeometry(0.31, 24, 12, 0, pie * 2, 0, pie / 2), matte("#314672"));
+  cap.scale.set(1.06, 0.55, 1);
+  cap.rotation.z = -0.13;
+  cap.position.set(-0.015, 0.28, 0.03);
+  head.add(cap);
+  const brim = new T.Mesh(new T.SphereGeometry(0.23, 20, 10), glossy("#263550"));
+  brim.scale.set(1.05, 0.14, 0.68);
+  brim.position.set(0, 0.29, 0.25);
+  head.add(brim);
+  const smile = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3([
+    new T.Vector3(-0.105,-0.145,0.458), new T.Vector3(0,-0.172,0.477), new T.Vector3(0.105,-0.145,0.458)
+  ]), 12, 0.009, 5, false), matte("#765448"));
+  head.add(smile);
+  const eyes = [];
+  for (const s of [-1, 1]) {
+    const nost = new T.Mesh(new T.SphereGeometry(0.025, 8, 6), matte("#2a6a5a"));
+    nost.position.set(s * 0.07, -0.05, 0.49);
+    head.add(nost);
+    const white = new T.Mesh(new T.SphereGeometry(0.11, 16, 12), matte("#ffffff"));
+    white.position.set(s * 0.16, 0.1, 0.28);
+    head.add(white);
+    const pupil = new T.Mesh(new T.SphereGeometry(0.065, 12, 10), glossy("#1d1420", { roughness: 0.1 }));
+    pupil.position.set(s * 0.16, 0.1, 0.37);
+    head.add(pupil);
+    const shine = new T.Mesh(new T.SphereGeometry(0.02, 8, 6), new T.MeshBasicMaterial({ color: "#ffffff" }));
+    shine.position.set(s * 0.16 + 0.025, 0.13, 0.43);
+    head.add(shine);
+    eyes.push(white, pupil, shine);
+    const cheek = new T.Mesh(new T.SphereGeometry(0.06, 10, 8), matte("#ff9fb8"));
+    cheek.scale.set(1, 0.6, 0.4);
+    cheek.position.set(s * 0.27, -0.06, 0.28);
+    head.add(cheek);
+    const horn = new T.Mesh(new T.ConeGeometry(0.07, 0.22, 10), matte("#fff3c8"));
+    horn.position.set(s * 0.18, 0.36, -0.06);
+    horn.rotation.z = -s * 0.3;
+    head.add(horn);
+    const ear = new T.Mesh(new T.ConeGeometry(0.08, 0.2, 3), accent);
+    ear.position.set(s * 0.34, 0.16, -0.05);
+    ear.rotation.z = -s * 1.1;
+    head.add(ear);
+    // Крылышки
+    const wingShape = new T.Shape();
+    wingShape.moveTo(0, 0);
+    wingShape.quadraticCurveTo(0.25, 0.35, 0.5, 0.3);
+    wingShape.quadraticCurveTo(0.38, 0.15, 0.45, 0.02);
+    wingShape.quadraticCurveTo(0.3, 0.08, 0.25, -0.08);
+    wingShape.quadraticCurveTo(0.15, 0.02, 0, 0);
+    const wing = new T.Mesh(new T.ExtrudeGeometry(wingShape, { depth: 0.03, bevelEnabled: false }), accent);
+    wing.position.set(s * 0.22, 0.65, -0.3);
+    wing.scale.set(s * 1, 1, 1);
+    wing.rotation.y = s * 0.6;
+    body.add(wing);
+    wing.userData.s = s;
+    const paw = new T.Mesh(new T.SphereGeometry(0.12, 16, 12), skin);
+    paw.scale.set(0.72, 1.25, 0.8);
+    paw.position.set(s * 0.34, 0.51, 0.22);
+    paw.rotation.z = -s * 0.28;
+    body.add(paw);
+    const foot = new T.Mesh(new T.SphereGeometry(0.12, 12, 10), skin);
+    foot.scale.set(1, 0.6, 1.3);
+    foot.position.set(s * 0.2, 0.06, 0.18);
+    body.add(foot);
+  }
+  // Гребешок на спине и хвост
+  for (let k = 0; k < 4; k++) {
+    const spike = new T.Mesh(new T.ConeGeometry(0.06, 0.14, 8), accent);
+    spike.position.set(0, 0.85 - k * 0.18, -0.36 + k * 0.02);
+    spike.rotation.x = -0.6;
+    body.add(spike);
+  }
+  const tail = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3([new T.Vector3(0, 0.2, -0.35), new T.Vector3(0.2, 0.1, -0.6), new T.Vector3(0.45, 0.18, -0.55), new T.Vector3(0.55, 0.32, -0.35)]), 20, 0.07, 8), skin);
+  body.add(tail);
+  const tip = new T.Mesh(new T.ConeGeometry(0.1, 0.18, 4), accent);
+  tip.position.set(0.58, 0.4, -0.3);
+  tip.rotation.z = -0.5;
+  body.add(tip);
+  // Почтальонская сумка через плечо
+  const bag = new T.Mesh(new RoundedBoxGeometry(0.32, 0.24, 0.12, 2, 0.04), glossy("#44577c"));
+  bag.position.set(-0.32, 0.38, 0.22);
+  bag.rotation.y = 0.4;
+  body.add(bag);
+  const strap = new T.Mesh(new T.TorusGeometry(0.42, 0.025, 6, 30, pie * 0.9), glossy("#44577c"));
+  strap.position.set(-0.05, 0.6, 0.05);
+  strap.rotation.set(0.2, 0.3, 2.2);
+  body.add(strap);
+  g.traverse((o) => o.isMesh && (o.castShadow = true));
+  return { group: g, body, head, eyes, wings: body.children.filter((o) => o.userData.s) };
+}
+
+export class World {
+  constructor(canvas, context) {
+    this.canvas = canvas;
+    this.active = true;
+    this.cardVersion = 0;
+    this.renderer = new T.WebGLRenderer({ canvas, context, antialias: true });
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.6));
+    this.renderer.toneMapping = T.NeutralToneMapping;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = T.PCFSoftShadowMap;
+    this.scene = new T.Scene();
+    const pmrem = new T.PMREMGenerator(this.renderer);
+    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.scene.environmentIntensity = 0.45;
+    pmrem.dispose();
+    this.camera = new T.PerspectiveCamera(36, 1, 0.1, 200);
+    this.scene.add(new T.HemisphereLight(0xfff0e0, 0x8a5a7a, 1.15));
+    const key = new T.DirectionalLight(0xffe8c8, 2.0);
+    key.position.set(4, 9, 7);
+    key.castShadow = true;
+    key.shadow.mapSize.set(1024, 1024);
+    Object.assign(key.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 1, far: 40 });
+    key.shadow.bias = -0.001;
+    this.scene.add(key);
+    const lamp = new T.PointLight(0xffc27a, 14, 12, 1.6);
+    lamp.position.set(-3, 5, 2);
+    this.scene.add(lamp);
+    this.time = 0;
+    this.tweens = [];
+    this.motion = matchMedia("(prefers-reduced-motion: reduce)");
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.bloom = new UnrealBloomPass(new T.Vector2(256, 256), 0.45, 0.4, 1.4);
+    this.composer.addPass(this.bloom);
+    this.composer.addPass(new OutputPass());
+    this.glow = { on: !this.motion.matches && canvas.clientWidth > 650, slow: 0, seen: 0 };
+    this.build();
+    this.tiles = [];
+    this.resize = () => {
+      const w = canvas.clientWidth,
+        h = canvas.clientHeight;
+      if (!w || !h) return;
+      this.renderer.setSize(w, h, false);
+      this.composer.setPixelRatio(this.renderer.getPixelRatio());
+      this.composer.setSize(w, h);
+      this.bloom.resolution.set(w / 2, h / 2);
+      this.fit();
+    };
+    new ResizeObserver(this.resize).observe(canvas);
+    this.resize();
+    this.onFrame = null;
+    this.last = 0;
+    this.renderer.setAnimationLoop((ms) => this.frame(ms));
+  }
+  tween(seconds, update) {
+    return new Promise((done) => this.tweens.push({ at: this.time, dur: this.motion.matches ? seconds * 0.5 : seconds, update, done }));
+  }
+  // ---------- Почта ----------
+  build() {
+    const S = this.scene;
+    // Задняя стена в полоску, пол, окно с закатом
+    const wall = new T.Mesh(
+      new T.PlaneGeometry(40, 16),
+      new T.MeshStandardMaterial({
+        roughness: 0.9,
+        map: canvasTexture(256, 64, (x) => {
+          for (let i = 0; i < 16; i++) {
+            x.fillStyle = i % 2 ? "#a9d4b7" : "#b2d5c0";
+            x.fillRect(i * 16, 0, 16, 64);
+          }
+          x.fillStyle = "#ffffff55";
+          for (let i = 0; i < 16; i++) {
+            x.beginPath();
+            x.arc(i * 16 + 8, 32, 3, 0, 7);
+            x.fill();
+          }
+        }),
+      }),
+    );
+    wall.material.map.wrapS = T.RepeatWrapping;
+    wall.material.map.repeat.set(4, 1);
+    wall.position.set(0, 5, -5);
+    S.add(wall);
+    const skirting = new T.Mesh(new T.BoxGeometry(40, 1.4, 0.2), matte("#c86a5a"));
+    skirting.position.set(0, -0.7, -4.9);
+    S.add(skirting);
+    const floor = new T.Mesh(new T.PlaneGeometry(40, 20), matte("#8a5a4a"));
+    floor.rotation.x = -pie / 2;
+    floor.position.set(0, -1.4, 4);
+    S.add(floor);
+    // Круглое окно с закатом и облаками
+    const win = new T.Group();
+    const sky = new T.Mesh(
+      new T.CircleGeometry(1.6, 48),
+      new T.MeshBasicMaterial({
+        toneMapped: false,
+        map: canvasTexture(128, 128, (x) => {
+          const g = x.createLinearGradient(0, 0, 0, 128);
+          g.addColorStop(0, "#7a6bff");
+          g.addColorStop(0.55, "#ff9fd0");
+          g.addColorStop(1, "#ffd27a");
+          x.fillStyle = g;
+          x.fillRect(0, 0, 128, 128);
+          x.fillStyle = "#ffffffcc";
+          for (const [cx, cy, r] of [[30, 70, 14], [46, 66, 18], [64, 72, 12], [92, 52, 10], [104, 50, 13]]) {
+            x.beginPath();
+            x.arc(cx, cy, r, 0, 7);
+            x.fill();
+          }
+          x.fillStyle = "#fff3b0";
+          x.beginPath();
+          x.arc(84, 98, 16, 0, 7);
+          x.fill();
+        }),
+      }),
+    );
+    win.add(sky);
+    const frame = new T.Mesh(new T.TorusGeometry(1.6, 0.16, 12, 48), glossy("#ffffff"));
+    win.add(frame);
+    for (const r of [0, pie / 2]) {
+      const bar = new T.Mesh(new T.BoxGeometry(3.2, 0.08, 0.06), glossy("#ffffff"));
+      bar.rotation.z = r;
+      win.add(bar);
+    }
+    win.position.set(-5.6, 4.6, -4.9);
+    S.add(win);
+    // Полки с посылками
+    const parcelCols = ["#ff8f5f", "#4f8bff", "#3fbf7a", "#ffd25f", "#b47cff", "#ff5f8a"];
+    for (const [sx, sy] of [[5.4, 2.4], [5.4, 4.4], [-8.6, 1.6]]) {
+      const shelf = new T.Mesh(new RoundedBoxGeometry(3.4, 0.14, 0.9, 2, 0.04), matte("#a8743f"));
+      shelf.position.set(sx, sy, -4.5);
+      shelf.castShadow = shelf.receiveShadow = true;
+      S.add(shelf);
+      let x = sx - 1.4;
+      for (let k = 0; k < 4; k++) {
+        const w = 0.5 + ((k * 7 + sy * 3) % 3) * 0.15,
+          h = 0.4 + ((k * 5 + sx) % 3) * 0.15;
+        const box = new T.Mesh(new RoundedBoxGeometry(w, h, 0.6, 2, 0.05), glossy(parcelCols[(k + Math.round(sy)) % 6], { roughness: 0.6 }));
+        box.position.set(x + w / 2, sy + 0.07 + h / 2, -4.4);
+        box.rotation.y = (k % 2 ? 1 : -1) * 0.12;
+        box.castShadow = true;
+        S.add(box);
+        const ribbon = new T.Mesh(new T.BoxGeometry(0.06, h + 0.01, 0.61), matte("#ffffff"));
+        ribbon.position.copy(box.position);
+        ribbon.rotation.copy(box.rotation);
+        S.add(ribbon);
+        x += w + 0.12;
+      }
+    }
+    // Гирлянда из конвертиков
+    const env = canvasTexture(64, 44, (x) => {
+      x.fillStyle = "#fffaf0";
+      x.fillRect(0, 0, 64, 44);
+      x.strokeStyle = "#e8b88a";
+      x.lineWidth = 3;
+      x.beginPath();
+      x.moveTo(2, 2);
+      x.lineTo(32, 24);
+      x.lineTo(62, 2);
+      x.stroke();
+      x.fillStyle = "#ff5f8a";
+      x.beginPath();
+      x.arc(32, 26, 5, 0, 7);
+      x.fill();
+    });
+    this.bunting = [];
+    for (let k = 0; k < 15; k++) {
+      const u = k / 14,
+        x = -9 + u * 18,
+        y = 7.3 - Math.sin(u * pie) * 0.9;
+      const e = new T.Mesh(new T.PlaneGeometry(0.6, 0.42), new T.MeshStandardMaterial({ map: env, side: T.DoubleSide, roughness: 0.8 }));
+      e.position.set(x, y, -4.3);
+      e.rotation.z = (k % 2 ? 1 : -1) * 0.12;
+      S.add(e);
+      this.bunting.push(e);
+    }
+    // Почтовый ящик — сюда улетают письма
+    const box = new T.Group();
+    const body = new T.Mesh(new RoundedBoxGeometry(1.3, 1.7, 1.0, 3, 0.2), glossy("#c75549"));
+    body.position.y = 0.85;
+    box.add(body);
+    const top = new T.Mesh(new T.CylinderGeometry(0.65, 0.65, 1.0, 32, 1, false, 0, pie), glossy("#c75549"));
+    top.rotation.set(pie / 2, 0, pie / 2);
+    top.position.y = 1.7;
+    box.add(top);
+    const slot = new T.Mesh(new RoundedBoxGeometry(0.8, 0.12, 0.1, 2, 0.04), matte("#1a2460"));
+    slot.position.set(0, 1.45, 0.5);
+    box.add(slot);
+    const badge = new T.Mesh(
+      new T.CircleGeometry(0.3, 32),
+      new T.MeshBasicMaterial({
+        map: canvasTexture(64, 64, (x) => {
+          x.fillStyle = "#ffd25f";
+          x.beginPath();
+          x.arc(32, 32, 30, 0, 7);
+          x.fill();
+          x.font = `40px ${EMOJI}`;
+          x.textAlign = "center";
+          x.textBaseline = "middle";
+          x.fillText("✉️", 32, 34);
+        }),
+      }),
+    );
+    badge.position.set(0, 0.8, 0.51);
+    box.add(badge);
+    const leg = new T.Mesh(new T.CylinderGeometry(0.12, 0.16, 1.4, 12), matte("#3a3a5a"));
+    leg.position.y = -0.7;
+    box.add(leg);
+    const flag = new T.Group();
+    flag.position.set(0.7, 1.2, 0.1);
+    const pole = new T.Mesh(new T.CylinderGeometry(0.03, 0.03, 0.7, 8), matte("#ffffff"));
+    pole.position.y = 0.35;
+    flag.add(pole);
+    const cloth = new T.Mesh(new RoundedBoxGeometry(0.34, 0.22, 0.04, 2, 0.02), glossy("#ff4f6d"));
+    cloth.position.set(0.17, 0.6, 0);
+    flag.add(cloth);
+    flag.rotation.z = -pie / 2;
+    box.add(flag);
+    box.traverse((o) => o.isMesh && (o.castShadow = true));
+    box.position.set(-4.7, 0.93, -2.4);
+    box.rotation.y = 0.35;
+    S.add(box);
+    this.mailbox = { group: box, flag, slot };
+    // Стол
+    const grain = canvasTexture(512, 256, (x, w, h) => {
+      x.fillStyle = "#e5b17a";
+      x.fillRect(0, 0, w, h);
+      for (let row = 0; row < 38; row++) {
+        const y = row * 7 + Math.sin(row * 5) * 3;
+        x.lineWidth = row % 5 ? 0.7 : 1.3;
+        x.strokeStyle = row % 3 ? "#96683c38" : "#fff0c252";
+        x.beginPath();
+        x.moveTo(0, y);
+        x.bezierCurveTo(140, y + Math.sin(row) * 12, 319, y - 9, w, y);
+        x.stroke();
+      }
+    });
+    const desk = new T.Mesh(new RoundedBoxGeometry(16, 0.5, 4.4, 3, 0.15), glossy("#ffe4c1", { map: grain, roughness: 0.62, clearcoat: 0.2 }));
+    desk.position.set(0, -0.35, 0);
+    desk.receiveShadow = true;
+    S.add(desk);
+    const front = new T.Mesh(new T.BoxGeometry(16, 1.3, 0.2), matte("#a8743f"));
+    front.position.set(0, -1.15, 2.1);
+    S.add(front);
+    // Подставка для плиток
+    this.stand = new T.Mesh(new RoundedBoxGeometry(10, 0.22, 0.7, 2, 0.08), glossy("#8a5a3a", { roughness: 0.5 }));
+    this.stand.receiveShadow = true;
+    S.add(this.stand);
+    // Картинка в рамке на мольберте
+    const pic = new T.Group();
+    const easel = matte("#a8743f");
+    for (const s of [-1, 1]) {
+      const legE = new T.Mesh(new T.CylinderGeometry(0.05, 0.06, 3.2, 8), easel);
+      legE.position.set(s * 0.8, 1.2, -0.3);
+      legE.rotation.z = s * 0.12;
+      pic.add(legE);
+    }
+    const back = new T.Mesh(new RoundedBoxGeometry(2.3, 2.3, 0.14, 3, 0.1), glossy("#ffd25f", { metalness: 0.3, roughness: 0.3 }));
+    back.position.set(0, 2.2, -0.15);
+    pic.add(back);
+    this.picMat = new T.MeshBasicMaterial({ color: "#ffffff" });
+    this.picPlane = new T.Mesh(new T.PlaneGeometry(1.95, 1.95), this.picMat);
+    this.picPlane.position.set(0, 2.2, -0.07);
+    pic.add(this.picPlane);
+    pic.traverse((o) => o.isMesh && o !== this.picPlane && (o.castShadow = true));
+    pic.position.set(0, 0, -1.6);
+    S.add(pic);
+    this.picture = pic;
+    this.picGlow = glowSprite("#fff3a0", 4, 0);
+    this.picGlow.position.set(0, 2.2, -1.9);
+    S.add(this.picGlow);
+    // Лист с марками
+    const sheet = new T.Mesh(new RoundedBoxGeometry(1.7, 2.0, 0.06, 2, 0.04), matte("#fffaf0"));
+    sheet.position.set(-3.1, 1.2, -1.2);
+    sheet.rotation.set(-0.15, 0.25, 0.04);
+    sheet.castShadow = true;
+    S.add(sheet);
+    this.sheet = sheet;
+    this.stamps = [0, 1, 2, 3].map((i) => {
+      const m = new T.Mesh(new T.PlaneGeometry(0.62, 0.72), new T.MeshStandardMaterial({ map: stampTexture(i), transparent: true, roughness: 0.6 }));
+      m.position.set((i % 2 ? 0.38 : -0.38), i < 2 ? 0.44 : -0.42, 0.04);
+      sheet.add(m);
+      const ghost = new T.Mesh(new T.PlaneGeometry(0.62, 0.72), new T.MeshBasicMaterial({ color: "#e8d8c8", transparent: true, opacity: 0.6 }));
+      ghost.position.copy(m.position);
+      ghost.position.z = 0.035;
+      sheet.add(ghost);
+      return { mesh: m, home: m.position.clone(), used: false };
+    });
+    // Дракоша
+    this.perch = new T.Mesh(new RoundedBoxGeometry(1.32, .76, 1.0, 3, .09), matte("#aa754d"));
+    this.perch.position.set(3.25, .28, -.9);
+    this.perch.castShadow = this.perch.receiveShadow = true;
+    S.add(this.perch);
+    this.dragon = dragon();
+    this.dragon.group.position.set(3.1, 0, -0.9);
+    this.dragon.group.rotation.y = -0.45;
+    this.dragon.group.scale.setScalar(1.7);
+    S.add(this.dragon.group);
+    this.mood = { happy: 0, sad: 0, blink: 0 };
+    // Пламя Дракоши и частицы
+    this.makeParticles();
+  }
+  // Камера: стол, плитки, картинка и Дракоша в кадре при любой форме экрана
+  fit(aspect = this.canvas.clientWidth / Math.max(1, this.canvas.clientHeight)) {
+    const cam = this.camera;
+    const width = Math.max(10.0, (this.cols || 6) * STEP + 1.25);
+    const bottom = -0.65, top = 4.2;
+    cam.fov = 36;
+    cam.aspect = aspect;
+    const vf = T.MathUtils.degToRad(36),
+      hf = 2 * Math.atan(Math.tan(vf / 2) * aspect);
+    const needV = (top - bottom) * 1.12,
+      needH = width;
+    const dist = Math.max(needV / 2 / Math.tan(vf / 2), needH / 2 / Math.tan(hf / 2));
+    const cy = (top + bottom) / 2;
+    cam.position.set(0, cy + dist * 0.18, dist + 0.6);
+    cam.lookAt(0, cy, 0);
+    cam.updateProjectionMatrix();
+  }
+  // ---------- Слово ----------
+  setCard(card, round, hidePicture = false) {
+    const version = ++this.cardVersion;
+    this.flaming = 0;
+    this.envelope?.removeFromParent();
+    for (const tw of this.tweens.splice(0)) tw.done();
+    for (const s of this.pool) s.life = 0;
+    for (const t of this.tiles) { t.mesh.removeFromParent(); discardMesh(t.mesh); }
+    this.tiles = [];
+    const words = card.word.split(" ");
+    this.rows = words.length;
+    const stacked = this.rows > 1;
+    this.perch.visible = stacked;
+    this.dragon.group.position.set(stacked ? 3.25 : 3.1, stacked ? .66 : 0, -.9);
+    this.picture.position.y = stacked ? .65 : 0;
+    this.picGlow.position.y = 2.2 + this.picture.position.y;
+    this.sheet.position.y = stacked ? 1.8 : 1.2;
+    this.cols = Math.max(...words.map((w) => w.length));
+    this.stand.scale.x = (this.cols * STEP + 0.6) / 10;
+    this.stand.position.set(0, -0.03, 1.35);
+    let i = 0;
+    words.forEach((w, row) => {
+      [...w].forEach((ch, k) => {
+        const geo = new RoundedBoxGeometry(TILE_W, TILE_H, 0.16, 3, 0.07);
+        const side = glossy("#ffd8a8", { roughness: 0.4 });
+        const front = new T.MeshStandardMaterial({ map: tileFace(ch, "shown"), roughness: 0.45 });
+        const back = new T.MeshStandardMaterial({ map: tileFace("?", "hidden"), roughness: 0.45 });
+        const mesh = new T.Mesh(geo, [side, side, side, side, front, back]);
+        const x = (k - (w.length - 1) / 2) * STEP;
+        const y = 0.57 + (this.rows - row - 1) * 1.13;
+        mesh.position.set(x, y, 1.35 - (this.rows - row - 1) * 0.4);
+        const open = round.shown(i);
+        if (round.state === "lost" && !round.tried.has(ch === "Ё" ? "Е" : ch)) front.map = tileFace(ch, "lost");
+        mesh.rotation.y = open ? 0 : pie;
+        mesh.castShadow = true;
+        this.scene.add(mesh);
+        this.tiles.push({ mesh, ch, index: i, open, front, baseY: y });
+        i++;
+      });
+      i++; // пробел между словами — в индексах слова
+    });
+    // Плитки появляются по очереди
+    this.tiles.forEach((t, k) => {
+      const y = t.baseY;
+      t.mesh.scale.setScalar(0.001);
+      setTimeout(() => { if (version !== this.cardVersion) return; this.tween(0.35, (p) => {
+        t.mesh.scale.setScalar(Math.max(0.001, p < 0.7 ? (p / 0.7) * 1.15 : 1.15 - ((p - 0.7) / 0.3) * 0.15));
+        t.mesh.position.y = y + (1 - p) * 0.6;
+      }); }, k * 38);
+    });
+    // Картинка
+    this.setPicture(card, hidePicture);
+    this.picGlow.material.opacity = 0;
+    this.picture.scale.setScalar(1);
+    for (const [i, s] of this.stamps.entries()) {
+      s.used = i < round.misses;
+      s.mesh.visible = !s.used;
+      s.mesh.position.copy(s.home);
+      s.mesh.rotation.set(0, 0, 0);
+      s.mesh.material.opacity = 1;
+    }
+    this.mailbox.flag.rotation.z = -pie / 2;
+    this.fit();
+  }
+  setPicture(card, hidden) {
+    const url = hidden ? "./art/seal.svg" : "./art/" + card.asset + ".webp";
+    if (this.pictureURL === url) return;
+    this.pictureURL = url;
+    const previous = this.picMat.map;
+    this.picMat.map = null;
+    this.picMat.needsUpdate = true;
+    previous?.dispose();
+    loader.load(url, tex => {
+      if (this.pictureURL !== url) { tex.dispose(); return; }
+      tex.colorSpace = T.SRGBColorSpace;
+      this.picMat.map = tex;
+      this.picMat.needsUpdate = true;
+    });
+  }
+  // Индекс буквы в слове (с пробелами) → плитка
+  tileAt(i) {
+    return this.tiles.find((t) => t.index === i);
+  }
+  reveal(indices, kind = "shown") {
+    const version = this.cardVersion;
+    indices.forEach((i, k) => {
+      const t = this.tileAt(i);
+      if (!t || t.open) return;
+      t.open = true;
+      if (kind !== "shown") t.front.map = tileFace(t.ch, kind);
+      setTimeout(() => {
+        if (version !== this.cardVersion) return;
+        const y = t.baseY;
+        this.tween(0.45, (p) => {
+          t.mesh.rotation.y = pie * (1 - p);
+          t.mesh.position.y = y + Math.sin(p * pie) * 0.35;
+        });
+        if (kind === "shown") this.burst(t.mesh.position.clone().add(new T.Vector3(0, 0.3, 0.3)), 14, ["#ffe066", "#ff9fd0", "#ffffff"], 2.6);
+      }, k * 120);
+    });
+  }
+  // Неверная буква: марка отклеивается и улетает
+  loseStamp(n) {
+    const s = this.stamps[n];
+    if (!s || s.used) return;
+    s.used = true;
+    const version = this.cardVersion;
+    const m = s.mesh,
+      from = m.position.clone();
+    this.tween(0.9, (p) => {
+      m.position.set(from.x + p * 1.4, from.y + Math.sin(p * pie) * 1.2 + p * 0.6, from.z + p * 0.8);
+      m.rotation.set(p * 1.5, p * 3, p * 4);
+      m.material.opacity = 1 - Math.max(0, p - 0.5) * 2;
+    }).then(() => { if (version === this.cardVersion) m.visible = false; });
+    this.mood.sad = 1;
+  }
+  happy() {
+    this.mood.happy = 1;
+  }
+  // Победа: Дракоша дышит разноцветным огоньком, плитки сияют, письмо летит в ящик
+  async won() {
+    const version = this.cardVersion;
+    this.mood.happy = 1;
+    this.flame(this.motion.matches ? .35 : .75);
+    const env = new T.Group();
+    const paper = new T.Mesh(new RoundedBoxGeometry(1.2, 0.8, 0.06, 2, 0.03), matte("#fffaf0"));
+    env.add(paper);
+    const flap = new T.Mesh(new T.ConeGeometry(0.62, 0.42, 3), matte("#ffe8c8"));
+    flap.rotation.set(pie / 2, 0, pie);
+    flap.scale.set(1, 1, 0.05);
+    flap.position.set(0, 0.12, 0.04);
+    env.add(flap);
+    const seal = new T.Mesh(new T.CylinderGeometry(0.13, 0.13, 0.05, 20), glossy("#ff3f6d"));
+    seal.rotation.x = pie / 2;
+    seal.position.set(0, -0.02, 0.07);
+    env.add(seal);
+    env.position.set(1.8, 1.38, 0.23);
+    this.scene.add(env);
+    this.envelope = env;
+    await this.tween(0.72, p => { seal.scale.setScalar(Math.max(.01, p)); });
+    if (version !== this.cardVersion) { env.traverse(o => o.isMesh && discardMesh(o)); return; }
+    const slot = new T.Vector3();
+    this.mailbox.slot.getWorldPosition(slot);
+    const from = env.position.clone(),
+      mid = from.clone().lerp(slot, 0.5).add(new T.Vector3(0, 2.4, 0.5));
+    await this.tween(1.0, (p) => {
+      const a = from.clone().lerp(mid, p),
+        b = mid.clone().lerp(slot, p);
+      env.position.copy(a.lerp(b, p));
+      env.rotation.set(0, p * pie * 2 + 0.35, Math.sin(p * pie) * 0.4);
+      env.scale.setScalar(1 - p * 0.55);
+    });
+    env.removeFromParent();
+    env.traverse(o => o.isMesh && discardMesh(o));
+    if (version !== this.cardVersion) return;
+    this.envelope = null;
+    this.burst(slot, 30, ["#ffe066", "#ff9fd0", "#7fe8ff", "#ffffff"], 3.2);
+    const f = this.mailbox.flag;
+    this.tween(0.5, (p) => (f.rotation.z = -pie / 2 + p * (pie / 2)));
+    // Картинка сияет
+    this.tween(0.6, (p) => {
+      this.picGlow.material.opacity = p * 0.7;
+      this.picture.scale.setScalar(1 + Math.sin(p * pie) * 0.12);
+    });
+  }
+  lost(indices) {
+    this.reveal(indices, "lost");
+    this.mood.sad = 1;
+  }
+  // ---------- Огонёк и искры ----------
+  makeParticles() {
+    const n = 500;
+    this.sparks = new T.InstancedMesh(new T.OctahedronGeometry(0.06, 0), new T.MeshBasicMaterial({ color: new T.Color(2, 2, 2), toneMapped: false }), n);
+    this.sparks.frustumCulled = false;
+    this.pool = Array.from({ length: n }, () => ({ p: new T.Vector3(), v: new T.Vector3(), life: 0, max: 1, s: 1, g: 3 }));
+    this.next = 0;
+    for (let i = 0; i < n; i++) this.sparks.setColorAt(i, new T.Color("#ffffff"));
+    this.scene.add(this.sparks);
+    this.dummy = new T.Object3D();
+  }
+  burst(at, count, colors, speed, gravity = 3) {
+    for (let k = 0; k < count; k++) {
+      const s = this.pool[this.next];
+      this.sparks.setColorAt(this.next, new T.Color(colors[k % colors.length]));
+      this.next = (this.next + 1) % this.pool.length;
+      s.p.copy(at);
+      s.v.set(Math.random() - 0.5, Math.random() * 0.9 + 0.2, Math.random() - 0.5).normalize().multiplyScalar(speed * (0.4 + Math.random() * 0.8));
+      s.max = s.life = 0.5 + Math.random() * 0.6;
+      s.s = 0.7 + Math.random();
+      s.g = gravity;
+    }
+    this.sparks.instanceColor.needsUpdate = true;
+  }
+  // Радужный огонёк изо рта Дракоши в сторону плиток
+  flame(seconds) {
+    this.flaming = seconds;
+  }
+  // ---------- Кадр ----------
+  frame(ms) {
+    if (document.hidden || !this.active) { this.last = 0; return; }
+    const dt = this.last ? clamp((ms - this.last) / 1000, 0, 0.1) : 0;
+    this.last = ms;
+    this.time += dt;
+    const t = this.time,
+      calm = this.motion.matches ? 0.3 : 1;
+    for (const tw of [...this.tweens]) {
+      const p = clamp((t - tw.at) / tw.dur, 0, 1);
+      tw.update(p);
+      if (p === 1) {
+        this.tweens.splice(this.tweens.indexOf(tw), 1);
+        tw.done();
+      }
+    }
+    if (this.onFrame) this.onFrame(dt);
+    // Дракоша: дышит, моргает, радуется прыжком, грустит — опускает голову
+    const D = this.dragon,
+      m = this.mood;
+    m.happy *= Math.pow(0.15, dt);
+    m.sad *= Math.pow(0.3, dt);
+    D.body.position.y = Math.abs(Math.sin(t * 10)) * 0.35 * m.happy + Math.sin(t * 2) * 0.02 * calm;
+    D.head.rotation.x = m.sad * 0.35 + Math.sin(t * 1.4) * 0.04 * calm;
+    D.head.rotation.z = Math.sin(t * 0.9) * 0.08 * calm - m.sad * 0.2;
+    for (const w of D.wings) w.rotation.z = w.userData.s * (0.2 + Math.sin(t * (m.happy > 0.1 ? 22 : 3)) * (0.15 + m.happy * 0.5));
+    const blink = (t % 3.7) > 3.58;
+    for (const e of D.eyes) e.scale.y = blink ? 0.15 : 1;
+    if (this.flaming > 0) {
+      this.flaming -= dt;
+      const mouth = new T.Vector3(0, -0.1, 0.55);
+      D.head.localToWorld(mouth);
+      const dir = new T.Vector3(1.8, 1.38, 0.23).sub(mouth).normalize();
+      for (let k = 0; k < 4; k++) {
+        const s = this.pool[this.next];
+        this.sparks.setColorAt(this.next, new T.Color(["#ffd25f", "#ff8f3f", "#ff5f8a", "#b47cff"][k]));
+        this.next = (this.next + 1) % this.pool.length;
+        s.p.copy(mouth);
+        s.v.copy(dir).multiplyScalar(3 + Math.random() * 2).add(new T.Vector3((Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 0.8));
+        s.max = s.life = 0.45 + Math.random() * 0.25;
+        s.s = 1.4;
+        s.g = -0.5;
+      }
+      this.sparks.instanceColor.needsUpdate = true;
+    }
+    this.bunting.forEach((b, i) => (b.rotation.z = (i % 2 ? 1 : -1) * 0.12 + Math.sin(t * 1.3 + i) * 0.06 * calm));
+    if (this.picGlow.material.opacity > 0) this.picGlow.material.opacity = 0.5 + Math.sin(t * 3) * 0.15;
+    const d = this.dummy;
+    this.pool.forEach((s, i) => {
+      if (s.life > 0) {
+        s.life -= dt;
+        s.v.y -= s.g * dt;
+        s.p.addScaledVector(s.v, dt);
+      }
+      d.position.copy(s.p);
+      d.rotation.set(s.life * 7, s.life * 5, 0);
+      d.scale.setScalar(Math.max(0, s.life / s.max) * s.s);
+      d.updateMatrix();
+      this.sparks.setMatrixAt(i, d.matrix);
+    });
+    this.sparks.instanceMatrix.needsUpdate = true;
+    if (this.glow.on) {
+      this.composer.render();
+      if (dt) {
+        this.glow.seen += dt;
+        if (dt > 1 / 36) this.glow.slow += dt;
+        if (this.glow.seen > 5) {
+          if (this.glow.slow > 1.8) this.glow.on = false;
+          this.glow.seen = this.glow.slow = 0;
+        }
+      }
+    } else this.renderer.render(this.scene, this.camera);
+  }
+  snapshot(w = 1600, h = 1000) {
+    this.renderer.setSize(w, h, false);
+    this.composer.setSize(w, h);
+    try {
+      this.fit(w / h);
+      if (this.glow.on) this.composer.render();
+      else this.renderer.render(this.scene, this.camera);
+      return this.canvas.toDataURL("image/jpeg", 0.9);
+    } finally {
+      this.resize();
+    }
+  }
+}

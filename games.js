@@ -84,4 +84,11 @@ const GAMES = [
     cover: "covers/tishka.jpg",
     color: "#5a4fd8",
   },
+  {
+    id: "drakosha",
+    title: "Почта Дракоши",
+    url: "drakosha/",
+    cover: "covers/drakosha.jpg",
+    color: "#27765f",
+  },
 ];
