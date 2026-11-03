@@ -1,6 +1,6 @@
 // Всё, что видно вокруг шара: небо, острова, облака, арки, препятствия, кристаллы, шар и эффекты
-import * as T from "../vendor/three/three.module.min.js?v=d805dd80";
-import { HALF, rng } from "./track.js?v=d805dd80";
+import * as T from "../vendor/three/three.module.min.js?v=3eed4cb9";
+import { HALF, rng } from "./track.js?v=3eed4cb9";
 
 const pie = Math.PI;
 export const R = 0.6; // радиус шара
@@ -602,28 +602,30 @@ export function obstacles(scene, track) {
 }
 
 // ---------- Кристаллы ----------
-// Крупные гранёные кристаллы светятся своим цветом (видны и в ночных темах) и окружены ореолом.
-// Все стоят на своих местах с самого начала; крутятся только те, что рядом с шаром.
+// Крупные кристаллы огранкой «бриллиант» без всякой оболочки: грани переливаются, сами светятся своим цветом,
+// а мягкое свечение (bloom) даёт ореол прямо от граней. Все стоят на местах с начала; крутятся только те, что рядом с шаром.
+function brilliant() {
+  // Площадка сверху, корона, пояс и острый низ — как у настоящего бриллианта
+  const pts = [new T.Vector2(0, -0.62), new T.Vector2(0.5, 0.02), new T.Vector2(0.52, 0.08), new T.Vector2(0.36, 0.3), new T.Vector2(0, 0.3)];
+  const g = new T.LatheGeometry(pts, 8);
+  return g.toNonIndexed();
+}
 export function gemField(scene, track) {
-  const geo = new T.OctahedronGeometry(0.5, 0);
-  geo.scale(1, 1.35, 1);
-  const look = new T.MeshStandardMaterial({ roughness: 0.15, metalness: 0.15, flatShading: true });
-  // Свечение цветом самого кристалла: цвет экземпляра добавляется к собственному свету
+  const geo = brilliant();
+  geo.computeVertexNormals();
+  const look = new T.MeshPhysicalMaterial({ roughness: 0.06, metalness: 0.4, clearcoat: 1, clearcoatRoughness: 0.04, iridescence: 0.5, flatShading: true, envMapIntensity: 2.4 });
+  // Свечение цветом самого кристалла: ярче порога свечения, поэтому вокруг граней мягкий ореол
   look.onBeforeCompile = (shader) => {
     shader.fragmentShader = shader.fragmentShader.replace(
       "#include <emissivemap_fragment>",
-      "#include <emissivemap_fragment>\n#ifdef USE_COLOR\n totalEmissiveRadiance += vColor * 1.1;\n#endif",
+      "#include <emissivemap_fragment>\n#ifdef USE_COLOR\n totalEmissiveRadiance += vColor * 0.8;\n#endif",
     );
   };
   const n = track.gems.length;
   const mesh = new T.InstancedMesh(geo, look, n);
-  const halo = new T.InstancedMesh(
-    new T.SphereGeometry(0.75, 16, 12),
-    new T.MeshBasicMaterial({ transparent: true, opacity: 0.14, blending: T.AdditiveBlending, depthWrite: false }),
-    n,
-  );
-  mesh.frustumCulled = halo.frustumCulled = false;
-  halo.renderOrder = 2;
+  // Искорка-блик: маленькая звёздочка, вспыхивает то на одном, то на другом кристалле
+  const glint = new T.InstancedMesh(new T.OctahedronGeometry(0.11, 0), new T.MeshBasicMaterial({ color: new T.Color(3, 3, 3), toneMapped: false }), n);
+  mesh.frustumCulled = glint.frustumCulled = false;
   const color = new T.Color(),
     m = new T.Matrix4(),
     q = new T.Quaternion(),
@@ -631,22 +633,23 @@ export function gemField(scene, track) {
     up = new T.Vector3(0, 1, 0),
     at = new T.Vector3(),
     fr = {};
+  // Сочные цвета драгоценных камней
+  const palette = ["#ff2d6f", "#ffb000", "#25e07a", "#1fb8ff", "#a64dff", "#ff5fd2", "#ffe14d", "#2ff0e0"];
   track.gems.forEach((g, i) => {
     track.at(g.s, fr);
     g.pos = fr.p.clone().addScaledVector(fr.r, g.u).addScaledVector(fr.u, R + 0.4 + g.h);
     g.taken = false;
     g.shown = true;
-    color.setHSL((g.s * 0.004 + (i % 5) * 0.12) % 1, 1, 0.58);
+    color.set(palette[(i + Math.floor(g.s / 37)) % palette.length]);
     mesh.setColorAt(i, color);
-    halo.setColorAt(i, color);
     q.setFromAxisAngle(up, i);
-    m.compose(g.pos, q, sc.setScalar(1));
+    m.compose(g.pos, q, sc.setScalar(1.15));
     mesh.setMatrixAt(i, m);
-    m.compose(g.pos, q, sc.setScalar(1));
-    halo.setMatrixAt(i, m);
+    m.compose(g.pos, q, sc.setScalar(0));
+    glint.setMatrixAt(i, m);
   });
-  mesh.instanceColor.needsUpdate = halo.instanceColor.needsUpdate = true;
-  scene.add(mesh, halo);
+  mesh.instanceColor.needsUpdate = true;
+  scene.add(mesh, glint);
   return {
     mesh,
     update(t, near) {
@@ -657,22 +660,25 @@ export function gemField(scene, track) {
           g.shown = false;
           m.compose(g.pos, q.identity(), sc.setScalar(0));
           mesh.setMatrixAt(i, m);
-          halo.setMatrixAt(i, m);
+          glint.setMatrixAt(i, m);
           changed = true;
           return;
         }
-        // Крутятся и покачиваются кристаллы впереди шара, ореол мягко дышит
+        // Крутятся и покачиваются кристаллы впереди шара, блик вспыхивает на верхней грани
         if (g.s < near - 10 || g.s > near + 160) return;
         g.shown = true;
         q.setFromAxisAngle(up, t * 2.4 + i);
         at.copy(g.pos).setY(g.pos.y + Math.sin(t * 3 + i) * 0.15);
-        m.compose(at, q, sc.setScalar(1));
+        m.compose(at, q, sc.setScalar(1.15));
         mesh.setMatrixAt(i, m);
-        m.compose(at, q, sc.setScalar(0.9 + 0.2 * Math.sin(t * 5 + i)));
-        halo.setMatrixAt(i, m);
+        const flash = Math.max(0, Math.sin(t * 2.6 + i * 1.7) - 0.8) / 0.2;
+        at.y += 0.3;
+        at.x += 0.18;
+        m.compose(at, q.setFromAxisAngle(up, t), sc.set(flash, flash * 2.2, flash));
+        glint.setMatrixAt(i, m);
         changed = true;
       });
-      if (changed) mesh.instanceMatrix.needsUpdate = halo.instanceMatrix.needsUpdate = true;
+      if (changed) mesh.instanceMatrix.needsUpdate = glint.instanceMatrix.needsUpdate = true;
     },
   };
 }

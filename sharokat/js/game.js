@@ -1,13 +1,14 @@
 // «Шарокат»: шар катится по радужным горкам в небе. Здесь игровой цикл, физика шара, камера, меню.
-import * as T from "../vendor/three/three.module.min.js?v=d805dd80";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=d805dd80";
-import { Track, trackMesh, railLights, tubeMeshes, HALF } from "./track.js?v=d805dd80";
-import { R, sky, scenery, supports, gates, boostPads, obstacles, trampolines, gemField, skins, skinMaterial, ballMesh, effects } from "./world.js?v=d805dd80";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=d805dd80";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=d805dd80";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=d805dd80";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=d805dd80";
-import { themeFor } from "./themes.js?v=d805dd80";
+import * as T from "../vendor/three/three.module.min.js?v=3eed4cb9";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=3eed4cb9";
+import { Track, trackMesh, railLights, tubeMeshes, HALF } from "./track.js?v=3eed4cb9";
+import { R, sky, scenery, supports, gates, boostPads, obstacles, trampolines, gemField, skins, skinMaterial, ballMesh, effects } from "./world.js?v=3eed4cb9";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=3eed4cb9";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=3eed4cb9";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=3eed4cb9";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=3eed4cb9";
+import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=3eed4cb9";
+import { themeFor } from "./themes.js?v=3eed4cb9";
 
 // 20 уровней: каждая из 10 тем встречается дважды
 const LEVELS = 20;
@@ -43,10 +44,12 @@ try {
 }
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.6));
 renderer.toneMapping = T.NeutralToneMapping;
+// Чуть меньше света: раньше яркие цвета упирались в белый и выцветали
+renderer.toneMappingExposure = 0.92;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = T.PCFSoftShadowMap;
 const scene = new T.Scene();
-scene.fog = new T.Fog(0xd8eeff, 120, 520);
+scene.fog = new T.Fog(0xd8eeff, 170, 680);
 const pmrem = new T.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 scene.environmentIntensity = 0.55;
@@ -406,9 +409,24 @@ function frame(ms) {
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 // Порог выше яркости неба и белых бортиков: светится только то, что ярче, — кристаллы, неон, лава, блики
-const bloom = new UnrealBloomPass(new T.Vector2(256, 256), 0.45, 0.35, 1.3);
+const bloom = new UnrealBloomPass(new T.Vector2(256, 256), 0.5, 0.35, 1.6);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
+// Сочнее: насыщенность растёт там, где цвет бледный (пастель, дымка), яркое не пересвечивается; чуть больше контраста
+const vivid = new ShaderPass({
+  uniforms: { tDiffuse: { value: null }, vibrance: { value: 0.65 }, contrast: { value: 0.1 } },
+  vertexShader: "varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float vibrance; uniform float contrast; varying vec2 vUv;
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      float mx = max(c.r, max(c.g, c.b)), mn = min(c.r, min(c.g, c.b));
+      float l = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+      vec3 col = mix(vec3(l), c.rgb, 1.0 + vibrance * (1.0 - (mx - mn)));
+      col = (col - 0.5) * (1.0 + contrast) + 0.5;
+      gl_FragColor = vec4(clamp(col, 0.0, 1.0), c.a);
+    }`,
+});
+composer.addPass(vivid);
 // Если кадры медленные (старый iPad), свечение выключается само
 const glow = { on: true, slow: 0, checked: 0 };
 function watchSpeed(dt) {
