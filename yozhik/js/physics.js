@@ -171,6 +171,39 @@ export function processStroke(raw, level, rails) {
   return pts;
 }
 
+// Потянуть кончик готового рельса: кончик едет к пальцу, ближние точки плавно за ним.
+// Рядом с почтой, станцией или концом другого рельса кончик примагничивается (others — остальные рельсы)
+export function bendRail(level, pts, fromEnd, target, others) {
+  let t = [...target],
+    snapped = false,
+    bd = SNAP;
+  for (const a of anchors(level, others)) {
+    const d = dist(a, t);
+    if (d < bd) {
+      bd = d;
+      t = [...a];
+      snapped = true;
+    }
+  }
+  const n = pts.length,
+    end = fromEnd ? pts[n - 1] : pts[0],
+    d = [t[0] - end[0], t[1] - end[1]];
+  const reach = Math.max(1.2, Math.min(4, Math.hypot(...d) * 1.8));
+  const out = pts.map((p) => [...p]);
+  let along = 0;
+  for (let k = 0; k < n; k++) {
+    const i = fromEnd ? n - 1 - k : k;
+    if (k) along += dist(pts[i], pts[fromEnd ? i + 1 : i - 1]);
+    const u = Math.max(0, 1 - along / reach);
+    if (!u) break;
+    const w = u * u * (3 - 2 * u);
+    out[i] = [pts[i][0] + d[0] * w, pts[i][1] + d[1] * w];
+  }
+  out[fromEnd ? n - 1 : 0] = t;
+  let res = resample(out, STEP).map(([x, y], i, a) => (snapped && (fromEnd ? i === a.length - 1 : i === 0) ? [x, y] : [x, Math.max(y, groundAt(level, x) + CLEAR, waterAt(level, x) + CLEAR)]));
+  return { pts: res, snapped };
+}
+
 // ---------- Сеть рельсов ----------
 export function makeRail(pts, kind, id) {
   const cum = [0];
@@ -220,6 +253,10 @@ export class Run {
     this.turn = null;
     this.ignore = null;
     this.result = null;
+    // Трюки: петля (вагончик повернулся на полный круг), полёт, тоннель, ракета
+    this.tricks = new Set();
+    this.spin = 0;
+    this.airTime = 0;
     this.speed = PUSH;
     this.pos = railAt(this.rail, this.s).p;
     this.dir = railAt(this.rail, this.s).t;
@@ -228,15 +265,20 @@ export class Run {
   emit(e) {
     this.events.push(e);
   }
+  trick(name) {
+    if (this.tricks.has(name)) return;
+    this.tricks.add(name);
+    this.emit({ type: "trick", name });
+  }
   fail(reason, at) {
     if (this.result) return;
-    this.result = { ok: false, reason, at: [...at], rings: [...this.rings] };
+    this.result = { ok: false, reason, at: [...at], rings: [...this.rings], tricks: [...this.tricks] };
     this.mode = "fail";
     this.emit({ type: "fail", reason, at: [...at] });
   }
   finish() {
     if (this.result) return;
-    this.result = { ok: true, rings: [...this.rings], time: this.t };
+    this.result = { ok: true, rings: [...this.rings], tricks: [...this.tricks], time: this.t };
     this.emit({ type: "finish" });
   }
   // Конец рельса: продолжение (рельс с концом в этой точке) или полёт
@@ -275,6 +317,8 @@ export class Run {
         this.emit({ type: "ring", i });
       }
     }
+    const tun = this.level.tunnel;
+    if (tun && this.pos[0] > (tun[0] + tun[1]) / 2 && this.pos[1] > tun[2] && this.pos[1] < tun[3]) this.trick("tunnel");
     if (Math.round(this.t / DT) % 4 === 0) this.trace.push([...this.pos]);
     if (this.t > 40 && !this.result) this.fail("slow", this.pos);
   }
@@ -289,10 +333,14 @@ export class Run {
     let v = this.v - G * here.t[1] * DT;
     const fr = (MU * G + DRAG * v * v) * DT;
     v = Math.sign(v) * Math.max(0, Math.abs(v) - fr);
-    if (rail.kind === "boost" && Math.abs(v) < BOOST_V) {
-      if (!this.boosted) this.emit({ type: "boost" });
+    if (rail.kind === "boost") {
+      // Ракета срабатывает при любом въезде, разгоняет до BOOST_V (быстрее — не тормозит)
+      if (!this.boosted) {
+        this.emit({ type: "boost" });
+        this.trick("rocket");
+      }
       this.boosted = true;
-      v = (v >= 0 ? 1 : -1) * BOOST_V;
+      if (Math.abs(v) < BOOST_V) v = (v >= 0 ? 1 : -1) * BOOST_V;
     }
     // Разворот: вагончик не заехал на горку
     if (Math.sign(v) !== Math.sign(this.v) && this.v !== 0) {
@@ -326,11 +374,16 @@ export class Run {
         this.v = Math.abs(this.v) * 0.3;
         break;
       }
-      const end = railAt(this.rail, atEnd ? this.rail.len : 0);
-      const sgn = atEnd ? 1 : -1;
+      const r = this.rail,
+        end = railAt(r, atEnd ? r.len : 0),
+        back = railAt(r, atEnd ? Math.max(0, r.len - 0.6) : Math.min(r.len, 0.6));
+      let d = [end.p[0] - back.p[0], end.p[1] - back.p[1]];
+      const dl = Math.hypot(...d) || 1;
+      d = [d[0] / dl, d[1] / dl];
       this.mode = "air";
+      this.airTime = 0;
       this.pos = end.p;
-      this.vel = [end.t[0] * sgn * Math.abs(this.v), end.t[1] * sgn * Math.abs(this.v)];
+      this.vel = [d[0] * Math.abs(this.v), d[1] * Math.abs(this.v)];
       this.ignore = { rail: this.rail, until: this.t + 0.15 };
       this.emit({ type: "leave", at: [...end.p] });
       this.speed = Math.abs(this.v);
@@ -340,11 +393,19 @@ export class Run {
     const now = railAt(this.rail, this.s);
     this.pos = now.p;
     const sg = this.v >= 0 ? 1 : -1;
+    const prevDir = this.dir;
     this.dir = [now.t[0] * sg, now.t[1] * sg];
     this.speed = Math.abs(this.v);
+    if (prevDir) {
+      const da = Math.atan2(prevDir[0] * this.dir[1] - prevDir[1] * this.dir[0], prevDir[0] * this.dir[0] + prevDir[1] * this.dir[1]);
+      // Разворот назад (не заехал) — не поворот по кругу
+      if (Math.abs(da) < 1.5) this.spin += da;
+      if (Math.abs(this.spin) > Math.PI * 2 - 0.35) this.trick("loop");
+    }
   }
   stepAir() {
     const vel = this.vel;
+    this.airTime += DT;
     vel[1] -= G * DT;
     const a = this.pos,
       b = [a[0] + vel[0] * DT, a[1] + vel[1] * DT];
@@ -365,7 +426,8 @@ export class Run {
         t = [seg[0] / l, seg[1] / l];
       const sp = Math.hypot(...vel),
         vt = vel[0] * t[0] + vel[1] * t[1];
-      if (r.kind === "finish" || Math.abs(vt) / sp >= 0.35) {
+      if (r.kind === "finish" || Math.abs(vt) / sp >= 0.25) {
+        if (this.airTime > 0.55) this.trick("jump");
         this.mode = "rail";
         this.rail = r;
         this.s = r.cum[i - 1] + dist(r.pts[i - 1], p);
@@ -382,6 +444,7 @@ export class Run {
     const [fx0, fx1, fy] = this.plat.finish;
     if (b[0] >= fx0 && b[0] <= fx1 && a[1] >= fy && b[1] < fy) {
       const r = this.rails.find((q) => q.kind === "finish");
+      if (this.airTime > 0.55) this.trick("jump");
       this.mode = "rail";
       this.rail = r;
       this.s = Math.max(0, Math.min(r.len, b[0] - fx0));
@@ -434,14 +497,40 @@ export function simulate(level, userRails, maxSeconds = 45) {
   for (let i = 0; i < maxSeconds / DT && !run.result; i++) run.step();
   return run.result || { ok: false, reason: "slow", at: run.pos, rings: [...run.rings] };
 }
-// Линия пальца в виде редких точек → плотные «сырые» точки, как от настоящего пальца
+// Начало будущих прыжков: заезд «в уме» до первых трёх полётов, по 0.45 с каждого.
+// Ребёнок видит, куда вагончик полетит с трамплина, но не весь путь.
+export function predictJumps(level, userRails, show = 0.45) {
+  const run = new Run(level, userRails);
+  const arcs = [];
+  let cur = null;
+  for (let i = 0; i < 8 / DT && !run.result && arcs.length <= 3; i++) {
+    run.step();
+    if (run.mode === "air") {
+      if (!cur) arcs.push((cur = [[...run.pos]]));
+      else if (run.airTime < show) cur.push([...run.pos]);
+    } else cur = null;
+    run.events.length = 0;
+  }
+  return arcs.slice(0, 3);
+}
+// Линия пальца в виде редких точек → плотные «сырые» точки по плавной кривой (Катмулл — Ром),
+// как провёл бы настоящий палец
 export function fingerPath(points, step = 0.12) {
   const out = [points[0]];
-  for (let i = 1; i < points.length; i++) {
-    const a = points[i - 1],
-      b = points[i],
-      n = Math.max(1, Math.ceil(dist(a, b) / step));
-    for (let k = 1; k <= n; k++) out.push([a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n]);
+  const P = (i) => points[Math.max(0, Math.min(points.length - 1, i))];
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = P(i - 1),
+      p1 = P(i),
+      p2 = P(i + 1),
+      p3 = P(i + 2);
+    const n = Math.max(1, Math.ceil(dist(p1, p2) / step));
+    for (let k = 1; k <= n; k++) {
+      const t = k / n,
+        t2 = t * t,
+        t3 = t2 * t;
+      const f = (a, b, c, d) => 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
+      out.push([f(p0[0], p1[0], p2[0], p3[0]), f(p0[1], p1[1], p2[1], p3[1])]);
+    }
   }
   return out;
 }

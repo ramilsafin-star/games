@@ -8,7 +8,7 @@
     <meta name="description" content="Нарисуй пальцем рельсы — и ёжик-почтальон довезёт посылку через петли, трамплины и пещеры." />
     <link rel="icon" href="./icon-192.png" />
     <link rel="apple-touch-icon" href="./icon-180.png" />
-    <link rel="stylesheet" href="./style.css?v=1913a63e" />
+    <link rel="stylesheet" href="./style.css?v=10b8a11f" />
   </head>
   <body>
     <main class="app">
@@ -30,7 +30,6 @@
           <button id="eraser" class="tool" aria-label="Ластик"></button>
           <button id="undo" class="tool" aria-label="Отменить"></button>
           <button id="clear" class="tool" aria-label="Стереть всё"></button>
-          <button id="hint" class="tool hint" aria-label="Подсказка" hidden></button>
         </div>
         <button id="go" class="go" aria-label="Поехали"><i></i><span>Поехали!</span></button>
       </nav>
@@ -61,6 +60,7 @@
       <div class="card">
         <h2 id="result-title">Посылка доставлена!</h2>
         <div id="result-stars" class="stars"><i></i><i></i><i></i></div>
+        <div id="result-tricks" class="tricks" hidden></div>
         <div id="result-new" class="new" hidden></div>
         <div class="row">
           <button id="again" class="round wide" aria-label="Ещё раз"></button>
@@ -70,13 +70,18 @@
     </section>
 
     <!-- Телефон стоя: поле узкое, рисовать неудобно -->
-    <div class="rotate" aria-live="polite"><div><b>📱</b><p>Поверни телефон боком —<br />так удобнее рисовать!</p></div></div>
+    <div class="rotate" aria-live="polite">
+      <div><b>📱</b><p>Поверни телефон боком —<br />так удобнее рисовать!</p><button id="portrait-ok" class="later">Играть так</button></div>
+    </div>
+    <!-- Лампочка-подсказка появляется на поле рядом с местом, где не получилось -->
+    <button id="hint" class="hint-float" aria-label="Подсказка" hidden></button>
+    <div id="toast" class="toast" aria-live="polite"></div>
     <div id="hand" class="hand" hidden aria-hidden="true">👆</div>
     <div id="fly" class="fly" aria-hidden="true"></div>
     <div id="nogl" class="screen nogl" hidden>
       <p>Тут нужна 3D-графика (WebGL), а браузер её не включил. Попробуйте другой браузер.</p>
     </div>
-    <script src="./js/audio.js?v=1913a63e"></script>
-    <script type="module" src="./js/game.js?v=1913a63e"></script>
+    <script src="./js/audio.js?v=10b8a11f"></script>
+    <script type="module" src="./js/game.js?v=10b8a11f"></script>
   </body>
 </html>

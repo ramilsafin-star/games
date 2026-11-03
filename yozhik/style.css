@@ -595,6 +595,110 @@ button:focus-visible {
   font-size: 20px;
 }
 
+/* Лампочка на поле */
+.hint-float {
+  position: fixed;
+  z-index: 11;
+  left: 0;
+  top: 0;
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  padding: 10px;
+  background: radial-gradient(circle at 50% 40%, #fffbe0, #ffe14d);
+  box-shadow: 0 5px 0 #d9a21f, 0 0 0 8px #ffe14d66;
+  animation: bulb 1.1s ease-in-out infinite;
+}
+.hint-float[hidden] {
+  display: none;
+}
+.hint-float svg {
+  width: 100%;
+  height: 100%;
+}
+@keyframes bulb {
+  50% {
+    box-shadow: 0 5px 0 #d9a21f, 0 0 0 16px #ffe14d33;
+    scale: 1.08;
+  }
+}
+/* Надпись трюка во время заезда */
+.toast {
+  position: fixed;
+  z-index: 13;
+  left: 50%;
+  top: 18%;
+  translate: -50% 0;
+  pointer-events: none;
+  font-size: clamp(34px, 6vw, 62px);
+  font-weight: 900;
+  color: #fff;
+  paint-order: stroke fill;
+  -webkit-text-stroke: 10px #ff7a2f;
+  filter: drop-shadow(0 6px 0 #0003);
+  white-space: nowrap;
+  opacity: 0;
+}
+.toast.show {
+  animation: toast 1.4s ease-out both;
+}
+@keyframes toast {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) rotate(-8deg);
+  }
+  18% {
+    opacity: 1;
+    transform: scale(1.15) rotate(3deg);
+  }
+  30% {
+    transform: scale(1) rotate(0);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-30px);
+  }
+}
+/* Трюки в карточке результата и на карте */
+.tricks {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: -6px 0 14px;
+  flex-wrap: wrap;
+}
+.tricks[hidden] {
+  display: none;
+}
+.tricks span {
+  background: linear-gradient(#fff4c8, #ffd96b);
+  border-radius: 18px;
+  padding: 6px 12px;
+  font-weight: 900;
+  font-size: 17px;
+  box-shadow: 0 3px 0 #d9a21f;
+}
+.tricks span.new {
+  animation: pop 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+  box-shadow: 0 3px 0 #d9a21f, 0 0 0 3px #ff7a2f;
+}
+.lvl .gift {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 22px;
+}
+.lvl .tr {
+  font-size: 12px;
+  line-height: 1;
+  min-height: 12px;
+}
+.lvl {
+  position: relative;
+}
 /* Подсказка повернуть телефон */
 .rotate {
   display: none;
@@ -621,6 +725,19 @@ button:focus-visible {
   }
   .rotate p {
     margin: 12px 20px 0;
+  }
+  .rotate .later {
+    margin-top: 22px;
+    padding: 12px 26px;
+    border-radius: 26px;
+    background: #ffffff;
+    color: var(--ink);
+    font-size: 19px;
+    font-weight: 900;
+    box-shadow: 0 4px 0 #0003;
+  }
+  .portrait-ok .rotate {
+    display: none;
   }
 }
 @keyframes turn {
@@ -687,6 +804,13 @@ button:focus-visible {
     height: 34px;
   }
 }
+@media (max-height: 520px), (max-width: 480px) {
+  .hint-float {
+    width: 52px;
+    height: 52px;
+    padding: 7px;
+  }
+}
 @media (orientation: landscape) and (max-height: 520px) {
   .app {
     display: grid;
@@ -705,12 +829,18 @@ button:focus-visible {
     min-height: 0;
     justify-content: center;
   }
+  /* Инструменты сеткой 2 × 2, «Поехали!» всегда под ними */
   .group {
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: repeat(2, 44px);
+    gap: 6px;
+    padding: 5px;
   }
   .tool {
-    width: 48px;
-    height: 48px;
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    padding: 7px;
   }
   .go {
     margin: 0;

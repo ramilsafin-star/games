@@ -1,20 +1,22 @@
 // «Ёжик-почтальон»: ребёнок рисует пальцем рельсы от почты до станции, вагончик с ёжиком едет сам.
 // Физика — physics.js (шаг 1/120 с, заезд повторяется точно), картинка — world.js, уровни — levels.js.
-import { World, SKINS, railUp } from "./world.js?v=1913a63e";
-import { LEVELS, WORLDS } from "./levels.js?v=1913a63e";
-import { Run, DT, processStroke, makeRail, anchors, canDraw, blockedSegment, SNAP, drawStrokes, fixedRails, railAt } from "./physics.js?v=1913a63e";
+import { World, SKINS, railUp } from "./world.js?v=10b8a11f";
+import { LEVELS, WORLDS, STORIES } from "./levels.js?v=10b8a11f";
+import { Run, DT, processStroke, makeRail, anchors, canDraw, blockedSegment, SNAP, drawStrokes, fixedRails, railAt, predictJumps, bendRail } from "./physics.js?v=10b8a11f";
 
 const el = (id) => document.getElementById(id);
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---------- Сохранение ----------
 const KEY = "yozhik-v1";
 function load() {
+  const empty = { v: 1, stars: {}, rings: {}, tricks: {}, drawings: {}, heard: {}, skin: "cart", sound: true, music: true, level: 0 };
   try {
     const s = JSON.parse(localStorage.getItem(KEY));
-    if (s && s.v === 1) return { stars: {}, rings: {}, drawings: {}, heard: {}, ...s };
+    if (s && s.v === 1) return { ...empty, ...s, tricks: s.tricks || {} };
   } catch {}
-  return { v: 1, stars: {}, rings: {}, drawings: {}, heard: {}, skin: "cart", sound: true, music: true, level: 0 };
+  return empty;
 }
 const save = load();
 function store() {
@@ -24,7 +26,15 @@ function store() {
     // Хранилище недоступно (частный режим): играть можно, прогресс живёт до закрытия
   }
 }
-const totalStamps = () => Object.values(save.rings).reduce((a, b) => a + b, 0);
+// Печати: кольца лучших заездов и особые печати за трюки
+const trickCount = () => Object.values(save.tricks).reduce((a, b) => a + b.length, 0);
+const totalStamps = () => Object.values(save.rings).reduce((a, b) => a + b, 0) + trickCount();
+const TRICKS = {
+  loop: { icon: "🎢", name: "Петля" },
+  jump: { icon: "✈️", name: "Полёт" },
+  tunnel: { icon: "🔦", name: "Тоннель" },
+  rocket: { icon: "🚀", name: "Ракета" },
+};
 
 // ---------- Значки ----------
 const svg = (body, view = "0 0 64 64") => `<svg viewBox="${view}" aria-hidden="true">${body}</svg>`;
@@ -33,7 +43,7 @@ const ICON = {
   eraser: svg('<g transform="rotate(-35 32 32)"><rect x="12" y="20" width="40" height="24" rx="6" fill="#ff8fb1"/><rect x="12" y="20" width="16" height="24" rx="6" fill="#7fb8ff"/></g><path d="M10 56h44" stroke="#c9cde6" stroke-width="4" stroke-linecap="round"/>'),
   undo: svg('<path d="M22 18 8 30l14 12" fill="none" stroke="#2f6bff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 30h24a16 16 0 0 1 0 32h-8" fill="none" stroke="#2f6bff" stroke-width="7" stroke-linecap="round" transform="translate(0 -8)"/>'),
   clear: svg('<rect x="14" y="18" width="36" height="40" rx="6" fill="#ff6f8f"/><rect x="10" y="10" width="44" height="9" rx="4" fill="#ff4f6d"/><rect x="26" y="5" width="12" height="7" rx="3" fill="#ff4f6d"/><path d="M24 28v20M32 28v20M40 28v20" stroke="#fff" stroke-width="4" stroke-linecap="round"/>'),
-  hint: svg('<circle cx="32" cy="26" r="17" fill="#ffd23f"/><rect x="24" y="40" width="16" height="12" rx="4" fill="#c9cde6"/><path d="M32 14v4M20 26h-3M47 26h-3" stroke="#fff" stroke-width="4" stroke-linecap="round"/><rect x="27" y="52" width="10" height="5" rx="2" fill="#8d93b5"/>'),
+  hint: svg('<circle cx="32" cy="26" r="17" fill="#ffd23f"/><circle cx="27" cy="20" r="5" fill="#fff8c8"/><rect x="24" y="40" width="16" height="12" rx="4" fill="#c9cde6"/><path d="M32 3v4M12 10l3 3M52 10l-3 3" stroke="#ff9f3f" stroke-width="4" stroke-linecap="round"/><rect x="27" y="52" width="10" height="5" rx="2" fill="#8d93b5"/>'),
   map: svg('<path d="M6 14l16-6 20 6 16-6v42l-16 6-20-6-16 6z" fill="#7fe08f"/><path d="M22 8v42M42 14v42" stroke="#3fbf5a" stroke-width="3"/><path d="M12 40c8-10 16 4 22-8s14-6 18-12" fill="none" stroke="#ff4f6d" stroke-width="4" stroke-dasharray="5 4" stroke-linecap="round"/>'),
   soundOn: svg('<path d="M8 24h12l14-12v40L20 40H8z" fill="#2f6bff"/><path d="M42 22a14 14 0 0 1 0 20M48 16a22 22 0 0 1 0 32" fill="none" stroke="#2f6bff" stroke-width="5" stroke-linecap="round"/>'),
   soundOff: svg('<path d="M8 24h12l14-12v40L20 40H8z" fill="#9aa0bf"/><path d="M42 24l14 16M56 24 42 40" stroke="#ff4f6d" stroke-width="5" stroke-linecap="round"/>'),
@@ -82,7 +92,9 @@ el("music").onclick = () => {
   paintToggles();
 };
 const recordings = new Map();
-let voice = null;
+let voice = null,
+  voiceToken = 0,
+  speakToken = 0;
 function stopVoice() {
   if (voice) {
     try {
@@ -91,9 +103,11 @@ function stopVoice() {
     voice = null;
   }
 }
-// Говорит ёжик (записи Gemini). Нет записи — молчит
-async function say(id, delay = 0) {
+// Говорит ёжик (записи Gemini). Нет записи — молчит. Ждать окончания: await say(...)
+async function say(id, delay = 0, chain = false) {
+  if (!chain) speakToken++;
   if (!save.sound || !Sound.ctx) return;
+  const token = ++voiceToken;
   stopVoice();
   const ctx = Sound.ctx;
   try {
@@ -108,21 +122,37 @@ async function say(id, delay = 0) {
       recordings.set(id, p);
     }
     const buf = await recordings.get(id);
-    stopVoice();
+    if (token !== voiceToken) return;
     const src = ctx.createBufferSource();
     src.buffer = buf;
     src.connect(Sound.master);
     src.start(ctx.currentTime + delay);
     voice = src;
     Music.duck(buf.duration + delay + 0.2, 0.35);
+    await new Promise((r) => (src.onended = r));
   } catch {}
 }
-// Подсказку один раз на уровень, не повторять каждую секунду
+// Несколько фраз подряд; новая фраза прерывает цепочку
+async function speak(...ids) {
+  const token = ++speakToken;
+  for (const id of ids) {
+    if (token !== speakToken) return;
+    await say(id, 0, true);
+    await wait(180);
+  }
+}
 const said = new Set();
 function sayOnce(id) {
   if (said.has(id)) return;
   said.add(id);
   say(id);
+}
+function toast(text) {
+  const t = el("toast");
+  t.textContent = text;
+  t.classList.remove("show");
+  void t.offsetWidth;
+  t.classList.add("show");
 }
 
 // ---------- Мир ----------
@@ -144,13 +174,19 @@ let li = 0,
   mode = "title",
   tool = "pencil",
   stroke = null,
+  drag = null,
   run = null,
   acc = 0,
   fails = 0,
+  failsBy = {},
+  blockedTries = 0,
   lastLeave = false,
   hand = null,
+  hintAt = null,
+  history = [],
   fixedSides = new Map();
 
+const story = () => STORIES[level.story] || STORIES.carrot;
 function sideOf(rail) {
   if (rail.kind === "user") return World.side(rail.pts);
   return fixedSides.get(rail.kind) ?? 1;
@@ -166,42 +202,45 @@ function startLevel(i, quiet = false) {
   for (const h of handles) world.removeRail(h);
   rails = [];
   handles = [];
+  history = [];
   colorNext = 0;
-  for (const d of save.drawings[level.id] || []) addRail(d.pts, d.c, true, false);
+  for (const d of save.drawings[level.id] || []) insertRail(makeRail(d.pts, "user", rid()), rails.length, d.c, true);
   fixedSides = new Map(fixedRails(level).map((r) => [r.kind, World.side(r.pts)]));
   fails = 0;
+  failsBy = {};
+  blockedTries = 0;
+  hintAt = null;
   said.clear();
   el("hint").hidden = true;
   el("lvl-num").textContent = level.id;
   el("lvl-name").textContent = level.name;
+  world.clearTrace();
+  // Посылка уже доставлена — у станции её результат, иначе получатель ждёт с облачком
+  const delivered = (save.stars[level.id] || 0) > 0;
+  world.showGift(delivered ? story().gift : null, false);
+  world.setBubble(delivered ? null : story().icon);
   setMode("edit");
   resetWagon();
-  updateMagnets();
+  refresh();
   hideHand();
   world.ghost(null);
   if (quiet) return;
-  // Подсказки голосом: на первой горке — знакомство и рука, на особых — что тут нового
-  if (level.id === 1 && !rails.length) {
-    if (!save.heard.hello) {
-      save.heard.hello = 1;
-      store();
-      say("hello");
-      setTimeout(() => level.id === 1 && !rails.length && mode === "edit" && say("draw"), 3600);
-    } else say("draw");
-    showGhost(true);
-  } else if (level.hint && !save.heard[level.hint]) {
-    save.heard[level.hint] = 1;
-    store();
-    say(level.hint, 0.4);
-  } else if (level.id === 2 && !save.heard.rings) {
-    save.heard.rings = 1;
-    store();
-    say("rings", 0.4);
-  } else if (level.rocks.length && !save.heard.cave) {
-    save.heard.cave = 1;
-    store();
-    say("cave", 0.4);
-  } else if (worldChanged && li > 0) say("world", 0.3);
+  // Голос: знакомство, кто ждёт посылку, что нового на этой горке
+  const seq = [];
+  if (level.id === 1 && !save.heard.hello) {
+    save.heard.hello = 1;
+    seq.push("hello");
+  }
+  if (!delivered) seq.push("story-" + level.story);
+  if (level.id === 1 && !rails.length) seq.push("draw");
+  const tip = level.hint || (level.id === 2 ? "rings" : level.rocks.length ? "cave" : null);
+  if (tip && !save.heard[tip]) {
+    save.heard[tip] = 1;
+    seq.push(tip);
+  } else if (worldChanged && li > 0 && delivered) seq.push("world");
+  store();
+  speak(...seq);
+  if (level.id === 1 && !rails.length) showGhost(true);
 }
 function resetWagon() {
   const start = fixedRails(level)[0],
@@ -210,6 +249,7 @@ function resetWagon() {
   world.placeWagon(at.p, at.t, railUp(start, s, 1), 0, 0, true);
   world.resetWagonParcel();
   world.ringsReset();
+  world.follow(null);
   paintStamps(0);
 }
 function paintStamps(n) {
@@ -221,8 +261,11 @@ function setMode(m) {
   go.classList.toggle("stop", m === "run");
   go.querySelector("span").textContent = m === "run" ? "Стоп" : "Поехали!";
   go.setAttribute("aria-label", m === "run" ? "Остановить" : "Поехали");
-  for (const id of ["pencil", "eraser", "undo", "clear", "hint"]) el(id).disabled = m !== "edit";
-  go.disabled = m === "result";
+  for (const id of ["pencil", "eraser", "undo", "clear"]) el(id).disabled = m !== "edit";
+  el("undo").disabled = m !== "edit" || !history.length;
+  go.disabled = m === "result" || m === "fail";
+  if (m !== "edit") el("hint").hidden = true;
+  else if (hintAt) el("hint").hidden = false;
   updateReady();
 }
 // Кнопка «Поехали» зовёт, когда рельс уже отходит от почты
@@ -230,45 +273,83 @@ function updateReady() {
   const touches = rails.some((r) => dist(r.pts[0], level.start) < 1e-3 || dist(r.pts.at(-1), level.start) < 1e-3);
   el("go").classList.toggle("ready", mode === "edit" && touches);
 }
-function updateMagnets(hot = -1) {
-  if (mode !== "edit") return world.setMagnets([]);
+// Свободные кончики: не прицеплены ни к станции, ни к почте, ни к другому рельсу
+function freeEnds() {
+  const out = [];
+  rails.forEach((r, i) => {
+    for (const end of [0, 1]) {
+      const p = end ? r.pts.at(-1) : r.pts[0];
+      const others = anchors(level, rails.filter((q) => q !== r));
+      if (!others.some((a) => dist(a, p) < 1e-3)) out.push({ i, end, p, color: world.railColor(r.color) });
+    }
+  });
+  return out;
+}
+// После любого изменения рельсов: магниты, ручки на кончиках, пунктир будущих прыжков
+function refresh(hot = -1) {
+  if (mode !== "edit") {
+    world.setMagnets([]);
+    world.setHandles([]);
+    world.showArcs([]);
+    return;
+  }
   world.setMagnets(anchors(level, rails), hot);
+  world.setHandles(tool === "pencil" ? freeEnds() : []);
+  world.showArcs(predictJumps(level, rails));
+  el("undo").disabled = !history.length;
+  updateReady();
 }
 function persist() {
   save.drawings[level.id] = rails.map((r) => ({ pts: r.pts, c: r.color }));
   store();
 }
-function addRail(pts, color, animate = true, keep = true) {
-  const rail = makeRail(pts, "user", "u" + Math.random().toString(36).slice(2));
+const rid = () => "u" + Math.random().toString(36).slice(2);
+// Рельсы и их 3D хранятся в двух параллельных списках
+function insertRail(rail, i, color, animate = true) {
   rail.color = color;
-  rails.push(rail);
-  handles.push(world.buildRail(pts, world.railColor(color), animate));
+  rails.splice(i, 0, rail);
+  handles.splice(i, 0, world.buildRail(rail.pts, world.railColor(color), animate));
   colorNext = Math.max(colorNext, color + 1);
-  if (keep) persist();
-  return rail;
 }
-function removeRail(i) {
+function deleteRail(i, puff = true) {
   const [r] = rails.splice(i, 1),
     [h] = handles.splice(i, 1);
-  for (let k = 0; k < r.pts.length; k += 5) world.puff(r.pts[k], 1, "#ffffff", 0.8, 0.45);
+  if (puff) for (let k = 0; k < r.pts.length; k += 5) world.puff(r.pts[k], 1, "#ffffff", 0.8, 0.45);
   world.removeRail(h);
+  return r;
+}
+// Отмена: вернуть нарисованное, стёртое ластиком, корзиной или изменённый кончик
+function undo() {
+  const a = history.pop();
+  if (!a) return;
+  if (a.t === "add") deleteRail(rails.indexOf(a.rail));
+  else if (a.t === "erase") insertRail(a.rail, Math.min(a.i, rails.length), a.rail.color);
+  else if (a.t === "clear") a.list.forEach(({ rail, i }) => insertRail(rail, Math.min(i, rails.length), rail.color));
+  else if (a.t === "bend") {
+    const i = rails.indexOf(a.after);
+    if (i >= 0) {
+      deleteRail(i, false);
+      insertRail(a.before, i, a.before.color, false);
+    }
+  }
   persist();
-  updateMagnets();
-  updateReady();
+  refresh();
 }
 
-// ---------- Рисование ----------
+// ---------- Рисование и кончики ----------
 const canvas = el("stage");
-function point(e) {
-  return world.pick(e.clientX, e.clientY);
-}
+const point = (e) => world.pick(e.clientX, e.clientY);
 function blocked(p, last) {
   return !canDraw(level, p) || (last && blockedSegment(level, last, p));
 }
 function warnBlocked() {
   world.flashNoDraw();
   Sound.nope();
-  if (level.nodraw.length) sayOnce("nodraw");
+  if (!level.nodraw.length) return;
+  blockedTries++;
+  // Ребёнок снова и снова тянет линию над пропастью — объяснить, что нужен трамплин
+  if (blockedTries === 1) sayOnce("nodraw");
+  else if (blockedTries === 6) say("coachJump");
 }
 function eraseAt(p) {
   let best = -1,
@@ -283,29 +364,65 @@ function eraseAt(p) {
     }
   });
   if (best >= 0) {
-    removeRail(best);
+    const rail = rails[best];
+    deleteRail(best);
+    history.push({ t: "erase", rail, i: best });
     Sound.erase();
+    persist();
+    refresh();
   }
 }
 canvas.addEventListener("pointerdown", (e) => {
   unlock();
-  if (mode !== "edit" || stroke) return;
+  if (mode !== "edit" || stroke || drag) return;
   const p = point(e);
   if (!p) return;
   canvas.setPointerCapture(e.pointerId);
   hideHand();
   world.ghost(null);
-  world.clearTrace();
   if (tool === "eraser") {
     stroke = { id: e.pointerId, erase: true };
     eraseAt(p);
+    return;
+  }
+  // За ручку на кончике рельса — тянуть кончик
+  const reach = Math.max(0.55, 30 / world.pixelsPerUnit());
+  const h = freeEnds().find((f) => dist(f.p, p) < reach);
+  if (h) {
+    drag = { id: e.pointerId, i: h.i, end: h.end, rail: rails[h.i], target: p, moved: false, at: 0 };
+    handles[h.i].group.visible = false;
+    world.setHandles([]);
+    Sound.tap();
+    dragPreview();
     return;
   }
   if (blocked(p)) return warnBlocked();
   stroke = { id: e.pointerId, raw: [p] };
   world.preview(stroke.raw, false);
 });
+function dragPreview() {
+  const others = rails.filter((r) => r !== drag.rail);
+  const b = bendRail(level, drag.rail.pts, drag.end === 1, drag.target, others);
+  drag.pts = b.pts;
+  world.preview(b.pts, b.snapped);
+  // Пунктир прыжка пересчитывается не чаще 15 раз в секунду
+  const now = performance.now();
+  if (now - drag.at > 66) {
+    drag.at = now;
+    const tmp = rails.map((r) => (r === drag.rail ? makeRail(b.pts, "user", "tmp") : r));
+    world.showArcs(predictJumps(level, tmp));
+  }
+}
 canvas.addEventListener("pointermove", (e) => {
+  if (drag && e.pointerId === drag.id) {
+    const p = point(e);
+    if (!p || blocked(p)) return;
+    if (dist(p, drag.target) > 0.02) drag.moved = true;
+    drag.target = p;
+    Sound.scratch();
+    dragPreview();
+    return;
+  }
   if (!stroke || e.pointerId !== stroke.id) return;
   const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
   for (const ev of events.length ? events : [e]) {
@@ -340,24 +457,42 @@ canvas.addEventListener("pointermove", (e) => {
   });
   if (hot !== stroke.hot) {
     stroke.hot = hot;
-    updateMagnets(hot);
+    world.setMagnets(list, hot);
   }
   world.preview(stroke.raw, hot >= 0);
 });
-function endStroke(e) {
+function endPointer(e) {
+  if (drag && (!e || e.pointerId === drag.id)) {
+    const d = drag;
+    drag = null;
+    world.preview([], false);
+    const i = rails.indexOf(d.rail);
+    if (d.moved && d.pts && i >= 0) {
+      const after = makeRail(d.pts, "user", rid());
+      deleteRail(i, false);
+      insertRail(after, i, d.rail.color, false);
+      history.push({ t: "bend", before: d.rail, after });
+      Sound.build();
+      persist();
+    } else if (i >= 0) handles[i].group.visible = true;
+    refresh();
+    return;
+  }
   if (!stroke || (e && e.pointerId !== stroke.id)) return;
   const s = stroke;
   stroke = null;
   world.preview([], false);
   if (s.erase) return;
   const pts = processStroke(s.raw, level, rails);
-  if (!pts) return updateMagnets();
-  if (rails.length >= 24) removeRail(0);
-  addRail(pts, colorNext);
+  if (!pts) return refresh();
+  if (rails.length >= 24) deleteRail(0);
+  const rail = makeRail(pts, "user", rid());
+  insertRail(rail, rails.length, colorNext);
+  history.push({ t: "add", rail });
   Sound.build();
-  updateMagnets();
-  updateReady();
-  // Первая горка: рельс от почты есть — показать кнопку «Поехали»
+  persist();
+  refresh();
+  // Рельс от почты есть — показать кнопку «Поехали»
   if (el("go").classList.contains("ready") && !save.heard.play) {
     save.heard.play = 1;
     store();
@@ -365,14 +500,15 @@ function endStroke(e) {
     pointAtGo();
   }
 }
-canvas.addEventListener("pointerup", endStroke);
-canvas.addEventListener("pointercancel", endStroke);
-canvas.addEventListener("lostpointercapture", endStroke);
+canvas.addEventListener("pointerup", endPointer);
+canvas.addEventListener("pointercancel", endPointer);
+canvas.addEventListener("lostpointercapture", endPointer);
 
 function setTool(t) {
   tool = t;
   el("pencil").classList.toggle("on", t === "pencil");
   el("eraser").classList.toggle("on", t === "eraser");
+  refresh();
 }
 el("pencil").onclick = () => {
   unlock();
@@ -386,17 +522,18 @@ el("eraser").onclick = () => {
 };
 el("undo").onclick = () => {
   unlock();
-  if (!rails.length) return;
-  removeRail(rails.length - 1);
+  if (!history.length) return;
+  undo();
   Sound.erase();
-  world.clearTrace();
 };
 el("clear").onclick = () => {
   unlock();
   if (!rails.length) return;
-  while (rails.length) removeRail(rails.length - 1);
+  const list = rails.map((rail, i) => ({ rail, i }));
+  while (rails.length) deleteRail(rails.length - 1);
+  history.push({ t: "clear", list });
   Sound.whoosh();
-  world.clearTrace();
+  persist();
   setTool("pencil");
 };
 el("hint").onclick = () => {
@@ -412,15 +549,17 @@ el("go").onclick = () => {
   else if (mode === "run") stopRun();
 };
 function startRun() {
+  if (stroke || drag) endPointer();
   hideHand();
   world.ghost(null);
   world.clearTrace();
+  world.setBubble(null);
   resetWagon();
   run = new Run(level, rails);
   acc = 0;
   lastLeave = false;
   setMode("run");
-  updateMagnets();
+  refresh();
   Sound.whistle();
   say("go", 0.15);
 }
@@ -429,7 +568,8 @@ function stopRun() {
   Sound.stopRoll();
   setMode("edit");
   resetWagon();
-  updateMagnets();
+  if (!(save.stars[level.id] > 0)) world.setBubble(story().icon);
+  refresh();
 }
 function handle(ev) {
   if (ev.type === "ring") {
@@ -439,7 +579,6 @@ function handle(ev) {
   } else if (ev.type === "leave") {
     lastLeave = true;
     Sound.whoosh();
-    if (!said.has("whee") && Math.random() < 0.6) sayOnce("whee");
   } else if (ev.type === "land") {
     lastLeave = false;
     Sound.clack();
@@ -448,12 +587,16 @@ function handle(ev) {
   } else if (ev.type === "boost") {
     Sound.boost();
     world.burst(run.pos, 30, ["#ff9a3f", "#ffd23f", "#ffffff"], 3.5);
+  } else if (ev.type === "trick") {
+    const t = TRICKS[ev.name];
+    toast(t.icon + " " + t.name + "!");
+    Sound.star();
+    world.burst(run.pos, 24, ["#ffd23f", "#ff8fd0", "#7fe8ff"], 3);
+    say("trick-" + ev.name);
   } else if (ev.type === "finish") finished();
   else if (ev.type === "fail") failed(ev.reason, ev.at);
 }
-let got = 0;
 function flyStamp(i) {
-  got++;
   const from = world.screen(level.rings[i]),
     slot = el("stamps").children[i].getBoundingClientRect();
   const f = el("fly");
@@ -476,20 +619,33 @@ function finished() {
     rings = r.rings.length,
     stars = 1 + rings;
   const before = totalStamps(),
-    unlockedBefore = SKINS.filter((s) => s.need <= before).length;
+    unlockedBefore = SKINS.filter((s) => s.need <= before).length,
+    first = !(save.stars[level.id] > 0);
+  const known = save.tricks[level.id] || [];
+  const newTricks = r.tricks.filter((t) => !known.includes(t));
   save.stars[level.id] = Math.max(save.stars[level.id] || 0, stars);
   save.rings[level.id] = Math.max(save.rings[level.id] || 0, rings);
+  save.tricks[level.id] = [...known, ...newTricks];
   store();
   const fresh = SKINS.filter((s) => s.need <= totalStamps()).slice(unlockedBefore);
+  hintAt = null;
   setMode("result");
   setTimeout(() => {
     world.deliver(run ? run.pos : level.finish);
     world.celebrate([level.finish[0] + 1.3, level.finish[1] + 0.5]);
     Sound.fanfare();
-    say(rings === level.rings.length ? "perfect" : "delivered", 0.3);
+    const line = rings === level.rings.length ? "perfect" : "delivered";
+    if (first) speak(line, "gift");
+    else say(line, 0.3);
   }, 700);
-  setTimeout(() => showResult(stars, fresh), 2300);
+  // Коробка у получателя — открывается, у станции появляется подарок
+  setTimeout(() => {
+    world.showGift(story().gift, first);
+    world.burst([level.finish[0] + 1.3, level.finish[1] + 1.2], 40, ["#ffd23f", "#ff8fd0", "#7fe8ff", "#ffffff"], 3.5);
+  }, 1400);
+  setTimeout(() => showResult(stars, r.tricks, newTricks, fresh), 2800);
 }
+// Неудача: что случилось, где, и голосом — что сделать
 function failed(reason, at) {
   Sound.stopRoll();
   const why = reason === "crash" && lastLeave ? "gap" : reason;
@@ -504,42 +660,58 @@ function failed(reason, at) {
     world.shake(0.35);
   }
   if (why !== "slow" && why !== "away") world.tumble(why);
-  say(why, 0.25);
+  world.follow(null);
+  fails++;
+  failsBy[why] = (failsBy[why] || 0) + 1;
+  // Рядом с пропастью или речкой: прыжок не получился — подсказать про трамплин
+  const nearGap = level.nodraw.some(([x0, , x1]) => at[0] > x0 - 2.5 && at[0] < x1 + 2.5);
+  const jumpFail = nearGap && (why === "water" || why === "gap" || why === "crash" || why === "away");
+  let line = why;
+  if (jumpFail) line = failsBy[why] === 1 && fails === 1 ? "coachJump" : freeEnds().length ? "coachDrag" : "coachLand";
+  else if (fails >= 2)
+    line = { slow: "coachSlow", gap: "coachGap", crash: "coachCrash", away: "coachLand", water: "coachJump" }[why] || why;
+  if (fails === 3 || fails === 6) line = "coachBulb";
+  say(line, 0.25);
   const trace = run.trace;
   setMode("fail");
   world.showTrace(trace, at);
-  fails++;
-  // После двух неудач появляется лампочка-подсказка
-  if (fails >= 2) el("hint").hidden = false;
+  // После двух неудач на поле рядом с этим местом загорается лампочка
+  if (fails >= 2) hintAt = [...at];
   setTimeout(() => {
     run = null;
     setMode("edit");
     resetWagon();
-    updateMagnets();
+    if (!(save.stars[level.id] > 0)) world.setBubble(story().icon);
+    refresh();
   }, 1700);
 }
-function showResult(stars, fresh) {
-  const box = el("result");
+function showResult(stars, tricks, newTricks, fresh) {
   el("result-title").textContent = stars === 3 ? "Все печати!" : "Посылка доставлена!";
   [...el("result-stars").children].forEach((s, i) => s.classList.toggle("on", i < stars));
+  const tr = el("result-tricks");
+  tr.innerHTML = tricks.map((t) => `<span class="${newTricks.includes(t) ? "new" : ""}">${TRICKS[t].icon} ${TRICKS[t].name}</span>`).join("");
+  tr.hidden = !tricks.length;
   const nw = el("result-new");
   if (fresh.length) {
     const s = fresh.at(-1);
     nw.innerHTML = `<img alt="" src="${skinIcon(s.id)}"><span>Новый вагончик: ${s.name}!</span>`;
     nw.hidden = false;
-    say("unlock", 1.2);
+    setTimeout(() => say("unlock"), 1600);
   } else nw.hidden = true;
-  box.hidden = false;
+  el("result").hidden = false;
   Sound.star();
 }
-el("again").onclick = () => {
-  unlock();
-  Sound.tap();
+function backToEdit() {
   el("result").hidden = true;
   run = null;
   setMode("edit");
   resetWagon();
-  updateMagnets();
+  refresh();
+}
+el("again").onclick = () => {
+  unlock();
+  Sound.tap();
+  backToEdit();
 };
 el("next").onclick = () => {
   unlock();
@@ -547,7 +719,10 @@ el("next").onclick = () => {
   el("result").hidden = true;
   run = null;
   if (li < LEVELS.length - 1) startLevel(li + 1);
-  else openMap();
+  else {
+    backToEdit();
+    openMap();
+  }
 };
 
 // ---------- Каждый кадр ----------
@@ -570,11 +745,21 @@ world.onFrame = (dt) => {
       if (run.mode === "air") up = run.dir[0] >= 0 ? [-run.dir[1], run.dir[0]] : [run.dir[1], -run.dir[0]];
       else up = railUp(run.rail, run.s, sideOf(run.rail));
       world.placeWagon(run.pos, run.dir, up, run.speed, dt);
+      world.follow(mode === "run" ? run.pos : null);
       if (mode === "run") Sound.roll(run.speed, run.mode === "air");
       else Sound.stopRoll();
     }
   }
   if (hand) moveHand(dt);
+  // Лампочка держится у места, где не получилось
+  if (hintAt && !el("hint").hidden) {
+    const p = world.screen(hintAt),
+      r = canvas.getBoundingClientRect();
+    const size = el("hint").offsetWidth || 70;
+    const x = Math.max(r.left + 8, Math.min(r.right - size - 8, p.x - size / 2)),
+      y = Math.max(r.top + 8, Math.min(r.bottom - size - 8, p.y - size - 50));
+    el("hint").style.transform = `translate(${x}px, ${y}px)`;
+  }
 };
 
 // ---------- Рука-подсказка ----------
@@ -583,7 +768,7 @@ function showGhost(tutorial) {
   const ref = drawStrokes(level, level.solution);
   world.ghost(ref);
   const path = ref.flatMap((r) => r.pts);
-  hand = { path, t: 0, loop: tutorial ? Infinity : 2, k: 0 };
+  hand = { path, t: 0, loop: tutorial ? Infinity : 2 };
   el("hand").hidden = false;
 }
 function pointAtGo() {
@@ -634,12 +819,15 @@ function openMap() {
         const st = save.stars[l.id] || 0,
           open = unlockedLevel(i);
         const stars = [0, 1, 2].map((k) => (k < st ? "<em>★</em>" : "★")).join("");
-        return `<button class="lvl ${l.world}${i === li ? " now" : ""}" data-level="${i}" ${open ? "" : "disabled"} aria-label="Горка ${l.id}: ${l.name}"><b>${open ? l.id : "🔒"}</b><small>${l.name}</small><span class="st">${stars}</span></button>`;
+        const gift = st ? STORIES[l.story].icon : open ? "📦" : "";
+        const tricks = (save.tricks[l.id] || []).map((t) => TRICKS[t].icon).join("");
+        return `<button class="lvl ${l.world}${i === li ? " now" : ""}" data-level="${i}" ${open ? "" : "disabled"} aria-label="Горка ${l.id}: ${l.name}"><span class="gift">${gift}</span><b>${open ? l.id : "🔒"}</b><small>${l.name}</small><span class="st">${stars}</span><span class="tr">${tricks}</span></button>`;
       })
       .join("")}</div></div>`;
   }).join("");
-  const total = totalStamps();
-  el("stamp-total").textContent = `✉ ${total} печатей`;
+  const total = totalStamps(),
+    tc = trickCount();
+  el("stamp-total").textContent = `✉ ${total} печатей${tc ? ` · трюков ${tc}` : ""}`;
   el("garage").innerHTML = SKINS.map((s) => {
     const open = total >= s.need;
     return `<button class="skin${save.skin === s.id ? " on" : ""}" data-skin="${s.id}" ${open ? "" : "disabled"} aria-label="${s.name}"><img alt="" src="${skinIcon(s.id)}"><span>${open ? s.name : "✉ " + s.need}</span></button>`;
@@ -655,6 +843,8 @@ el("map-open").onclick = () => {
 el("map-close").onclick = () => {
   Sound.tap();
   el("map").hidden = true;
+  // После последней горки карта открывается поверх итога — вернуть живое поле
+  if (mode === "result" && el("result").hidden) backToEdit();
 };
 el("map").addEventListener("click", (e) => {
   const b = e.target.closest("button");
@@ -684,11 +874,21 @@ el("play").onclick = () => {
   el("title").hidden = true;
   startLevel(li);
 };
+// Телефон стоя: можно играть и так
+el("portrait-ok").onclick = () => {
+  document.body.classList.add("portrait-ok");
+  try {
+    sessionStorage.setItem("yozhik-portrait", "1");
+  } catch {}
+};
+try {
+  if (sessionStorage.getItem("yozhik-portrait")) document.body.classList.add("portrait-ok");
+} catch {}
 // Свернули вкладку во время заезда — заезд останавливается, рисунок остаётся
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     if (mode === "run") stopRun();
-    if (stroke) endStroke();
+    if (stroke || drag) endPointer();
     Music.stop();
     stopVoice();
   } else if (save.music && Sound.ctx && mode !== "title") Music.start();
@@ -717,13 +917,21 @@ if (new URLSearchParams(location.search).has("debug"))
     get level() {
       return level;
     },
+    get history() {
+      return history;
+    },
+    freeEnds,
     save,
     startLevel,
     // Нарисовать эталонное решение, как будто пальцем
     solve() {
-      while (rails.length) removeRail(rails.length - 1);
-      for (const r of drawStrokes(level, level.solution)) addRail(r.pts, colorNext);
-      updateMagnets();
-      updateReady();
+      while (rails.length) deleteRail(rails.length - 1, false);
+      history = [];
+      for (const r of drawStrokes(level, level.solution)) {
+        insertRail(r, rails.length, colorNext);
+        history.push({ t: "add", rail: r });
+      }
+      persist();
+      refresh();
     },
   };

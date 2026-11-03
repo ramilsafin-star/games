@@ -11,6 +11,22 @@ export const WORLDS = [
   { id: "snow", name: "Снежные горы" },
 ];
 
+// Посылки с историями: кто ждёт, что в коробке и что появится у станции после доставки
+export const STORIES = {
+  carrot: { who: "bunny", icon: "🥕", gift: "garden" },
+  flowers: { who: "bunny", icon: "🌷", gift: "flowers" },
+  balloons: { who: "bunny", icon: "🎈", gift: "balloons" },
+  cake: { who: "bunny", icon: "🎂", gift: "cake" },
+  nuts: { who: "squirrel", icon: "🌰", gift: "nuts" },
+  lights: { who: "squirrel", icon: "🏮", gift: "lights" },
+  kite: { who: "squirrel", icon: "🪁", gift: "kite" },
+  lantern: { who: "squirrel", icon: "🔦", gift: "lantern" },
+  scarf: { who: "penguin", icon: "🧣", gift: "scarf" },
+  snowman: { who: "penguin", icon: "⛄", gift: "snowman" },
+  tree: { who: "penguin", icon: "🎄", gift: "tree" },
+  fireworks: { who: "penguin", icon: "🎆", gift: "fireworks" },
+};
+const ORDER = ["carrot", "flowers", "balloons", "cake", "nuts", "lights", "kite", "lantern", "scarf", "snowman", "tree", "fireworks"];
 const flat = (y, bumps = []) => [[-8, y], ...bumps, [32, y]];
 
 export const LEVELS = [
@@ -69,8 +85,9 @@ export const LEVELS = [
     ground: [[-8, 1.5], [6, 1.6], [9, 4], [12, 7.6], [15, 4], [18, 1.6], [32, 1.5]],
     start: [4.4, 11.6],
     finish: [20.3, 3.6],
-    rings: [[8.6, 9.0], [16.2, 5.6]],
-    solution: [[[4.4, 11.6], [8.6, 9.0], [12, 8.4], [14.5, 7.0], [16.2, 5.6], [20.3, 3.6]]],
+    // Одна прямая перелезает холм, но печати — над вершиной и в ложбине за ним
+    rings: [[11.6, 9.5], [16.8, 3.5]],
+    solution: [[[4.4, 11.6], [8, 10.2], [11.6, 9.4], [14, 7.6], [16.8, 3.4], [18.5, 3.2], [20.3, 3.6]]],
   },
   {
     name: "Мёртвая петля",
@@ -120,11 +137,11 @@ export const LEVELS = [
     water: [[7.6, 10.4, 1.3], [13.8, 16.6, 1.3]],
     nodraw: [[7.5, -5, 10.5, 20], [13.7, -5, 16.7, 20]],
     start: [4.2, 11.4],
-    finish: [18.2, 5.4],
+    finish: [17.6, 5.4],
     rings: [[9.1, 8.2], [15.4, 8.5]],
     solution: [
       [[4.2, 11.4], [5.6, 7.6], [6.6, 6.4], [7.3, 7.0]],
-      [[10.9, 9.3], [11.9, 8.4], [12.8, 8.0], [13.4, 8.3]],
+      [[10.6, 10.4], [11.4, 9.0], [12.4, 8.1], [13.4, 8.4]],
     ],
   },
   {
@@ -151,4 +168,4 @@ export const LEVELS = [
       [[9.4, 2.4], [10.6, 2.9], [11.6, 3.8], [12.3, 4.6]],
     ],
   },
-].map((l, i) => ({ id: i + 1, size: [24, 14], water: [], rocks: [], nodraw: [], boost: null, hint: null, ...l }));
+].map((l, i) => ({ id: i + 1, size: [24, 14], water: [], rocks: [], nodraw: [], boost: null, hint: null, story: ORDER[i], ...l }));
