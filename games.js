@@ -96,6 +96,6 @@ const GAMES = [
     title: "Дворовой кубок",
     url: "dvor-cup/",
     cover: "covers/dvor-cup.jpg",
-    color: "#437559",
+    color: "#ff8a3d",
   },
 ];
