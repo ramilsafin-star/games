@@ -1,14 +1,14 @@
 // 3D «Колеса огоньков»: ночной парк аттракционов, колесо обозрения с кабинками,
 // огоньки с мордочками на ободе, шарики, енотик Фоня с корзинкой, стрелка перед поворотом, салют.
 // Логика (wheel.js) задаёт угол колеса θ(t) и места огоньков; здесь всё рисуется по тем же числам.
-import * as T from "../vendor/three/three.module.min.js?v=ae8fa7d6";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=ae8fa7d6";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=ae8fa7d6";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=ae8fa7d6";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=ae8fa7d6";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=ae8fa7d6";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=ae8fa7d6";
-import { RADIUS, CONTACT, FLIGHT } from "./wheel.js?v=ae8fa7d6";
+import * as T from "../vendor/three/three.module.min.js?v=ec1eb721";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=ec1eb721";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=ec1eb721";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=ec1eb721";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=ec1eb721";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=ec1eb721";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=ec1eb721";
+import { RADIUS, CONTACT, FLIGHT } from "./wheel.js?v=ec1eb721";
 
 const pie = Math.PI;
 const D2R = pie / 180;
