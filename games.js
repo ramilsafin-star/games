@@ -98,4 +98,11 @@ const GAMES = [
     cover: "covers/dvor-cup.jpg",
     color: "#ff8a3d",
   },
+  {
+    id: "velopanda",
+    title: "Велопанда",
+    url: "velopanda/",
+    cover: "covers/velopanda.jpg",
+    color: "#ff4f6d",
+  },
 ];

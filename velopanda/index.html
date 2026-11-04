@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#5fc8ff" />
+    <title>Велопанда</title>
+    <meta name="description" content="Панда-курьер едет на заднем колесе и везёт посылки. Держи палец — колесо поднимается, отпусти — опускается." />
+    <link rel="icon" href="./icon-192.png" />
+    <link rel="apple-touch-icon" href="./icon-180.png" />
+    <link rel="stylesheet" href="./style.css?v=7ab9d98d" />
+  </head>
+  <body>
+    <canvas id="stage" aria-label="Трасса: держи палец на экране, чтобы поднять переднее колесо"></canvas>
+    <canvas id="gauge" class="gauge" width="200" height="120" aria-hidden="true"></canvas>
+    <header class="top">
+      <!-- Сюда портал вставляет кнопку «Все игры» (games-portal/build.mjs) -->
+      <nav class="home-slot"><a href="../" aria-label="Все игры">🎮</a></nav>
+      <button id="map-open" class="round" aria-label="Трассы и велосипеды"></button>
+      <div class="hud">
+        <div class="track-name" id="track-name"></div>
+        <div class="progress"><i id="bar"></i><b id="rec" class="rec" hidden></b><span id="marks"></span></div>
+      </div>
+      <div class="pill"><span id="meters">0</span> м</div>
+      <div class="pill">⭐ <span id="star-count">0</span></div>
+      <div class="tools">
+        <button id="music" class="round"></button>
+        <button id="sound" class="round"></button>
+      </div>
+    </header>
+    <div id="hold-hint" class="hold-hint" hidden><span class="finger">👆</span><b>Нажми и держи</b></div>
+    <div id="toast" class="toast" aria-live="polite"></div>
+
+    <section id="title" class="screen title">
+      <div class="logo">
+        <h1><span>Вело</span><span>панда</span></h1>
+        <p>Держи равновесие на одном колесе!</p>
+      </div>
+      <button id="play" class="big">▶ Поехали</button>
+    </section>
+
+    <section id="map" class="screen dim" hidden>
+      <div class="sheet">
+        <button id="map-close" class="round close" aria-label="Закрыть"></button>
+        <h2>Трассы</h2>
+        <div id="tracks" class="tracks"></div>
+        <h2>Велосипеды <small id="star-total"></small></h2>
+        <div id="bikes" class="bikes"></div>
+      </div>
+    </section>
+
+    <section id="result" class="screen dim" hidden>
+      <div class="card">
+        <div id="result-icon" class="result-icon"></div>
+        <h2 id="result-title"></h2>
+        <div id="stars" class="stars"><i></i><i></i><i></i></div>
+        <p id="result-text" class="result-text"></p>
+        <div class="row">
+          <button id="to-map" class="round wide" aria-label="Трассы"></button>
+          <button id="again" class="big alt">↻ Ещё раз</button>
+          <button id="next" class="big">Дальше ▶</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="nogl" class="screen nogl" hidden>
+      <p>Тут нужна 3D-графика (WebGL), а браузер её не включил. Попробуйте другой браузер.</p>
+    </div>
+    <script src="./js/audio.js?v=7ab9d98d"></script>
+    <script type="module" src="./js/game.js?v=7ab9d98d"></script>
+  </body>
+</html>
