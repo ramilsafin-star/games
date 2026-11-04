@@ -105,4 +105,11 @@ const GAMES = [
     cover: "covers/velopanda.jpg",
     color: "#ff4f6d",
   },
+  {
+    id: "bobryata",
+    title: "Гонка бобрят",
+    url: "bobryata/",
+    cover: "covers/bobryata.jpg",
+    color: "#2fa0e8",
+  },
 ];
