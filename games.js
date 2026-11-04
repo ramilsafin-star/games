@@ -119,4 +119,11 @@ const GAMES = [
     cover: "covers/skok.jpg",
     color: "#ff8f1f",
   },
+  {
+    id: "koleso",
+    title: "Колесо огоньков",
+    url: "koleso/",
+    cover: "covers/koleso.jpg",
+    color: "#8f5bff",
+  },
 ];
