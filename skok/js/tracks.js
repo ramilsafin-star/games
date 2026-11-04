@@ -1,0 +1,128 @@
+// Трассы «Заводного Скока». x — вдоль верстака, единица ≈ рост игрушки.
+// things — препятствия по x левого края: гайка (nut), винтик (bolt), кнопки (tacks, n штук в ряд),
+// кубик (block — на него можно запрыгнуть, сбоку врезаться нельзя).
+// gears — шестерёнки [x, y]: низкие на верстаке берутся без риска, высокие — только точным прыжком.
+// checks — флажки, к которым игрушка возвращается после столкновения.
+
+const nut = (x) => ({ kind: "nut", x });
+const bolt = (x) => ({ kind: "bolt", x });
+const tacks = (x, n = 2) => ({ kind: "tacks", x, n });
+const block = (x, w, h, color) => ({ kind: "block", x, w, h, color });
+// Шестерёнки: на верстаке, ряд на верстаке, высоко над препятствием (в верхушке дуги)
+const low = (x, base = 0) => [x, base + 0.42];
+const row = (x, n, gap = 0.9, base = 0) => Array.from({ length: n }, (_, k) => low(x + k * gap, base));
+const high = (x, base = 0) => [x, base + 1.95];
+
+export const TRACKS = [
+  {
+    id: "bench",
+    name: "Верстак",
+    theme: "bench",
+    toy: "🚂",
+    toyName: "паровозик",
+    speed: 6,
+    training: true, // зелёные полоски «прыгай здесь» на верстаке
+    start: 0,
+    end: 140,
+    things: [nut(12), nut(25), nut(38), tacks(52), nut(65), tacks(78), nut(91), nut(104), tacks(117, 3), nut(130)],
+    checks: [29.4, 56.5, 82.5, 109],
+    gears: [...row(5, 3), high(12.5), ...row(18, 3), high(25.5), ...row(31, 2), high(38.5), ...row(45, 3), high(52.6), ...row(58, 3), ...row(71, 3), high(78.6), ...row(84, 3), high(91.5), ...row(97, 2), high(104.5), ...row(110, 3), ...row(123, 3), high(130.5), ...row(134, 3)],
+  },
+  {
+    id: "blocks",
+    name: "Кубики",
+    theme: "blocks",
+    toy: "🪀",
+    toyName: "йо-йо",
+    speed: 6,
+    start: 0,
+    end: 170,
+    things: [
+      nut(12),
+      block(22, 6, 0.8, "#ff6f8f"),
+      nut(36),
+      block(46, 7, 0.8, "#3fb4ff"),
+      nut(49.6),
+      tacks(62),
+      block(72, 5, 0.8, "#ffc533"),
+      block(77, 5, 1.4, "#3fdc7a"),
+      nut(90),
+      bolt(103),
+      block(113, 8, 0.8, "#b47cff"),
+      bolt(117.2),
+      tacks(130, 3),
+      nut(143),
+      block(152, 6, 0.8, "#ff8f3f"),
+    ],
+    checks: [26.2, 53.8, 80.8, 94.4, 121.7, 154.5],
+    gears: [...row(5, 3), high(12.5), ...row(23, 5, 1, 0.8), ...row(30, 2), high(36.5), ...row(40, 3), ...row(52.2, 1, 1, 0.8), high(62.6), ...row(66, 3), ...row(73, 3, 1, 0.8), ...row(78.5, 3, 1, 1.4), high(90.5), ...row(95, 3), high(103.3), ...row(119.6, 2, 1, 0.8), high(131), ...row(136, 3), high(143.5), ...row(153, 4, 1, 0.8), ...row(162, 4)],
+  },
+  {
+    id: "sewing",
+    name: "Швейный столик",
+    theme: "sewing",
+    toy: "🪁",
+    toyName: "воздушный змей",
+    speed: 6.5,
+    start: 0,
+    end: 200,
+    things: [
+      bolt(12),
+      nut(24),
+      nut(31),
+      tacks(44, 3),
+      block(56, 5, 0.9, "#ff6f8f"),
+      bolt(66),
+      tacks(77, 4),
+      block(88, 4, 0.8, "#ffc533"),
+      block(92, 4, 1.4, "#3fb4ff"),
+      block(96, 4, 0.8, "#ffc533"),
+      nut(108),
+      bolt(115),
+      tacks(128, 2),
+      nut(135),
+      block(146, 9, 0.9, "#3fdc7a"),
+      nut(150),
+      tacks(164, 3),
+      bolt(176),
+      nut(186),
+    ],
+    checks: [35.5, 69.6, 97.2, 119.1, 155],
+    gears: [...row(4, 3), high(12.3), ...row(17, 3), high(24.5), high(31.5), ...row(36, 3), high(44.9), ...row(57, 4, 1, 0.9), high(66.3), ...row(70, 2), high(78.2), ...row(89, 2, 1, 0.8), ...row(93, 3, 1, 1.4), high(108.5), high(115.3), ...row(120, 3), high(128.6), high(135.5), ...row(153, 2, 1, 0.9), high(165), ...row(169, 3), high(176.3), ...row(180, 3), high(186.5), ...row(191, 4)],
+  },
+  {
+    id: "workshop",
+    name: "Большая мастерская",
+    theme: "workshop",
+    toy: "🤖",
+    toyName: "робот",
+    speed: 7,
+    start: 0,
+    end: 260,
+    things: [
+      nut(14),
+      tacks(28, 2),
+      bolt(40),
+      block(52, 6, 0.8, "#ff6f8f"),
+      nut(55.6),
+      block(66, 5, 1.3, "#3fb4ff"),
+      tacks(80, 3),
+      nut(94),
+      nut(102),
+      bolt(115),
+      block(126, 4, 0.8, "#ffc533"),
+      block(130, 4, 1.5, "#3fdc7a"),
+      tacks(146, 4),
+      bolt(160),
+      nut(168),
+      block(180, 10, 0.9, "#b47cff"),
+      tacks(184, 2),
+      nut(201),
+      tacks(214, 3),
+      bolt(228),
+      nut(240),
+    ],
+    checks: [18.4, 69.5, 105.9, 135.6, 151, 190, 218.6],
+    gears: [...row(5, 4), high(14.5), ...row(20, 3), high(28.6), high(40.3), ...row(45, 2), ...row(53, 1, 1, 0.8), high(56.1, 0.8), ...row(67, 4, 1, 1.3), high(81), ...row(86, 3), high(94.5), high(102.5), ...row(107, 3), high(115.3), ...row(127, 2, 1, 0.8), ...row(131, 3, 1, 1.5), high(147.2), ...row(152, 3), high(160.3), high(168.5), ...row(174, 3), ...row(181, 2, 1, 0.9), high(184.6, 0.9), ...row(188, 2, 1, 0.9), high(201.5), ...row(206, 3), high(214.9), ...row(220, 3), high(228.3), ...row(233, 3), high(240.5), ...row(246, 5)],
+  },
+];

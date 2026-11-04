@@ -112,4 +112,11 @@ const GAMES = [
     cover: "covers/bobryata.jpg",
     color: "#2fa0e8",
   },
+  {
+    id: "skok",
+    title: "Заводной Скок",
+    url: "skok/",
+    cover: "covers/skok.jpg",
+    color: "#ff8f1f",
+  },
 ];
