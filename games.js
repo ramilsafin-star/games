@@ -126,4 +126,11 @@ const GAMES = [
     cover: "covers/koleso.jpg",
     color: "#8f5bff",
   },
+  {
+    id: "klubok",
+    title: "Волшебный клубочек",
+    url: "klubok/",
+    cover: "covers/klubok.jpg",
+    color: "#ff4f8a",
+  },
 ];
