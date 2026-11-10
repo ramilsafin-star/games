@@ -1,13 +1,13 @@
 // 3D «Почты Дракоши»: уютная волшебная почта. На столе — подставка с плитками-буквами, картинка-подсказка
 // в рамке, лист с четырьмя марками, дракончик Дракоша; сзади — почтовый ящик, полки с посылками, окно в закат.
-import * as T from "../vendor/three/three.module.min.js?v=19e66c1e";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=19e66c1e";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=19e66c1e";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=19e66c1e";
-import { polish } from "./gfx.js?v=19e66c1e";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=19e66c1e";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=19e66c1e";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=19e66c1e";
+import * as T from "../vendor/three/three.module.min.js?v=0bbe0307";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=0bbe0307";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=0bbe0307";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=0bbe0307";
+import { polish } from "./gfx.js?v=0bbe0307";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=0bbe0307";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=0bbe0307";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=0bbe0307";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;
@@ -155,6 +155,7 @@ function dragon() {
     ear.position.set(s * 0.34, 0.16, -0.05);
     ear.rotation.z = -s * 1.1;
     head.add(ear);
+    (head.userData.ears ||= []).push(ear);
     // Крылышки
     const wingShape = new T.Shape();
     wingShape.moveTo(0, 0);
@@ -196,7 +197,7 @@ function dragon() {
   strap.rotation.set(0.2, 0.3, 2.2);
   body.add(strap);
   g.traverse((o) => o.isMesh && (o.castShadow = true));
-  return { group: g, body, head, eyes, wings: body.children.filter((o) => o.userData.s) };
+  return { group: g, body, head, eyes, tail, ears: head.userData.ears, wings: body.children.filter((o) => o.userData.s) };
 }
 
 export class World {
@@ -611,6 +612,8 @@ export class World {
       const t = this.tileAt(i);
       if (!t || t.open) return;
       t.open = true;
+      this.lookAtX = t.mesh.getWorldPosition(new T.Vector3()).x;
+      this.lookT = this.time;
       if (kind !== "shown") t.front.map = tileFace(t.ch, kind);
       setTimeout(() => {
         const y = t.mesh.position.y;
@@ -744,6 +747,53 @@ export class World {
     D.head.rotation.x = m.sad * 0.35 + Math.sin(t * 1.4) * 0.04 * calm;
     D.head.rotation.z = Math.sin(t * 0.9) * 0.08 * calm - m.sad * 0.2;
     for (const w of D.wings) w.rotation.z = w.userData.s * (0.2 + Math.sin(t * (m.happy > 0.1 ? 22 : 3)) * (0.15 + m.happy * 0.5));
+    // Хвост виляет (от радости — быстро), ушки подрагивают, голова поворачивается к открытой букве
+    D.tail.rotation.y = Math.sin(t * (m.happy > 0.1 ? 14 : 2.2)) * (0.12 + m.happy * 0.3) * calm;
+    D.ears.forEach((e, i) => {
+      const k = (t * 0.6 + i * 0.45) % 2.9;
+      e.rotation.x = k < 0.25 ? Math.sin((k / 0.25) * pie * 2) * 0.3 * calm : 0;
+    });
+    const looking = clamp(1 - (t - (this.lookT ?? -9)) / 1.4, 0, 1);
+    const yaw = looking > 0 ? clamp((this.lookAtX - D.group.position.x) * 0.18, -0.6, 0.6) * Math.min(1, looking * 3) : 0;
+    this.headYaw = (this.headYaw || 0) + (yaw - (this.headYaw || 0)) * Math.min(1, dt * 7);
+    D.head.rotation.y = this.headYaw * calm;
+    // Раз в несколько секунд из носа вылетает колечко дыма
+    this.smokeNext ??= t + 3;
+    if (calm === 1 && t > this.smokeNext && !(this.flaming > 0)) {
+      this.smokeNext = t + 4 + Math.random() * 4;
+      const nose = D.head.localToWorld(new T.Vector3(0, 0.02, 0.55));
+      for (let k = 0; k < 5; k++) {
+        const sp = this.pool[this.next];
+        this.sparks.setColorAt(this.next, new T.Color(k % 2 ? "#ffffff" : "#d9d4e6"));
+        this.next = (this.next + 1) % this.pool.length;
+        sp.p.copy(nose);
+        sp.v.set((Math.random() - 0.5) * 0.25, 0.25 + Math.random() * 0.2, 0.35 + Math.random() * 0.2);
+        sp.max = sp.life = 0.9 + Math.random() * 0.4;
+        sp.s = 1.1;
+        sp.g = -0.6;
+      }
+      this.sparks.instanceColor.needsUpdate = true;
+    }
+    // Пылинки в закатном свете из окна
+    if (!this.motes) {
+      const n = 40,
+        pos = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) pos.set([(Math.random() - 0.5) * 12, 0.5 + Math.random() * 5, -4 + Math.random() * 6], i * 3);
+      const geo = new T.BufferGeometry();
+      geo.setAttribute("position", new T.BufferAttribute(pos, 3));
+      this.motes = new T.Points(geo, new T.PointsMaterial({ color: "#ffd9a0", size: 0.06, transparent: true, opacity: 0.5, depthWrite: false, blending: T.AdditiveBlending }));
+      this.motes.userData.base = pos.slice();
+      this.scene.add(this.motes);
+    }
+    {
+      const mp = this.motes.geometry.attributes.position,
+        base = this.motes.userData.base;
+      for (let i = 0; i < mp.count; i++) {
+        mp.setX(i, base[i * 3] + Math.sin(t * 0.2 + i) * 0.4 * calm);
+        mp.setY(i, 0.5 + ((base[i * 3 + 1] + t * (0.04 + (i % 5) * 0.012) * calm) % 5));
+      }
+      mp.needsUpdate = true;
+    }
     const blink = (t % 3.7) > 3.58;
     for (const e of D.eyes) e.scale.y = blink ? 0.15 : 1;
     if (this.flaming > 0) {
