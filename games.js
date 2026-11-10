@@ -133,4 +133,11 @@ const GAMES = [
     cover: "covers/klubok.jpg",
     color: "#ff4f8a",
   },
+  {
+    id: "planetka",
+    title: "Планетка",
+    url: "planetka/",
+    cover: "covers/planetka.jpg",
+    color: "#4a54d6",
+  },
 ];
