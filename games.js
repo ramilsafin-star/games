@@ -154,4 +154,11 @@ const GAMES = [
     cover: "covers/strazh.jpg",
     color: "#2f8fff",
   },
+  {
+    id: "reef-patrol",
+    title: "Патруль рифа",
+    url: "reef-patrol/",
+    cover: "covers/reef-patrol.jpg",
+    color: "#37ac98",
+  },
 ];
