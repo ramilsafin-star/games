@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#8fd3ff" />
+    <title>Радужная пушка</title>
+    <meta name="description" content="Добрый шутер для малышей: стреляй краской по хмурым серым тучкам — они становятся цветными и весёлыми, а в небе загорается радуга." />
+    <link rel="icon" href="./icon-192.png" />
+    <link rel="apple-touch-icon" href="./icon-180.png" />
+    <link rel="stylesheet" href="./style.css?v=c8f098b5" />
+  </head>
+  <body>
+    <canvas id="stage" aria-label="Радужная пушка: касайся хмурых тучек, чтобы раскрасить их"></canvas>
+    <header class="top">
+      <!-- Сюда портал вставляет кнопку «Все игры» (games-portal/build.mjs) -->
+      <nav class="home-slot"><a href="../" aria-label="Все игры">🎮</a></nav>
+      <div class="pill" aria-label="Сколько радуг собрано">🌈 <b id="stars-n">0</b></div>
+      <div id="power" class="pill" hidden aria-label="Тройной выстрел">⭐×3</div>
+      <span class="grow"></span>
+      <button id="sound" class="round" aria-label="Звук">🔊</button>
+    </header>
+    <div id="hand" aria-hidden="true">👆</div>
+    <script type="module" src="./js/game.js?v=c8f098b5"></script>
+    <script src="./js/juice.js?v=c8f098b5"></script>
+  </body>
+</html>

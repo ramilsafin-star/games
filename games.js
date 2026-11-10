@@ -140,4 +140,11 @@ const GAMES = [
     cover: "covers/planetka.jpg",
     color: "#4a54d6",
   },
+  {
+    id: "raduga",
+    title: "Радужная пушка",
+    url: "raduga/",
+    cover: "covers/raduga.jpg",
+    color: "#ff6f9c",
+  },
 ];
