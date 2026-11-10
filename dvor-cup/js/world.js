@@ -1,14 +1,14 @@
 // 3D «Дворового кубка»: двор с полем, ворота с сеткой, забор, домики, зрители-зверята, гирлянда флажков,
 // футболисты с большими головами, мяч, следы и искры. Игра идёт в плоскости z = 0, вид сбоку.
-import * as T from "../vendor/three/three.module.min.js?v=aa442635";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=aa442635";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=aa442635";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=aa442635";
-import { polish } from "./gfx.js?v=aa442635";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=aa442635";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=aa442635";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=aa442635";
-import { FIELD, BALL_R } from "./match.js?v=aa442635";
+import * as T from "../vendor/three/three.module.min.js?v=535f2d7e";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=535f2d7e";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=535f2d7e";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=535f2d7e";
+import { polish } from "./gfx.js?v=535f2d7e";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=535f2d7e";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=535f2d7e";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=535f2d7e";
+import { FIELD, BALL_R } from "./match.js?v=535f2d7e";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;
@@ -727,6 +727,10 @@ export class World {
       // Сбит звёздным мячом: кружится голова, звёздочки
       v.stunned = Math.max(0, v.stunned - dt);
       v.head.rotation.x = v.stunned > 0 ? Math.sin(t * 20) * 0.25 : 0;
+      // Следит за мячом: задирает голову, когда мяч летит высоко
+      const up = v.stunned > 0 ? 0 : clamp((m.ball.y - 1.6) * 0.11, -0.12, 0.45) * calm;
+      v.lookUp = (v.lookUp || 0) + (up - (v.lookUp || 0)) * Math.min(1, dt * 8);
+      v.head.rotation.z = v.lookUp;
       // Радость после гола: прыгает, машет руками
       v.celebrate = Math.max(0, v.celebrate - dt);
       if (v.celebrate > 0) {
@@ -744,6 +748,16 @@ export class World {
       v.shadow.scale.setScalar(Math.max(0.4, 1 - p.y * 0.2));
     });
     const b = m.ball;
+    // Мяч сплющивается при отскоке от земли, от сильного удара — облачко пыли
+    if (this.ballVy < -1 && b.vy > 0 && b.y < 1) {
+      this.ballSquash = clamp(-this.ballVy / 14, 0.15, 0.45);
+      if (this.ballVy < -7) this.dust(b.x);
+    }
+    this.ballVy = b.vy;
+    this.ballSquash = (this.ballSquash || 0) * Math.pow(0.0005, dt);
+    const sq = this.ballSquash * calm;
+    this.ballMesh.scale.set(1 + sq * 0.5, 1 - sq, 1 + sq * 0.5);
+    this.ballX = b.x;
     this.ballMesh.position.set(b.x, b.y, 0);
     this.ballMesh.rotation.z -= b.spin * dt * 0.5;
     this.ballShadow.position.set(b.x, 0.016, 0);
@@ -793,6 +807,10 @@ export class World {
       f.cheer = Math.max(0, (f.cheer || 0) - dt);
       const jump = f.cheer > 0 ? Math.abs(Math.sin(t * 10 + f.ph)) * 0.8 : Math.abs(Math.sin(t * 1.5 + f.ph)) * 0.08 * calm;
       f.group.position.y = f.base + jump;
+      // Болельщики поворачиваются вслед за мячом
+      f.yaw0 ??= f.group.rotation.y;
+      const want = f.yaw0 + clamp(((this.ballX || 0) - f.group.position.x) * 0.06, -0.6, 0.6) * calm;
+      f.group.rotation.y += (want - f.group.rotation.y) * Math.min(1, dt * 5);
       f.arms[0].rotation.x = f.cheer > 0 ? 2.6 : -0.5;
       f.arms[1].rotation.x = f.cheer > 0 ? -2.6 : 0.5;
     }
