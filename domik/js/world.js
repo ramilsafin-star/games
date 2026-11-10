@@ -1,6 +1,6 @@
 // Мир игры: небо, поляна, большое дерево, свет и камера. Домик строится в house.js.
-import * as T from "../vendor/three/three.module.min.js?v=88d2ca30";
-import "./gfx.js?v=88d2ca30";
+import * as T from "../vendor/three/three.module.min.js?v=e6637b83";
+import "./gfx.js?v=e6637b83";
 
 export const mats = new Map();
 export function mat(color, rough = 0.8, metal = 0) {
@@ -628,8 +628,10 @@ export class World {
     // Ветер качает крону
     const crown = this.tree?.userData.crown;
     if (crown) {
-      crown.rotation.z = Math.sin(t * 0.8) * 0.006;
-      crown.rotation.x = Math.sin(t * 0.6 + 1) * 0.005;
+      // Порывы ветра: крона то почти замирает, то заметно качается
+      const gust = 1 + 1.4 * Math.max(0, Math.sin(t * 0.23));
+      crown.rotation.z = Math.sin(t * 0.8) * 0.006 * gust;
+      crown.rotation.x = Math.sin(t * 0.6 + 1) * 0.005 * gust;
     }
     // Искры
     this.bits = this.bits.filter((b) => (b.life -= dt) > 0);

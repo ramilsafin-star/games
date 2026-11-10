@@ -1,8 +1,8 @@
 // Обустройство внутри: домик раскрывается, как кукольный, а в комнату можно ставить вещи и двигать их пальцем.
-import * as T from "../vendor/three/three.module.min.js?v=88d2ca30";
-import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js?v=88d2ca30";
-import { mat, easeBack, easeOut } from "./world.js?v=88d2ca30";
-import { part, plank, ball, shapeOf, DECK_Y, HOUSE_W, HOUSE_FRONT, HOUSE_BACK, WALL_H } from "./house.js?v=88d2ca30";
+import * as T from "../vendor/three/three.module.min.js?v=e6637b83";
+import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js?v=e6637b83";
+import { mat, easeBack, easeOut } from "./world.js?v=e6637b83";
+import { part, plank, ball, shapeOf, DECK_Y, HOUSE_W, HOUSE_FRONT, HOUSE_BACK, WALL_H } from "./house.js?v=e6637b83";
 
 const FLOOR = DECK_Y + 0.13,
   IN_W = HOUSE_W / 2 - 0.13,

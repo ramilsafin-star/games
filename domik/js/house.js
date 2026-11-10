@@ -1,8 +1,8 @@
 // Домик на дереве: каждая часть появляется по мере того, как её строит ребёнок.
-import * as T from "../vendor/three/three.module.min.js?v=88d2ca30";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=88d2ca30";
-import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js?v=88d2ca30";
-import { mat, easeBack, easeOut, TRUNK_Z } from "./world.js?v=88d2ca30";
+import * as T from "../vendor/three/three.module.min.js?v=e6637b83";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=e6637b83";
+import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js?v=e6637b83";
+import { mat, easeBack, easeOut, TRUNK_Z } from "./world.js?v=e6637b83";
 
 export const DECK_Y = 5.6;
 export const WALL_H = 3.1,
@@ -910,12 +910,31 @@ export class TreeHouse {
         this.hop[who] = Math.max(0, this.hop[who] - dt * 1.1);
         o.userData.lift = Math.abs(Math.sin(time * 9)) * this.hop[who] * 0.9;
       } else o.userData.lift = 0;
+      // Живут сами по себе: дышат, покачиваются и время от времени сами подпрыгивают
+      const u = o.userData,
+        size = u.size || 1.4,
+        ph = who === "rabbit" ? 2 : 0;
+      u.nextHop ??= time + 4 + Math.random() * 5;
+      if (o.visible && time > u.nextHop) {
+        if (this.hop[who] <= 0) this.hop[who] = 0.45;
+        u.nextHop = time + 5 + Math.random() * 7;
+      }
+      const breath = Math.sin(time * 2.2 + ph) * 0.02;
+      o.scale.x = o.scale.z = size * (1 + breath);
+      o.rotation.z = Math.sin(time * 1.1 + ph) * 0.045;
       const lift = o.userData.lift;
-      o.scale.y = (o.userData.size || 1.4) * (1 + lift * 0.1);
+      o.scale.y = size * (1 - breath) * (1 + lift * 0.1);
       o.position.y += lift - (o.userData.lastLift || 0);
       o.userData.lastLift = lift;
     }
     this.tail.rotation.x = Math.sin(time * 3.2) * 0.14;
+    // Ушки зайчика: то одно, то другое дёргается
+    this.rabbitEars ??= this.rabbit.children.filter((c) => c.scale.y === 3);
+    this.rabbitEars.forEach((e, i) => {
+      const side = i < 2 ? -1 : 1,
+        k = (time * 0.6 + (side > 0 ? 1.1 : 0)) % 3.2;
+      e.rotation.z = (k < 0.3 ? Math.sin((k / 0.3) * Math.PI * 2) * 0.1 : 0) + Math.sin(time * 1.4) * 0.02;
+    });
     if (this.bucket) {
       const y = 3 + Math.sin(time * 0.5) * 2.6;
       this.bucket.position.y = y;
@@ -929,8 +948,12 @@ export class TreeHouse {
         this.bird.children.slice(-2).forEach((w, i) => (w.rotation.z = Math.sin(time * 26) * (i ? 1 : -1)));
       } else if (this.birdSpot) {
         const p = this.birdSpot.position;
-        this.bird.position.set(p.x, p.y - 0.15, p.z + 0.72);
-        this.bird.rotation.y = 0.2;
+        // На жёрдочке: вертит головой по сторонам, иногда подпрыгивает и встряхивает крыльями
+        const k = (time * 0.5) % 4,
+          hopUp = k < 0.35 ? Math.abs(Math.sin((k / 0.35) * Math.PI * 2)) * 0.12 : 0;
+        this.bird.position.set(p.x, p.y - 0.15 + hopUp, p.z + 0.72);
+        this.bird.rotation.y = 0.2 + Math.sign(Math.sin(time * 0.9)) * 0.35 * Math.min(1, Math.abs(Math.sin(time * 0.9)) * 4);
+        this.bird.children.slice(-2).forEach((w, i) => (w.rotation.z = hopUp > 0 ? Math.sin(time * 30) * 0.6 * (i ? 1 : -1) : 0));
       }
     }
   }
