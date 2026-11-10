@@ -2,11 +2,12 @@
 // Ведёшь пальцем — прицел поворачивается и лазеры стреляют (с перегревом), кнопка ракет — залп
 // самонаводящихся. Дроны идут волнами: разведчики, бомбардировщики-тараны, канонерки, на каждой
 // пятой волне — флагман. Щит восстанавливается, корпус — нет. Между волнами — выбор улучшения.
-import * as T from "../vendor/three/three.module.min.js?v=9ef72205";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=9ef72205";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=9ef72205";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=9ef72205";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=9ef72205";
+import * as T from "../vendor/three/three.module.min.js?v=9b5e14d1";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=9b5e14d1";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=9b5e14d1";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=9b5e14d1";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=9b5e14d1";
+import { addSpace } from "./space.js?v=9b5e14d1";
 
 const TAU = Math.PI * 2;
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -32,7 +33,8 @@ function writeStorage(key, value) {
   }
 }
 
-const RANGE = 130; // дальность лазера: дальше лучи гаснут, врагов приходится подпускать
+const RANGE = 185;
+const LASER_SPEED = 360;
 
 // ---------- Звук: всё синтезируется ----------
 const Sound = (() => {
@@ -118,19 +120,21 @@ const scene = new T.Scene();
 scene.background = new T.Color("#03040b");
 const camera = new T.PerspectiveCamera(62, 1, 0.1, 3000);
 scene.add(camera);
-scene.add(new T.HemisphereLight(0x9fc8ff, 0x1a1030, 0.9));
+scene.add(new T.HemisphereLight(0xc3dcff, 0x4d315f, 1.55));
 const sun = new T.DirectionalLight(0xfff0dd, 2.6);
-sun.position.set(-300, 220, -400);
-scene.add(sun);
+sun.position.set(-300, 220, 90);
+const rim = new T.DirectionalLight(0x609eff, 2.1);
+rim.position.set(80, 30, -150);
+scene.add(sun, rim);
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new T.Vector2(256, 256), 0.55, 0.35, 1.0);
+const bloom = new UnrealBloomPass(new T.Vector2(256, 256), 0.63, 0.42, 1.0);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 const perf = { glow: true, slow: 0, seen: 0 };
 
-const metal = (color, extra = {}) => new T.MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.6, flatShading: true, ...extra });
+const metal = (color, extra = {}) => new T.MeshStandardMaterial({ color, roughness: 0.46, metalness: 0.36, flatShading: true, ...extra });
 const lit = (hex, k = 3) => new T.MeshBasicMaterial({ color: hot(hex, k), toneMapped: false });
 const GEO = {
   ball: new T.SphereGeometry(1, 14, 10),
@@ -140,6 +144,7 @@ const GEO = {
   cone: new T.ConeGeometry(1, 1, 6),
   cyl: new T.CylinderGeometry(1, 1, 1, 10),
   ring: new T.TorusGeometry(1, 0.12, 6, 28),
+  wave: new T.TorusGeometry(1, 0.025, 5, 32),
 };
 const part = (geo, material, sx, sy, sz) => {
   const m = new T.Mesh(geo, material);
@@ -148,72 +153,60 @@ const part = (geo, material, sx, sy, sz) => {
 };
 const at = (m, x, y, z) => (m.position.set(x, y, z), m);
 
-// Космос: звёзды, планета под станцией, солнце, платформа турели
-{
-  const n = 1600,
-    pos = new Float32Array(n * 3),
-    col = new Float32Array(n * 3);
-  for (let i = 0; i < n; i++) {
-    const v = V(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize().multiplyScalar(1500);
-    pos.set([v.x, v.y, v.z], i * 3);
-    const c = new T.Color().setHSL(rand(0.5, 0.7), 0.5, rand(0.6, 1));
-    col.set([c.r, c.g, c.b], i * 3);
-  }
-  const g = new T.BufferGeometry();
-  g.setAttribute("position", new T.BufferAttribute(pos, 3));
-  g.setAttribute("color", new T.BufferAttribute(col, 3));
-  scene.add(new T.Points(g, new T.PointsMaterial({ size: 1.8, sizeAttenuation: false, vertexColors: true })));
-  // планета: океаны и материки пятнами по вершинам
-  const pg = new T.IcosahedronGeometry(900, 24),
-    pp = pg.attributes.position,
-    pc = new Float32Array(pp.count * 3),
-    a = V(),
-    c = new T.Color();
-  for (let i = 0; i < pp.count; i++) {
-    a.fromBufferAttribute(pp, i).normalize();
-    const land = Math.sin(a.x * 5 + 1) * Math.sin(a.y * 6 + 2) * Math.sin(a.z * 5 + 3) + Math.sin(a.x * 13 + a.z * 9) * 0.25;
-    c.set(land > 0.22 ? "#3f9a5a" : land > 0.12 ? "#c9b77a" : "#1f5fbf").offsetHSL(0, 0, rand(-0.03, 0.03));
-    if (Math.sin(a.x * 9 + a.y * 14) * Math.sin(a.z * 11) > 0.55) c.lerp(new T.Color("#ffffff"), 0.7); // облака
-    pc.set([c.r, c.g, c.b], i * 3);
-  }
-  pg.setAttribute("color", new T.BufferAttribute(pc, 3));
-  const planet = new T.Mesh(pg, new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }));
-  planet.position.set(120, -965, -520);
-  scene.add(planet);
-  scene.userData.planet = planet;
-  const halo = part(GEO.ball, new T.MeshBasicMaterial({ color: "#3f8fff", transparent: true, opacity: 0.13, side: T.BackSide }), 935);
-  halo.position.copy(planet.position);
-  scene.add(halo);
-  const sunBall = at(part(GEO.ball, lit("#fff2c8", 2.2), 22), -700, 520, -950);
-  scene.add(sunBall);
-  // платформа станции под турелью
-  const deck = new T.Group();
-  deck.add(at(part(GEO.cyl, metal("#3a4658"), 9, 0.8, 9), 0, -4.4, 0));
-  deck.add(at(part(GEO.ring, lit("#2fb8ff", 2), 8.4, 8.4, 3), 0, -3.95, 0));
-  deck.children[1].rotation.x = Math.PI / 2;
-  for (let i = 0; i < 8; i++) {
-    const a2 = (i / 8) * TAU;
-    deck.add(at(part(GEO.box, metal("#2a3344"), 0.7, 0.5, 14), Math.cos(a2) * 15, -4.6, Math.sin(a2) * 15));
-    deck.children[deck.children.length - 1].rotation.y = -a2 + Math.PI / 2;
-  }
-  scene.add(deck);
+const planet = addSpace(scene);
+
+const deck = new T.Group();
+deck.add(at(part(GEO.cyl, metal("#26364d"), 9, 0.8, 9), 0, -4.4, 0));
+const track = at(part(GEO.wave, lit("#47c5ff", 2.1), 8.4, 8.4, 3), 0, -3.95, 0);
+track.rotation.x = Math.PI / 2;
+deck.add(track);
+for (let i = 0; i < 12; i++) {
+  const angle = i / 12 * TAU;
+  const panel = at(part(GEO.box, metal("#324967"), 0.82, 0.5, 3.8), Math.cos(angle) * 8.4, -4.25, Math.sin(angle) * 8.4);
+  panel.rotation.y = -angle + Math.PI / 2;
+  deck.add(panel);
+}
+scene.add(deck);
+
+const glowCanvas = document.createElement("canvas");
+glowCanvas.width = glowCanvas.height = 64;
+const glowContext = glowCanvas.getContext("2d");
+const radial = glowContext.createRadialGradient(32, 32, 1, 32, 32, 32);
+radial.addColorStop(0, "rgba(255,255,255,1)");
+radial.addColorStop(0.27, "rgba(255,255,255,.56)");
+radial.addColorStop(0.62, "rgba(255,255,255,.12)");
+radial.addColorStop(1, "rgba(255,255,255,0)");
+glowContext.fillStyle = radial;
+glowContext.fillRect(0, 0, 64, 64);
+const glowTexture = new T.CanvasTexture(glowCanvas);
+function flare(color, width, height = width) {
+  const sprite = new T.Sprite(new T.SpriteMaterial({
+    color,
+    map: glowTexture,
+    blending: T.AdditiveBlending,
+    depthWrite: false,
+    toneMapped: false,
+  }));
+  sprite.scale.set(width, height, 1);
+  return sprite;
 }
 
-// Турель: две пушки, закреплены на камере
+// Две пушки закреплены на камере, а снаряды летят в координатах мира.
 const guns = new T.Group();
-const barrels = [-1, 1].map((s) => {
-  const b = new T.Group();
-  b.add(at(part(GEO.cyl, metal("#6a7a92"), 0.07, 1.7, 0.07), 0, 0, -0.85));
-  b.children[0].rotation.x = Math.PI / 2;
-  b.add(at(part(GEO.cyl, metal("#3a4658"), 0.11, 0.5, 0.11), 0, 0, -0.5));
-  b.children[1].rotation.x = Math.PI / 2;
-  const tip = at(part(GEO.cyl, new T.MeshBasicMaterial({ color: hot("#2fd0ff", 2), toneMapped: false }), 0.085, 0.16, 0.085), 0, 0, -1.72);
-  tip.rotation.x = Math.PI / 2;
-  b.add(tip);
-  b.position.set(s * 0.62, -0.46, -1.2);
-  b.userData.tip = tip;
-  guns.add(b);
-  return b;
+const barrels = [-1, 1].map((side) => {
+  const barrel = new T.Group();
+  const casing = at(part(GEO.cyl, metal("#203753"), 0.21, 1.02, 0.21), 0, 0, -0.49);
+  const tube = at(part(GEO.cyl, metal("#7897b9"), 0.118, 1.4, 0.118), 0, 0, -1.05);
+  const tip = at(part(GEO.cyl, lit("#7ce6ff", 2.0), 0.146, 0.22, 0.146), 0, 0, -1.76);
+  for (const cylinder of [casing, tube, tip]) cylinder.rotation.x = Math.PI / 2;
+  const rail = at(part(GEO.box, lit("#2794fd", 1.5), 0.055, 0.045, 0.88), -side * 0.115, 0.14, -0.61);
+  const muzzle = at(flare("#8de5ff", 0.84), 0, 0, -1.85);
+  muzzle.visible = false;
+  barrel.add(casing, tube, tip, rail, muzzle);
+  barrel.position.set(side * 0.62, -0.46, -1.2);
+  barrel.userData = { tip, muzzle, kick: 0 };
+  guns.add(barrel);
+  return barrel;
 });
 camera.add(guns);
 
@@ -235,7 +228,15 @@ const hide = (mesh, i) => {
 const LASERS = 60,
   BOLTS = 70,
   SPARKS = 420;
-const laserMesh = pool(new T.BoxGeometry(0.12, 0.12, 5), new T.MeshBasicMaterial({ color: hot("#3fe0ff", 4), toneMapped: false }), LASERS);
+const laserMesh = pool(new T.BoxGeometry(0.115, 0.115, 5.8), lit("#bcf7ff", 2.5), LASERS);
+const laserGlow = pool(new T.BoxGeometry(0.36, 0.36, 7), new T.MeshBasicMaterial({
+  color: hot("#27a8ff", 2.0),
+  transparent: true,
+  opacity: 0.38,
+  blending: T.AdditiveBlending,
+  depthWrite: false,
+  toneMapped: false,
+}), LASERS);
 const boltMesh = pool(GEO.ball, new T.MeshBasicMaterial({ color: hot("#ff3f5f", 4), toneMapped: false }), BOLTS);
 const sparkMesh = pool(GEO.low, new T.MeshBasicMaterial({ toneMapped: false }), SPARKS);
 const lasers = Array.from({ length: LASERS }, () => ({ p: V(), d: V(), life: 0 }));
@@ -257,97 +258,130 @@ function burst(p, hexes, count, speed, size) {
   sparkMesh.instanceColor.needsUpdate = true;
 }
 const flashes = [];
-function flash(p, size, hex = "#ffd9a0") {
-  const m = part(GEO.ball, new T.MeshBasicMaterial({ color: hot(hex, 4), toneMapped: false, transparent: true }), 0.1);
-  m.position.copy(p);
-  const ring = part(GEO.ring, new T.MeshBasicMaterial({ color: hot(hex, 2), toneMapped: false, transparent: true }), 0.1);
-  ring.position.copy(p);
+function flash(position, size, color) {
+  const core = flare("#fff1bc", size * 2.0);
+  const ring = part(GEO.wave, new T.MeshBasicMaterial({
+    color: hot(color, 1.7),
+    toneMapped: false,
+    transparent: true,
+    depthWrite: false,
+    blending: T.AdditiveBlending,
+  }), 0.1);
+  core.position.copy(position);
+  ring.position.copy(position);
   ring.lookAt(camera.position);
-  scene.add(m, ring);
-  flashes.push({ m, ring, t: 0, size });
+  scene.add(core, ring);
+  flashes.push({ core, ring, t: 0, size });
 }
 
 // ---------- Враги ----------
 const KINDS = {
-  scout: { hp: 22, r: 3.3, speed: 34, score: 10, color: "#ff9a3f", size: 1.5 },
-  bomber: { hp: 60, r: 4.2, speed: 19, score: 20, color: "#ff3f3f", size: 1.45 },
-  gunship: { hp: 120, r: 5.6, speed: 16, score: 40, color: "#c05fff", size: 1.4 },
-  boss: { hp: 1100, r: 15, speed: 9, score: 500, color: "#ff3fa0", size: 1.2 },
+  scout: { hp: 20, r: 7.5, speed: 28, score: 10, color: "#ffd36a", size: 2.45 },
+  bomber: { hp: 58, r: 8.8, speed: 17, score: 20, color: "#ff7558", size: 2.2 },
+  gunship: { hp: 120, r: 10.5, speed: 15, score: 40, color: "#bc94ff", size: 2.1 },
+  boss: { hp: 920, r: 21, speed: 8, score: 500, color: "#ff75cb", size: 1.55 },
 };
+
 const MODEL = {
   scout() {
-    const g = new T.Group(),
-      hull = metal("#56637a");
-    g.add(part(GEO.oct, hull, 0.9, 0.4, 1.9));
-    for (const s of [-1, 1]) {
-      const w = at(part(GEO.box, metal("#3a4456"), 1.7, 0.08, 0.9), s * 1.2, 0, 0.3);
-      w.rotation.z = s * 0.35;
-      g.add(w);
+    const g = new T.Group();
+    const alloy = metal("#318cd2", { emissive: "#116d9d", emissiveIntensity: 0.27 });
+    const gold = metal("#ffc35f", { emissive: "#dd801e", emissiveIntensity: 0.24 });
+    const cyan = lit("#7ef4ff", 1.45);
+    g.add(part(GEO.ball, alloy, 1.18, 0.83, 1.68));
+    for (const side of [-1, 1]) {
+      const wing = at(part(GEO.oct, gold, 1.58, 0.46, 1.34), side * 1.48, 0.08, 0.12);
+      wing.rotation.y = side * 0.28;
+      wing.rotation.z = side * 0.2;
+      g.add(wing,
+        at(part(GEO.ball, gold, 0.57, 0.55, 1.04), side * 2.15, 0.31, 0.21),
+        at(part(GEO.ball, cyan, 0.37, 0.34, 0.3), side * 2.15, 0.31, -0.55),
+        at(part(GEO.box, cyan, 0.14, 0.15, 0.83), side * 2.15, 0.79, 0.19));
     }
-    g.add(at(part(GEO.ball, lit("#ff9a3f"), 0.32), 0, 0, 1.6), at(part(GEO.ball, lit("#3fe0ff", 2), 0.25, 0.18, 0.4), 0, 0.22, -0.6));
+    g.add(at(part(GEO.ball, lit("#ffdc77", 1.55), 0.6, 0.47, 0.36), 0, 0.18, -1.43));
     return g;
   },
   bomber() {
     const g = new T.Group();
-    g.add(part(GEO.low, metal("#5a2f2f"), 1.9));
-    for (let i = 0; i < 6; i++) {
-      const sp = part(GEO.cone, metal("#2f2222"), 0.45, 1.5, 0.45),
-        d = V(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize();
-      sp.position.copy(d).multiplyScalar(2);
-      sp.quaternion.setFromUnitVectors(V(0, 1, 0), d);
-      g.add(sp);
+    const red = metal("#d9563a");
+    const amber = metal("#ffae56");
+    g.add(part(GEO.low, red, 1.83, 1.42, 2.08));
+    for (let i = 0; i < 5; i++) {
+      const angle = i / 5 * TAU;
+      const dir = V(Math.cos(angle), Math.sin(angle), 0);
+      const fin = part(GEO.cone, amber, 0.47, 1.12, 0.54);
+      fin.position.copy(dir).multiplyScalar(1.66);
+      fin.position.z = 0.56;
+      fin.quaternion.setFromUnitVectors(V(0, 1, 0), dir);
+      g.add(fin);
     }
-    const core = part(GEO.ball, lit("#ff3f3f", 4), 0.8);
-    core.position.z = -1.5;
-    g.add(core);
+    const core = at(part(GEO.ball, lit("#ff743f", 2.4), 0.78, 0.78, 0.34), 0, 0, -1.93);
+    g.add(core, at(part(GEO.wave, lit("#ffe096", 1.8), 1.03), 0, 0, -1.7));
     g.userData.core = core;
     return g;
   },
   gunship() {
-    const g = new T.Group(),
-      hull = metal("#4a4466");
-    g.add(part(GEO.box, hull, 3.2, 1.2, 5.4));
-    for (const s of [-1, 1]) g.add(at(part(GEO.box, metal("#34304a"), 1.1, 0.9, 3.4), s * 2.3, -0.3, 0.2), at(part(GEO.box, lit("#c05fff"), 0.14, 0.14, 4.6), s * 1.62, 0.4, 0));
-    g.add(at(part(GEO.ball, lit("#ff3f5f", 2.5), 0.5), 0, -0.2, -2.9), at(part(GEO.ball, lit("#ff9a3f"), 0.6), 0, 0, 2.9));
+    const g = new T.Group();
+    const armor = metal("#7361a5");
+    const violet = lit("#bf8aff", 2.1);
+    g.add(part(GEO.oct, armor, 2.8, 1.15, 3.35));
+    for (const side of [-1, 1]) {
+      const wing = at(part(GEO.oct, metal("#b085dc"), 1.55, 0.58, 2.76), side * 2.9, 0, 0.2);
+      wing.rotation.y = side * 0.24;
+      g.add(wing,
+        at(part(GEO.box, armor, 0.8, 0.62, 2.86), side * 2.62, -0.15, -0.85),
+        at(part(GEO.box, violet, 0.14, 0.13, 2.42), side * 2.62, 0.26, -0.78),
+        at(part(GEO.ball, lit("#ffa857", 2.3), 0.33), side * 2.62, -0.14, -2.32));
+    }
+    g.add(at(part(GEO.ball, violet, 0.63, 0.26, 0.71), 0, 0.81, -1.38));
     return g;
   },
   boss() {
     const g = new T.Group();
-    g.add(part(GEO.ball, metal("#3a2f4a"), 6.5, 3.2, 6.5));
-    const ring = part(GEO.ring, metal("#2a2438"), 11, 11, 6);
-    ring.rotation.x = Math.PI / 2;
-    g.add(ring);
-    for (let i = 0; i < 4; i++) {
-      const a = (i / 4) * TAU + 0.78;
-      g.add(at(part(GEO.box, metal("#4a3f66"), 2.4, 1.6, 2.4), Math.cos(a) * 11, 0, Math.sin(a) * 11), at(part(GEO.ball, lit("#ff3fa0"), 0.8), Math.cos(a) * 11, 0, Math.sin(a) * 11 - 1.4));
+    const shell = metal("#5a5291");
+    const armor = metal("#7c64ac");
+    const pink = lit("#ff75cb", 1.8);
+    g.add(part(GEO.ball, shell, 6.45, 3.2, 6.45));
+    const ring = new T.Group();
+    ring.rotation.x = Math.PI / 2.7;
+    ring.add(part(GEO.ring, armor, 9.3, 9.3, 4.7), part(GEO.wave, pink, 10.35));
+    for (let i = 0; i < 6; i++) {
+      const angle = i / 6 * TAU;
+      const x = Math.cos(angle) * 9.8;
+      const y = Math.sin(angle) * 9.8;
+      ring.add(at(part(GEO.box, shell, 2.05, 1.65, 1.8), x, y, 0),
+        at(part(GEO.ball, pink, 0.78), x, y, -1.55));
     }
-    const core = at(part(GEO.ball, lit("#ff3fa0", 4), 2.2), 0, 0, -6);
-    g.add(core);
-    g.userData.core = core;
+    const core = at(part(GEO.ball, lit("#ffc5ef", 2.7), 2.17, 2.17, 0.65), 0, 0, -6);
+    g.add(ring, core, at(part(GEO.wave, pink, 2.55), 0, 0, -5.87));
     g.userData.ring = ring;
     return g;
   },
 };
+
 const enemies = [];
 const dirFrom = (yaw, pitch) => V(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
 function spawn(kind) {
   const K = KINDS[kind],
     g = MODEL[kind]();
   const boss = kind === "boss";
-  const spread = wave === 1 ? 0.55 : 1.6;
-  const pos = dirFrom(boss ? 0 : rand(-spread, spread), rand(0.1, wave === 1 ? 0.4 : 0.65))
-    .multiplyScalar(boss ? 300 : rand(210, 260));
+  const first = wave === 1 && waveT < 2;
+  const spread = wave === 1 ? 0.24 : wave < 4 ? 0.73 : 1.35;
+  const yaw = boss ? 0 : first ? rand(-0.075, 0.075) : rand(-spread, spread);
+  const pitch = first ? rand(0.22, 0.28) : rand(0.12, wave < 4 ? 0.42 : 0.58);
+  const distance = boss ? 228 : wave < 4 ? rand(137, 162) : rand(162, 209);
+  const pos = dirFrom(yaw, pitch).multiplyScalar(distance);
   g.position.copy(pos);
+  g.scale.setScalar(K.size);
   scene.add(g);
   const hp = K.hp * (1 + 0.08 * (wave - 1)) * (boss ? 1 + (wave / 5 - 1) * 0.5 : 1);
   enemies.push({ kind, K, g, pos, vel: V(), hp, max: hp, goal: null, fireIn: rand(1.5, 3.5), burst: 0, t: 0, flashT: 0, spawnIn: 5 });
 }
 function newGoal(e) {
   if (e.kind === "scout") {
-    const spread = wave === 1 ? 0.6 : 1.4;
-    e.goal = dirFrom(rand(-spread, spread), rand(0.02, wave === 1 ? 0.45 : 0.75)).multiplyScalar(rand(45, 90));
-  }
-  else if (e.kind === "gunship") e.goal = dirFrom(rand(-1.2, 1.2), rand(0.1, 0.5)).multiplyScalar(rand(70, 95));
+    const spread = wave === 1 ? 0.34 : wave < 4 ? 0.78 : 1.25;
+    e.goal = dirFrom(rand(-spread, spread), rand(0.08, wave < 4 ? 0.44 : 0.65)).multiplyScalar(rand(64, 109));
+  } else if (e.kind === "gunship") e.goal = dirFrom(rand(-1.2, 1.2), rand(0.1, 0.5)).multiplyScalar(rand(70, 95));
   else if (e.kind === "boss") e.goal = dirFrom(rand(-0.7, 0.7), rand(0.2, 0.45)).multiplyScalar(125);
 }
 function shootBolt(from, dmg, spread) {
@@ -361,14 +395,18 @@ function shootBolt(from, dmg, spread) {
 function removeModel(model) {
   scene.remove(model);
   // Геометрия из GEO общая. Материалы создаются для каждого экземпляра.
-  model.traverse((part) => part.material?.dispose());
+  const materials = new Set();
+  model.traverse((part) => {
+    if (part.material) materials.add(part.material);
+  });
+  for (const material of materials) material.dispose();
 }
 
 function kill(e, quiet) {
   enemies.splice(enemies.indexOf(e), 1);
   removeModel(e.g);
   const big = e.kind === "boss" || e.kind === "gunship";
-  flash(e.pos, e.K.r * (e.kind === "boss" ? 5 : 3), e.K.color);
+  flash(e.pos, e.K.r * (e.kind === "boss" ? 2.25 : 1.75), e.K.color);
   burst(e.pos, [e.K.color, "#ffd9a0", "#ffffff"], e.kind === "boss" ? 160 : big ? 50 : 26, e.kind === "boss" ? 70 : 34, e.kind === "boss" ? 1.6 : 0.7);
   Sound.boom(big);
   if (quiet) return;
@@ -387,7 +425,7 @@ function damage(e, amount, at2) {
   e.flashT = 0.12;
   hitMarker = 0.12;
   Sound.hit();
-  burst(at2 || e.pos, [e.K.color, "#ffffff"], 3, 14, 0.25);
+  burst(at2 || e.pos, [e.K.color, "#72dcff", "#ffffff"], 8, 20, 0.3);
   if (e.hp <= 0) kill(e);
 }
 
@@ -421,6 +459,7 @@ let wave = 1,
   hitMarker = 0,
   hurtFlash = 0,
   hurtDir = 0,
+  shieldImpact = false,
   fireIn = 0,
   side = 0,
   queue = [],
@@ -435,7 +474,8 @@ function hurt(amount, from) {
   // с какой стороны прилетело — для красной дуги на экране
   const local = from.clone().applyQuaternion(camera.quaternion.clone().invert());
   hurtDir = Math.atan2(local.x, -local.z);
-  if (S.shield > 0) {
+  shieldImpact = S.shield > 0;
+  if (shieldImpact) {
     S.shield = Math.max(0, S.shield - amount);
     Sound.shield();
     shake = Math.max(shake, 0.25);
@@ -564,30 +604,38 @@ function togglePause() {
 const fwd = V(),
   tmp = V(),
   tmp2 = V();
-// цель рядом с прицелом: лазер берёт упреждение, чтобы по быстрым дронам можно было попасть
-function assistTarget(maxAngle) {
-  let bestE = null,
-    bestA = maxAngle;
-  for (const e of enemies) {
-    if (e.pos.length() > RANGE) continue;
-    const a = tmp.copy(e.pos).normalize().angleTo(fwd) - Math.atan2(e.K.r, e.pos.length()) * 0.7;
-    if (a < bestA) (bestA = a), (bestE = e);
+// Зона захвата чуть шире корпуса. Приоритет у цели ближе к центру прицела.
+function assistTarget() {
+  const help = (wave < 3 ? 0.17 : 0.105) + (camera.aspect < 1 ? 0.035 : 0);
+  let target = null;
+  let best = Infinity;
+  for (const enemy of enemies) {
+    const distance = enemy.pos.length();
+    if (distance > RANGE) continue;
+    const angle = tmp.copy(enemy.pos).normalize().angleTo(fwd);
+    if (angle > help + Math.atan2(enemy.K.r, distance) * 0.65) continue;
+    const priority = angle + distance * 0.00014;
+    if (priority < best) {
+      best = priority;
+      target = enemy;
+    }
   }
-  return bestE;
+  return target;
 }
+
 function fireLaser() {
   const b = barrels[side];
   side = 1 - side;
   b.userData.kick = 1;
   const from = b.userData.tip.getWorldPosition(V());
-  const target = assistTarget(wave === 1 ? 0.12 : 0.08);
-  const point = target ? tmp2.copy(target.pos).addScaledVector(target.vel, target.pos.length() / 300) : tmp2.copy(fwd).multiplyScalar(500);
+  const target = assistTarget();
+  const point = target ? tmp2.copy(target.pos).addScaledVector(target.vel, target.pos.length() / LASER_SPEED) : tmp2.copy(fwd).multiplyScalar(500);
   const l = lasers[laserNext];
   laserNext = (laserNext + 1) % LASERS;
   l.p.copy(from);
   l.d.copy(point).sub(from).normalize();
-  l.life = RANGE / 300;
-  S.heat = Math.min(100, S.heat + 4.2);
+  l.life = RANGE / LASER_SPEED;
+  S.heat = Math.min(100, S.heat + 3.9);
   if (S.heat >= 100) {
     S.overheated = true;
     Sound.overheat();
@@ -601,13 +649,16 @@ function fireRockets() {
   const sorted = [...enemies].sort((a, b) => a.pos.clone().normalize().angleTo(fwd) - b.pos.clone().normalize().angleTo(fwd));
   for (let i = 0; i < S.rockets; i++) {
     const m = new T.Group();
-    m.add(part(GEO.cyl, metal("#d8dde6"), 0.16, 0.9, 0.16), at(part(GEO.ball, lit("#ffb35f", 4), 0.22), 0, -0.55, 0));
+    m.add(part(GEO.cyl, metal("#d8e8ff"), 0.18, 1.12, 0.18),
+      at(part(GEO.cone, metal("#ff9560"), 0.18, 0.41, 0.18), 0, 0.71, 0),
+      at(part(GEO.cone, lit("#ffb057", 2.6), 0.18, 0.76, 0.18), 0, -0.92, 0),
+      at(flare("#ffb961", 1.0), 0, -0.71, 0));
     const p = camera.position.clone().add(V((i % 2 ? 1 : -1) * 1.6, -1.2, -2.8).applyQuaternion(camera.quaternion));
     m.position.copy(p);
     m.visible = false;
     scene.add(m);
     const v = fwd.clone().add(V(rand(-0.5, 0.5), rand(0.1, 0.6), rand(-0.5, 0.5))).normalize().multiplyScalar(40);
-    rocketsLive.push({ m, p, v, target: sorted[i % sorted.length], life: 6, delay: i * 0.07 });
+    rocketsLive.push({ m, p, v, target: sorted[i % sorted.length], life: 6, trail: 0, delay: i * 0.07 });
   }
 }
 
@@ -624,7 +675,7 @@ canvas.addEventListener("pointerdown", (e) => {
 canvas.addEventListener("pointermove", (e) => {
   const f = fingers.get(e.pointerId);
   if (!f) return;
-  const k = (T.MathUtils.degToRad(camera.fov) / innerHeight) * 1.25;
+  const k = (T.MathUtils.degToRad(camera.fov) / innerHeight) * 1.12;
   S.yaw += (e.clientX - f.x) * k;
   S.pitch -= (e.clientY - f.y) * k;
   f.x = e.clientX;
@@ -716,7 +767,7 @@ function resize() {
   composer.setSize(w, h);
   bloom.resolution.set(w / 2, h / 2);
   camera.aspect = w / h;
-  camera.fov = camera.aspect < 1 ? 80 : 62;
+  camera.fov = camera.aspect < 1 ? 68 : 57;
   camera.updateProjectionMatrix();
   dpr = Math.min(devicePixelRatio, 2);
   hud.width = w * dpr;
@@ -724,6 +775,36 @@ function resize() {
 }
 addEventListener("resize", resize);
 const proj = V();
+function drawTarget(enemy, x, y, height, locked) {
+  const worldToPixels = height / (2 * Math.tan(T.MathUtils.degToRad(camera.fov) / 2));
+  const radius = worldToPixels * enemy.K.r / enemy.pos.length();
+  const size = clamp(radius + 7, 21, height * 0.15);
+  const corner = Math.min(13, size * 0.42);
+  hx.beginPath();
+  for (const dx of [-1, 1]) {
+    for (const dy of [-1, 1]) {
+      hx.moveTo(x + dx * (size - corner), y + dy * size);
+      hx.lineTo(x + dx * size, y + dy * size);
+      hx.lineTo(x + dx * size, y + dy * (size - corner));
+    }
+  }
+  hx.strokeStyle = "rgba(4,11,26,.84)";
+  hx.lineWidth = locked ? 6 : 5;
+  hx.stroke();
+  const color = enemy.flashT > 0 ? "#ffffff" : locked ? "#aaffcb" : enemy.K.color;
+  hx.strokeStyle = color;
+  hx.lineWidth = locked ? 3 : 2;
+  hx.stroke();
+
+  if (enemy.kind !== "boss") {
+    const width = Math.max(26, size * 1.5);
+    hx.fillStyle = "rgba(4,11,26,.92)";
+    hx.fillRect(x - width / 2 - 2, y - size - 10, width + 4, 7);
+    hx.fillStyle = color;
+    hx.fillRect(x - width / 2, y - size - 8, width * (enemy.hp / enemy.max), 3);
+  }
+}
+
 function drawHud(t) {
   const w = innerWidth,
     h = innerHeight,
@@ -732,26 +813,14 @@ function drawHud(t) {
   hx.setTransform(dpr, 0, 0, dpr, 0, 0);
   hx.clearRect(0, 0, w, h);
   if (S.state === "menu") return;
-  // враги: шкала прочности над повреждёнными, стрелки на краю экрана к тем, кого не видно
+  const target = S.state === "play" ? assistTarget() : null;
+  // Рамки остаются читаемыми, даже пока корабли далеко.
   for (const e of enemies) {
     proj.copy(e.pos).project(camera);
-    const behind = proj.z > 1,
-      on = !behind && Math.abs(proj.x) < 0.96 && Math.abs(proj.y) < 0.94;
+    const behind = proj.z > 1;
+    const on = !behind && Math.abs(proj.x) < 0.96 && Math.abs(proj.y) < 0.94;
     if (on) {
-      const x = (proj.x + 1) / 2 * w,
-        y = (1 - proj.y) / 2 * h;
-      if (e.hp < e.max && e.kind !== "boss") {
-        hx.fillStyle = "rgba(0,0,0,.5)";
-        hx.fillRect(x - 18, y - 26, 36, 4);
-        hx.fillStyle = e.K.color;
-        hx.fillRect(x - 18, y - 26, 36 * (e.hp / e.max), 4);
-      }
-      if (e.kind === "bomber") {
-        // таран опаснее всех: мигающая рамка
-        hx.strokeStyle = `rgba(255,70,70,${0.5 + 0.5 * Math.sin(t * 12)})`;
-        hx.lineWidth = 2;
-        hx.strokeRect(x - 16, y - 16, 32, 32);
-      }
+      drawTarget(e, (proj.x + 1) * w / 2, (1 - proj.y) * h / 2, h, e === target);
     } else {
       let ax = proj.x,
         ay = proj.y;
@@ -764,18 +833,22 @@ function drawHud(t) {
       hx.translate(cx + Math.cos(a) * k, cy + Math.sin(a) * k);
       hx.rotate(a);
       hx.fillStyle = e.K.color;
-      hx.globalAlpha = e.kind === "bomber" ? 0.6 + 0.4 * Math.sin(t * 12) : 0.85;
+      hx.strokeStyle = "rgba(4,11,26,.85)";
+      hx.lineWidth = 4;
+      hx.globalAlpha = e.kind === "bomber" ? 0.78 + 0.22 * Math.sin(t * 8) : 0.9;
       hx.beginPath();
       hx.moveTo(14, 0);
       hx.lineTo(-8, -10);
       hx.lineTo(-8, 10);
+      hx.closePath();
+      hx.stroke();
       hx.fill();
       hx.restore();
     }
   }
   // прицел и нагрев
   hx.lineWidth = 2;
-  hx.strokeStyle = hitMarker > 0 ? "#ffffff" : S.overheated ? "#ff5f3f" : "#7fe8ff";
+  hx.strokeStyle = hitMarker > 0 ? "#ffffff" : S.overheated ? "#ff7853" : target ? "#aaffcb" : "#7fe8ff";
   hx.globalAlpha = 0.9;
   hx.beginPath();
   hx.arc(cx, cy, 16, 0, TAU);
@@ -796,11 +869,17 @@ function drawHud(t) {
   hx.arc(cx, cy, 44, Math.PI * 0.75 - (Math.PI * 0.5 * Math.min(100, S.heat)) / 100, Math.PI * 0.75);
   hx.stroke();
   hx.globalAlpha = 1;
-  if (S.overheated) {
-    hx.fillStyle = "#ff5f3f";
-    hx.font = "700 14px sans-serif";
+  if (S.overheated || target) {
+    hx.fillStyle = S.overheated ? "#ff8668" : "#aaffcb";
+    hx.font = "800 13px system-ui, sans-serif";
     hx.textAlign = "center";
-    hx.fillText("ПЕРЕГРЕВ", cx, cy + 70);
+    const label = S.overheated ? "ПЕРЕГРЕВ" : "ЦЕЛЬ ЗАХВАЧЕНА";
+    const width = hx.measureText(label).width + 18;
+    const textColor = hx.fillStyle;
+    hx.fillStyle = "rgba(7,15,36,.76)";
+    hx.fillRect(cx - width / 2, cy + 57, width, 20);
+    hx.fillStyle = textColor;
+    hx.fillText(label, cx, cy + 71);
   }
   if (combo > 1) {
     hx.fillStyle = "#ffd25f";
@@ -808,16 +887,17 @@ function drawHud(t) {
     hx.textAlign = "center";
     hx.fillText("×" + combo, cx, cy - 56);
   }
-  // попадание по станции: красная дуга со стороны удара и рамка
+  // Щит вспыхивает голубым. Попадание по корпусу отмечено красным.
   if (hurtFlash > 0) {
-    hx.strokeStyle = `rgba(255,50,60,${hurtFlash})`;
+    const rgb = shieldImpact ? "65,190,255" : "255,73,88";
+    hx.strokeStyle = `rgba(${rgb},${hurtFlash})`;
     hx.lineWidth = 10;
     hx.beginPath();
     hx.arc(cx, cy, Math.min(w, h) * 0.3, hurtDir - Math.PI / 2 - 0.5, hurtDir - Math.PI / 2 + 0.5);
     hx.stroke();
     const g = hx.createRadialGradient(cx, cy, Math.min(w, h) * 0.35, cx, cy, Math.max(w, h) * 0.7);
-    g.addColorStop(0, "rgba(255,0,30,0)");
-    g.addColorStop(1, `rgba(255,0,30,${hurtFlash * (S.shield > 0 ? 0.25 : 0.5)})`);
+    g.addColorStop(0, `rgba(${rgb},0)`);
+    g.addColorStop(1, `rgba(${rgb},${hurtFlash * (shieldImpact ? 0.22 : 0.42)})`);
     hx.fillStyle = g;
     hx.fillRect(0, 0, w, h);
   }
@@ -867,7 +947,11 @@ function frame(ms) {
   for (const b of barrels) {
     b.userData.kick = (b.userData.kick || 0) * Math.pow(0.0005, dt);
     b.position.z = -1.2 + b.userData.kick * 0.22;
-    b.userData.tip.material.color.copy(hot(S.overheated ? "#ff5f3f" : "#2fd0ff", 2 + b.userData.kick * 4));
+    const color = S.overheated ? "#ff7853" : "#7ce6ff";
+    b.userData.tip.material.color.copy(hot(color, 1.7 + b.userData.kick * 2.2));
+    b.userData.muzzle.visible = b.userData.kick > 0.1;
+    b.userData.muzzle.material.opacity = b.userData.kick * 0.74;
+    b.userData.muzzle.material.color.set(color);
   }
   S.rocketIn = Math.max(0, S.rocketIn - dt);
   el("rocket-cd").style.height = (S.rocketIn / S.rocketCd) * 100 + "%";
@@ -905,7 +989,7 @@ function frame(ms) {
     if (e.kind === "bomber") {
       // таран идёт прямо на станцию и взрывается об неё
       e.vel.copy(e.pos).normalize().multiplyScalar(-(K.speed + wave * 0.8));
-      e.g.userData.core.material.color.copy(hot("#ff3f3f", 2 + (Math.sin(t * (4 + 300 / dist)) > 0 ? 4 : 0)));
+      e.g.userData.core.material.color.copy(hot("#ff743f", 2.2 + 0.8 * Math.sin(t * (4 + 220 / dist))));
       if (dist < 9) {
         hurt(34, e.pos);
         kill(e, true);
@@ -913,7 +997,9 @@ function frame(ms) {
       }
     } else {
       if (!e.goal || e.pos.distanceTo(e.goal) < 8) newGoal(e);
-      tmp.copy(e.goal).sub(e.pos).normalize().multiplyScalar(K.speed * (dist > 130 ? 2.2 : 1));
+      const approach = dist > RANGE ? 1.65 : 1;
+      const speed = wave === 1 ? K.speed * 0.76 : K.speed;
+      tmp.copy(e.goal).sub(e.pos).normalize().multiplyScalar(speed * approach);
       e.vel.lerp(tmp, Math.min(1, dt * (e.kind === "scout" ? 1.6 : 0.8)));
       // стреляют, только когда подошли
       e.fireIn -= dt;
@@ -939,33 +1025,50 @@ function frame(ms) {
       look.lookAt(e.pos, tmp.copy(e.pos).add(e.vel), up);
       q.setFromRotationMatrix(look);
       e.g.quaternion.slerp(q, Math.min(1, dt * 6));
-      e.g.rotateY(0);
     }
     e.g.scale.setScalar(K.size * (e.flashT > 0 ? 1.12 : 1));
   }
 
-  // лазерные лучи: летят быстро, проверяем отрезок за кадр
-  lasers.forEach((l, i) => {
-    if (l.life <= 0) return hide(laserMesh, i);
-    const step = 300 * dt;
-    for (const e of enemies) {
-      tmp.copy(e.pos).sub(l.p);
-      const along = clamp(tmp.dot(l.d), 0, step);
-      if (tmp.addScaledVector(l.d, -along).lengthSq() < e.K.r * e.K.r * 1.3) {
-        damage(e, S.dmg, tmp2.copy(l.p).addScaledVector(l.d, along));
-        l.life = 0;
-        break;
-      }
+  // Ближайшая точка входа луча в цель. Дрон за другой целью не перехватывает попадание.
+  lasers.forEach((laser, i) => {
+    if (laser.life <= 0) {
+      hide(laserMesh, i);
+      hide(laserGlow, i);
+      return;
     }
-    l.p.addScaledVector(l.d, step);
-    l.life -= dt;
-    dummy.position.copy(l.p);
-    dummy.lookAt(tmp.copy(l.p).add(l.d));
+    const travel = LASER_SPEED * Math.min(dt, laser.life);
+    let hit = null;
+    let nearest = travel;
+    for (const enemy of enemies) {
+      tmp.copy(enemy.pos).sub(laser.p);
+      const along = tmp.dot(laser.d);
+      const radius = enemy.K.r;
+      if (along < -radius || along > nearest + radius) continue;
+      const offset = tmp.lengthSq() - along * along;
+      if (offset > radius * radius) continue;
+      const halfChord = Math.sqrt(radius * radius - offset);
+      if (along + halfChord < 0) continue;
+      const entry = Math.max(0, along - halfChord);
+      if (entry > nearest) continue;
+      hit = enemy;
+      nearest = entry;
+    }
+    laser.p.addScaledVector(laser.d, nearest);
+    if (hit) {
+      damage(hit, S.dmg, laser.p);
+      laser.life = 0;
+    } else {
+      laser.life -= dt;
+    }
+    dummy.position.copy(laser.p);
+    dummy.lookAt(tmp.copy(laser.p).add(laser.d));
     dummy.scale.setScalar(1);
     dummy.updateMatrix();
     laserMesh.setMatrixAt(i, dummy.matrix);
+    laserGlow.setMatrixAt(i, dummy.matrix);
   });
   laserMesh.instanceMatrix.needsUpdate = true;
+  laserGlow.instanceMatrix.needsUpdate = true;
 
   // вражеские заряды: их можно сбить лазером, иначе бьют по щиту
   bolts.forEach((b, i) => {
@@ -985,8 +1088,9 @@ function frame(ms) {
       }
     }
     dummy.position.copy(b.p);
-    dummy.rotation.set(0, 0, 0);
-    dummy.scale.setScalar(b.dmg > 10 ? 1.2 : 0.7);
+    dummy.lookAt(tmp.copy(b.p).add(b.v));
+    const width = b.dmg > 10 ? 1.32 : 0.8;
+    dummy.scale.set(width, width, width * 2.7);
     dummy.updateMatrix();
     boltMesh.setMatrixAt(i, dummy.matrix);
   });
@@ -1007,7 +1111,11 @@ function frame(ms) {
     r.p.addScaledVector(r.v, dt);
     r.m.position.copy(r.p);
     r.m.quaternion.setFromUnitVectors(up, tmp.copy(r.v).normalize());
-    if (Math.random() < dt * 40) burst(r.p, ["#ffb35f", "#ffffff"], 1, 3, 0.3);
+    r.trail += dt;
+    if (r.trail >= 0.035) {
+      r.trail %= 0.035;
+      burst(r.p, ["#ff9b4e", "#ffe4a5", "#7c6bff"], 2, 7, 0.35);
+    }
     const near = r.target && r.p.distanceTo(r.target.pos) < r.target.K.r + 2;
     if (near || r.life <= 0) {
       flash(r.p, 9, "#ffb35f");
@@ -1035,18 +1143,20 @@ function frame(ms) {
   sparkMesh.instanceMatrix.needsUpdate = true;
   for (let i = flashes.length - 1; i >= 0; i--) {
     const f = flashes[i];
-    f.t += dt * 2.2;
-    f.m.scale.setScalar(f.size * Math.sin(Math.min(1, f.t * 1.6) * Math.PI) * 0.6 + 0.01);
-    f.m.material.opacity = Math.max(0, 1 - f.t);
-    f.ring.scale.setScalar(f.size * f.t * 1.3 + 0.01);
-    f.ring.material.opacity = Math.max(0, 1 - f.t);
+    f.t += dt * 1.85;
+    const alpha = Math.max(0, 1 - f.t);
+    f.core.material.opacity = alpha ** 3 * 0.76;
+    f.core.scale.setScalar(f.size * (0.8 + f.t * 2.3));
+    f.ring.lookAt(camera.position);
+    f.ring.scale.setScalar(f.size * Math.sqrt(f.t) * 1.45 + 0.01);
+    f.ring.material.opacity = alpha * 0.8;
     if (f.t >= 1) {
-      removeModel(f.m);
+      removeModel(f.core);
       removeModel(f.ring);
       flashes.splice(i, 1);
     }
   }
-  scene.userData.planet.rotation.y = t * 0.004;
+  planet.rotation.y = t * 0.006;
 
   // приборы
   el("shield").style.transform = `scaleX(${S.shield / S.shieldMax})`;
