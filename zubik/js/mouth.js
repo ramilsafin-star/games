@@ -1,10 +1,10 @@
-import * as T from "../vendor/three/three.module.min.js?v=013fe0bd";
-import "./gfx.js?v=013fe0bd";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=013fe0bd";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=013fe0bd";
-import { toothGeometry, enamel, archCurve, layout, gumGeometry, gumMaterial, labial } from "./teeth.js?v=013fe0bd";
-import { makeTools, renderIcon } from "./tools.js?v=013fe0bd";
-import { patients } from "./patients.js?v=013fe0bd";
+import * as T from "../vendor/three/three.module.min.js?v=3296954b";
+import "./gfx.js?v=3296954b";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=3296954b";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=3296954b";
+import { toothGeometry, enamel, archCurve, layout, gumGeometry, gumMaterial, labial } from "./teeth.js?v=3296954b";
+import { makeTools, renderIcon } from "./tools.js?v=3296954b";
+import { patients } from "./patients.js?v=3296954b";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;
@@ -670,6 +670,7 @@ export class Clinic {
     });
   }
   rinse(x, y, radius) {
+    this.tickle = Math.max(this.tickle || 0, 0.6);
     let n = 0;
     this.foam = this.foam.filter((f) => {
       const s = this.screenPoint(f.p);
@@ -717,6 +718,7 @@ export class Clinic {
   brush(tooth, amount) {
     if (tooth.plaque <= 0) return false;
     tooth.plaque = Math.max(0, tooth.plaque - amount);
+    this.tickle = 1;
     this.refreshTeeth();
     if (tooth.plaque === 0 || Math.random() < 0.6) this.addFoam(tooth.anchor());
     if (tooth.plaque === 0) this.burst(tooth.anchor(), 10, 1.2);
@@ -735,6 +737,7 @@ export class Clinic {
     return false;
   }
   drill(c, dt) {
+    this.tickle = 1;
     c.progress = Math.min(1, c.progress + dt / 1.3);
     // Тёмное пятнышко светлеет до серой ямки
     c.mesh.material.color.set("#4a3024").lerp(new T.Color("#a8aeb6"), c.progress);
@@ -931,7 +934,49 @@ export class Clinic {
         tw.done();
       }
     }
-    if (this.tongue) this.tongue.position.y = -1.49 + calm * Math.sin(t * 2.1) * 0.018;
+    // Язычок живой: дышит, покачивается, а от щётки, воды и бормашины щекотно вздрагивает
+    if (this.tongue) {
+      this.tickle = (this.tickle || 0) * Math.pow(0.03, dt);
+      const tk = this.tickle * calm;
+      this.tongue.position.y = -1.49 + calm * Math.sin(t * 2.1) * 0.018 + tk * Math.abs(Math.sin(t * 22)) * 0.035;
+      this.tongue.position.x = calm * Math.sin(t * 0.9) * 0.035 + tk * Math.sin(t * 26) * 0.03;
+      this.tongue.rotation.z = calm * Math.sin(t * 0.9 + 1) * 0.025 + tk * Math.sin(t * 19) * 0.05;
+    }
+    // Чистые зубки время от времени поблёскивают звёздочкой
+    if (!this.glint) {
+      const cv = document.createElement("canvas");
+      cv.width = cv.height = 64;
+      const x = cv.getContext("2d");
+      x.translate(32, 32);
+      x.fillStyle = "#ffffff";
+      x.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const a = (i * Math.PI) / 4,
+          r = i % 2 ? 5 : 30;
+        x.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+      }
+      x.fill();
+      const tex = new T.CanvasTexture(cv);
+      tex.colorSpace = T.SRGBColorSpace;
+      this.glint = new T.Sprite(new T.SpriteMaterial({ map: tex, transparent: true, opacity: 0, depthTest: false, depthWrite: false }));
+      this.glint.renderOrder = 5;
+      this.scene.add(this.glint);
+      this.glintAt = -9;
+      this.glintNext = t + 2;
+    }
+    if (calm && t > this.glintNext) {
+      this.glintNext = t + 1.2 + Math.random() * 1.8;
+      const clean = (this.teeth || []).filter((q) => q.plaque === 0 && !q.cavity && q.anchor);
+      if (clean.length) {
+        this.glint.position.copy(clean[Math.floor(Math.random() * clean.length)].anchor());
+        this.glint.position.z += 0.08;
+        this.glintAt = t;
+      }
+    }
+    const gl = clamp((t - this.glintAt) / 0.6, 0, 1);
+    this.glint.material.opacity = gl < 1 ? Math.sin(gl * Math.PI) * 0.95 : 0;
+    this.glint.material.rotation = gl * 1.2;
+    this.glint.scale.setScalar(0.05 + Math.sin(gl * Math.PI) * 0.22);
     // Светящиеся брекеты переливаются радугой
     if (this.neon)
       this.neon.forEach((m, k) => {

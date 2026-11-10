@@ -1,9 +1,9 @@
 // «Зубик»: ход приёма, инструменты, подсказки, голос, галерея улыбок. Всё 3D — в mouth.js.
-import { Clinic, decorations, braceKinds } from "./mouth.js?v=013fe0bd";
-import { tools as TOOL_ART, gems, ui } from "./icons.js?v=013fe0bd";
+import { Clinic, decorations, braceKinds } from "./mouth.js?v=3296954b";
+import { tools as TOOL_ART, gems, ui } from "./icons.js?v=3296954b";
 
-import { patients, portraitUrl } from "./patients.js?v=013fe0bd";
-import { postcard } from "./postcard.js?v=013fe0bd";
+import { patients, portraitUrl } from "./patients.js?v=3296954b";
+import { postcard } from "./postcard.js?v=3296954b";
 
 const el = (id) => document.getElementById(id);
 const KEY = "zubik-v1";
