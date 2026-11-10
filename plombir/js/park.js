@@ -1,6 +1,6 @@
-import * as T from "../vendor/three/three.module.min.js?v=265a53a5";
-import "./gfx.js?v=265a53a5";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=265a53a5";
+import * as T from "../vendor/three/three.module.min.js?v=91b23d48";
+import "./gfx.js?v=91b23d48";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=91b23d48";
 import {
   scenery,
   truck,
@@ -19,7 +19,7 @@ import {
   balloons,
   butterfly,
   bulbs,
-} from "./models.js?v=265a53a5";
+} from "./models.js?v=91b23d48";
 
 const clamp = T.MathUtils.clamp,
   mix = T.MathUtils.lerp;
@@ -80,7 +80,10 @@ export class Park {
     const background = group(this.scene);
     scenery(background);
 
-    this.sign = truck(this.scene).spin;
+    const van = truck(this.scene);
+    this.sign = van.spin;
+    this.van = van.body;
+    this.vanY = van.body.position.y;
     this.bunch = balloons(this.scene);
     stand(this.scene, worktop.x, worktop.z);
     this.guests = pals.map((_, i) => animal(this.scene, i));
@@ -337,6 +340,18 @@ export class Park {
   // Всё, что живёт само: облака, бабочки, пузыри, шары, лампочки, конфетти
   animateWorld(t, dt, motion) {
     this.sign.rotation.y = motion * t * 0.9;
+    // Фургончик тихонько тарахтит и покачивается, когда рожок отдают гостю
+    const sinceGive = this.delivered === null ? 9 : t - this.delivered;
+    const rock = motion * Math.max(0, 1 - sinceGive / 0.9);
+    this.van.position.y = this.vanY + motion * Math.sin(t * 21) * 0.004 + Math.sin(rock * Math.PI) * 0.03;
+    this.van.rotation.z = Math.sin(sinceGive * 14) * 0.012 * rock;
+    // Щенок живой: дышит, виляет, иногда оглядывается, а от угощения гостя скачет от радости
+    const glad = motion * Math.max(0, 1 - Math.max(0, sinceGive - 0.5) / 1.6) * (sinceGive > 0.5 ? 1 : 0);
+    const idleHop = (t * 0.33) % 5 < 0.5 ? Math.abs(Math.sin(((t * 0.33) % 5) / 0.5 * Math.PI * 2)) * 0.07 : 0;
+    this.dog.position.y = motion * (Math.abs(Math.sin(t * 10)) * 0.22 * glad + idleHop);
+    this.dog.scale.set(1 - motion * Math.sin(t * 2.6) * 0.02, 1 + motion * Math.sin(t * 2.6) * 0.03, 1);
+    this.dog.rotation.z = motion * Math.sin(t * (glad ? 16 : 5)) * (0.03 + glad * 0.07);
+    this.dog.rotation.y = 0.32 + motion * (Math.sin(t * 0.5) * 0.18 + glad * 0.5);
     this.bunch.rotation.set(
       motion * Math.sin(t * 0.7 + 1) * 0.05,
       0,
