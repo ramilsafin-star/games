@@ -1,14 +1,14 @@
 // «Шарокат»: шар катится по радужным горкам в небе. Здесь игровой цикл, физика шара, камера, меню.
-import * as T from "../vendor/three/three.module.min.js?v=cb0a4b60";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=cb0a4b60";
-import { Track, trackMesh, railLights, tubeMeshes, HALF } from "./track.js?v=cb0a4b60";
-import { R, sky, scenery, supports, gates, boostPads, obstacles, trampolines, gemField, skins, skinMaterial, ballMesh, effects } from "./world.js?v=cb0a4b60";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=cb0a4b60";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=cb0a4b60";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=cb0a4b60";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=cb0a4b60";
-import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=cb0a4b60";
-import { themeFor } from "./themes.js?v=cb0a4b60";
+import * as T from "../vendor/three/three.module.min.js?v=96f16026";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=96f16026";
+import { Track, trackMesh, railLights, tubeMeshes, HALF } from "./track.js?v=96f16026";
+import { R, sky, scenery, supports, gates, boostPads, obstacles, trampolines, gemField, skins, skinMaterial, ballMesh, effects } from "./world.js?v=96f16026";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=96f16026";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=96f16026";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=96f16026";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=96f16026";
+import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=96f16026";
+import { themeFor } from "./themes.js?v=96f16026";
 
 // 20 уровней: каждая из 10 тем встречается дважды
 const LEVELS = 20;
@@ -388,6 +388,7 @@ function frame(ms) {
     for (const o of lvl.obstacles) o.update(clock);
     for (const pad of lvl.pads) pad.update(clock);
     lvl.water?.update(clock);
+    lvl.view.update(clock, ball.position);
     lvl.gems.update(clock, b.s);
     lvl.chevrons.offset.y -= dt * 1.8;
     Sound.roll(b.state === "play" ? b.v : 0, b.state === "play" && !b.flying);

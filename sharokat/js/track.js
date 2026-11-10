@@ -1,6 +1,6 @@
 // Трасса «Шароката»: путь строится «черепашкой» из кусков (холм, поворот, петля, прыжок…),
 // каждые полметра — кадр (точка, вперёд, вверх, вправо). По кадрам строятся меш и физика шара.
-import * as T from "../vendor/three/three.module.min.js?v=cb0a4b60";
+import * as T from "../vendor/three/three.module.min.js?v=96f16026";
 
 export const DS = 0.5;
 export const HALF = 2.2; // половина ширины дорожки

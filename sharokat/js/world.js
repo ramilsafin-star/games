@@ -1,6 +1,6 @@
 // Всё, что видно вокруг шара: небо, острова, облака, арки, препятствия, кристаллы, шар и эффекты
-import * as T from "../vendor/three/three.module.min.js?v=cb0a4b60";
-import { HALF, rng } from "./track.js?v=cb0a4b60";
+import * as T from "../vendor/three/three.module.min.js?v=96f16026";
+import { HALF, rng } from "./track.js?v=96f16026";
 
 const pie = Math.PI;
 export const R = 0.6; // радиус шара
@@ -79,7 +79,8 @@ export function scenery(scene, track, theme) {
   scene.add(group);
   const islands = [],
     clouds = [],
-    balloons = [];
+    balloons = [],
+    spinners = [];
   const free = (p, gap) => track.samples.every((a, i) => i % 6 || a.p.distanceToSquared(p) > gap * gap);
   for (let s = 10; s < track.length; s += 16 + rand() * 12) {
     const fr = track.at(s),
@@ -188,12 +189,63 @@ export function scenery(scene, track, theme) {
       ball.add(ring);
       ball.position.copy(p);
       group.add(ball);
+      spinners.push(ball);
     });
   }
   group.traverse((o) => {
     if (o.isInstancedMesh && o.instanceColor) o.instanceColor.needsUpdate = true;
   });
-  return { group, balls, balloons };
+  // Стайка птиц днём: кружит вокруг шара, чтобы небо не было пустым
+  const birds = [];
+  if (!theme.stars) {
+    const wingGeo = new T.BufferGeometry();
+    wingGeo.setAttribute("position", new T.Float32BufferAttribute([0, 0.05, 0, 0.75, 0.1, 0, 0.7, -0.02, 0, 0, -0.12, 0], 3));
+    wingGeo.setIndex([0, 1, 2, 0, 2, 3]);
+    const mat = new T.MeshBasicMaterial({ color: "#3b4a6b", side: T.DoubleSide, fog: false });
+    for (let i = 0; i < 6; i++) {
+      const g = new T.Group();
+      const wings = [1, -1].map((sd) => {
+        const w = new T.Mesh(wingGeo, mat);
+        w.scale.x = sd;
+        g.add(w);
+        return w;
+      });
+      g.userData = { wings, ph: i * 0.19, h: 7 + (i % 3) * 1.4, r: 26 + (i % 2) * 4 };
+      g.scale.setScalar(1.5);
+      group.add(g);
+      birds.push(g);
+    }
+  }
+  const bm = new T.Matrix4(),
+    bq = new T.Quaternion(),
+    bs = new T.Vector3(),
+    bp = new T.Vector3();
+  // Живое небо: шары покачиваются и плывут, планеты медленно вращаются, птицы машут крыльями
+  const update = (t, around) => {
+    balloons.forEach((b, i) => {
+      bp.copy(b.p);
+      bp.y += Math.sin(t * 0.7 + i * 1.7) * 0.9;
+      bp.x += Math.sin(t * 0.23 + i) * 1.6;
+      bq.setFromAxisAngle(bs.set(0, 0, 1), Math.sin(t * 0.5 + i) * 0.06);
+      bm.compose(bp, bq, bs.set(1, 1.2, 1));
+      balls.setMatrixAt(i, bm);
+      bp.y -= 2.6;
+      bm.compose(bp, bq, bs.set(1, 1, 1));
+      baskets.setMatrixAt(i, bm);
+    });
+    balls.instanceMatrix.needsUpdate = baskets.instanceMatrix.needsUpdate = true;
+    for (const sp of spinners) sp.rotation.y = t * 0.08;
+    for (const g of birds) {
+      const u = g.userData,
+        a = t * 0.22 + u.ph;
+      g.position.set(around.x + Math.cos(a) * u.r, around.y + u.h + Math.sin(t * 0.8 + u.ph * 9) * 0.6, around.z + Math.sin(a) * u.r);
+      g.rotation.y = -a;
+      const flap = Math.sin(t * 8 + u.ph * 30) * 0.7;
+      u.wings[0].rotation.z = flap;
+      u.wings[1].rotation.z = -flap;
+    }
+  };
+  return { group, balls, balloons, update };
 }
 
 // ---------- Опоры горок, море облаков (или лавы) внизу, кольца в полёте ----------
