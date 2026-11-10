@@ -1,15 +1,15 @@
 // 3D «Колеса огоньков»: ночной парк аттракционов, колесо обозрения с кабинками,
 // огоньки с мордочками на ободе, шарики, енотик Фоня с корзинкой, стрелка перед поворотом, салют.
 // Логика (wheel.js) задаёт угол колеса θ(t) и места огоньков; здесь всё рисуется по тем же числам.
-import * as T from "../vendor/three/three.module.min.js?v=34014e05";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=34014e05";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=34014e05";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=34014e05";
-import { polish } from "./gfx.js?v=34014e05";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=34014e05";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=34014e05";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=34014e05";
-import { RADIUS, CONTACT, FLIGHT } from "./wheel.js?v=34014e05";
+import * as T from "../vendor/three/three.module.min.js?v=a8822816";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=a8822816";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=a8822816";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=a8822816";
+import { polish } from "./gfx.js?v=a8822816";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=a8822816";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=a8822816";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=a8822816";
+import { RADIUS, CONTACT, FLIGHT } from "./wheel.js?v=a8822816";
 
 const pie = Math.PI;
 const D2R = pie / 180;
@@ -134,10 +134,12 @@ function raccoon() {
     const shine = new T.Mesh(new T.SphereGeometry(0.012, 6, 4), new T.MeshBasicMaterial({ color: "#ffffff" }));
     shine.position.set(s * 0.13 + 0.014, 0.068, 0.415);
     head.add(shine);
+    (head.userData.eyes ||= []).push(eye, pupil, shine);
     const ear = new T.Mesh(new T.ConeGeometry(0.12, 0.2, 14), grey);
     ear.position.set(s * 0.26, 0.3, -0.02);
     ear.rotation.z = -s * 0.35;
     head.add(ear);
+    (head.userData.ears ||= []).push(ear);
     const inner = new T.Mesh(new T.ConeGeometry(0.06, 0.12, 10), light);
     inner.position.set(s * 0.255, 0.29, 0.04);
     inner.rotation.z = -s * 0.35;
@@ -738,6 +740,7 @@ export class World {
       this.flyer.g.visible = false;
       this.flying = null;
       this.addLamp(e.lamp, true);
+      this.foxJoy = this.time;
       this.burst(new T.Vector3(0, cy, 0.4), 16, [LIGHTS[e.lamp.n % LIGHTS.length], "#ffffff"], 3);
       this.wheelLight.intensity = 6 * (1 - wheel.left / (wheel.lamps.length + wheel.left));
       this.paintBasket(wheel.left);
@@ -749,6 +752,7 @@ export class World {
       this.bumpMark.position.set(Math.cos(a) * (R + 0.28), Math.sin(a) * (R + 0.28), 0.32);
       this.bumpMark.visible = true;
       this.bumpT = this.time;
+      this.foxOops = this.time;
       this.bumpLamp = this.lampMeshes.get(e.with);
       this.bounce = { t0: this.time, from: new T.Vector3(0, cy, 0.3) };
       this.burst(new T.Vector3(0, cy, 0.4), 10, ["#ff6f8f", "#ffffff"], 2.5);
@@ -838,6 +842,47 @@ export class World {
     this.fox.basket.position.y = 0.62 + (this.fox.arms[0].userData.kick && t - this.fox.arms[0].userData.kick < 0.3 ? 0.12 : 0);
     this.fox.tail.rotation.y = calm ? 0 : Math.sin(t * 3) * 0.2;
     this.fox.head.rotation.z = calm ? 0 : Math.sin(t * 1.3) * 0.05;
+    // Живой енот: моргает, шевелит ушками, провожает огонёк взглядом,
+    // подпрыгивает от радости, когда огонёк сел на колесо, и трясёт головой, когда не попал
+    {
+      const f = this.fox,
+        hu = f.head.userData;
+      if (hu.blinkAt == null || t > hu.blinkAt + 0.13) hu.blinkAt = t + 1.5 + Math.random() * 3;
+      const open = !calm && t > hu.blinkAt ? 0.12 : 1;
+      for (const e of hu.eyes || []) e.scale.y = open;
+      (hu.ears || []).forEach((e, i) => {
+        const k = (t * 0.6 + i * 0.4) % 2.8;
+        e.rotation.x = !calm && k < 0.25 ? Math.sin((k / 0.25) * pie * 2) * 0.3 : 0;
+      });
+      const joy = calm ? 0 : clamp(1 - (t - (this.foxJoy ?? -9)) / 0.5, 0, 1),
+        oops = calm ? 0 : clamp(1 - (t - (this.foxOops ?? -9)) / 0.7, 0, 1);
+      const up = Math.sin((1 - joy) * pie) * (joy > 0 ? 1 : 0);
+      f.g.position.y = up * 0.28;
+      f.body.scale.set(1 - up * 0.06, (1 + up * 0.1) * (1 + (calm ? 0 : Math.sin(t * 2.3) * 0.015)), 1 - up * 0.06);
+      const want = this.flying ? -0.4 : 0;
+      hu.look = (hu.look || 0) + (want - (hu.look || 0)) * Math.min(1, dt * 9);
+      f.head.rotation.x = hu.look;
+      f.head.rotation.y = Math.sin(t * 24) * 0.22 * oops;
+    }
+    // Падающая звезда над парком
+    if (!this.meteor) {
+      this.meteor = { parts: [0, 1, 2, 3, 4].map((i) => glowSprite(i ? "#bfe6ff" : "#ffffff", 1.8 - i * 0.3, 0)), at: -9, next: t + 4, from: new T.Vector3(), dir: new T.Vector3() };
+      for (const sp of this.meteor.parts) this.scene.add(sp);
+    }
+    const me = this.meteor;
+    if (!calm && t > me.next) {
+      const dx = Math.random() < 0.5 ? 1 : -1;
+      me.from.set(-dx * (4 + Math.random() * 14), this.H + this.R + 5 + Math.random() * 6, -22);
+      me.dir.set(dx * 20, -7 - Math.random() * 4, 0);
+      me.at = t;
+      me.next = t + 6 + Math.random() * 8;
+    }
+    const ml = (t - me.at) / 1.1;
+    me.parts.forEach((sp, i) => {
+      const lt = ml - i * 0.035;
+      sp.material.opacity = lt > 0 && lt < 1 ? Math.sin(lt * pie) * (0.9 - i * 0.15) : 0;
+      sp.position.copy(me.from).addScaledVector(me.dir, Math.max(0, lt) * 1.1);
+    });
     // Победа: бегущие огни по спицам, свет в кабинках, парк загорается, салют
     if (this.doneT !== null) {
       const p = clamp((t - this.doneT) / 1.5, 0, 1);
