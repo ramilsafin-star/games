@@ -1,9 +1,9 @@
 // «Гонка бобрят»: бобрёнок сам бежит по дороге между островами, игрок поворачивает пальцем.
 // Брёвнышки с куч превращаются в мостик, когда бежишь в воду — так срезается путь.
 // Логика — race.js (проверяется tests/race.mjs), трассы — tracks.js, 3D — world.js.
-import { World, CAPS } from "./world.js?v=0ee46457";
-import { TRACKS, BOTS } from "./tracks.js?v=0ee46457";
-import { Race, STEP } from "./race.js?v=0ee46457";
+import { World, CAPS } from "./world.js?v=6ce5cfe1";
+import { TRACKS, BOTS } from "./tracks.js?v=6ce5cfe1";
+import { Race, STEP } from "./race.js?v=6ce5cfe1";
 
 const el = (id) => document.getElementById(id);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

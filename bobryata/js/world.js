@@ -1,15 +1,15 @@
 // 3D «Гонки бобрят»: острова с мягкими берегами, вода с бликами, дорога, кучи брёвнышек, мостики,
 // бобрята в кепках с брёвнышками на спине, ворота, финиш с почтовым ящиком, утки и лодочки.
 // Клетка гонки (x, y) — это мир (x, 0, −y).
-import * as T from "../vendor/three/three.module.min.js?v=0ee46457";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=0ee46457";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=0ee46457";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=0ee46457";
-import { polish } from "./gfx.js?v=0ee46457";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=0ee46457";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=0ee46457";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=0ee46457";
-import { shoreField, landHeight } from "./race.js?v=0ee46457";
+import * as T from "../vendor/three/three.module.min.js?v=6ce5cfe1";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=6ce5cfe1";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=6ce5cfe1";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=6ce5cfe1";
+import { polish } from "./gfx.js?v=6ce5cfe1";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=6ce5cfe1";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=6ce5cfe1";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=6ce5cfe1";
+import { shoreField, landHeight } from "./race.js?v=6ce5cfe1";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;
@@ -141,6 +141,7 @@ function beaver(cap) {
     const ear = new T.Mesh(new T.SphereGeometry(0.08, 12, 8), dark);
     ear.position.set(s * 0.22, 0.2, 0.02);
     head.add(ear);
+    (head.userData.ears ||= []).push(ear);
     const cheek = new T.Mesh(new T.SphereGeometry(0.05, 10, 8), matte("#ff9fb0"));
     cheek.scale.set(1, 0.6, 0.4);
     cheek.position.set(s * 0.19, -0.04, -0.2);
@@ -188,7 +189,7 @@ function beaver(cap) {
   }
   g.traverse((o) => o.isMesh && (o.castShadow = true));
   g.scale.setScalar(1.15);
-  return { group: g, body, head, feet, logs, stack };
+  return { group: g, body, head, feet, logs, stack, tail, ears: head.userData.ears };
 }
 
 export class World {
@@ -634,6 +635,7 @@ export class World {
   }
   pick(r) {
     const v = this.racers[r.i];
+    v.pop = 1;
     this.burst(v.group.position.clone().add(new T.Vector3(0, 1, 0)), 12, ["#ffe066", "#ffffff", "#c98b55"], 2.5);
   }
   splash(at, count, color = this.theme.water[1]) {
@@ -701,6 +703,17 @@ export class World {
       v.body.position.y = moving ? Math.abs(Math.sin(v.run)) * 0.1 : Math.sin(t * 2 + i) * 0.01;
       v.body.rotation.z = moving ? Math.sin(v.run) * 0.08 : 0;
       v.feet.forEach((f, k) => (f.position.z = -0.05 + (moving ? Math.sin(v.run + k * pie) * 0.14 : 0)));
+      // Живой бобрёнок: хвост шлёпает на бегу, ушки подрагивают, поклажа подпрыгивает,
+      // а от подобранного брёвнышка он радостно вытягивается
+      v.tail.rotation.x = -0.55 + (moving ? Math.sin(v.run) * 0.4 * calm : Math.sin(t * 2 + i) * 0.07);
+      v.ears.forEach((e, k) => e.scale.setScalar(1 + Math.sin(t * 13 + k * 2 + i) * (moving ? 0.12 : 0.03)));
+      v.stack.position.y = 0.62 + (moving ? Math.abs(Math.sin(v.run + 0.6)) * 0.05 : 0);
+      v.stack.rotation.z = moving ? Math.sin(v.run) * 0.07 * calm : 0;
+      v.pop = (v.pop || 0) * Math.pow(0.02, dt);
+      const pp = Math.sin(v.pop * pie) * v.pop;
+      v.body.scale.set(1 - pp * 0.12, 1 + pp * 0.22, 1 - pp * 0.12);
+      v.head.rotation.x = -pp * 0.5 + (moving ? Math.sin(v.run * 2) * 0.04 : 0);
+      v.body.rotation.y = r.done ? Math.sin(t * 5 + i) * 0.7 : 0;
       // Брёвнышки на спине — сколько в лапах
       if (v.shown !== r.planks) {
         v.shown = r.planks;
@@ -717,6 +730,52 @@ export class World {
       // Брызги из-под лап на мостике
       if (moving && onBridge && Math.random() < dt * 8) this.puff(W3(r.x, r.y, 0.05), 1, "#ffffff");
     });
+    // Рыбка иногда выпрыгивает из воды рядом с игроком: всплеск, дуга, всплеск
+    if (!this.fish) {
+      const fg = new T.Group();
+      const fb = new T.Mesh(new T.SphereGeometry(0.16, 14, 10), glossy("#ff9a3c"));
+      fb.scale.set(0.55, 0.7, 1.5);
+      const ft = new T.Mesh(new T.ConeGeometry(0.12, 0.2, 4), glossy("#ffc46b"));
+      ft.rotation.x = -pie / 2;
+      ft.position.z = 0.3;
+      ft.scale.x = 0.3;
+      fg.add(fb, ft);
+      fg.visible = false;
+      this.scene.add(fg);
+      this.fish = { g: fg, at: -9, next: t + 2, from: new T.Vector3(), to: new T.Vector3() };
+    }
+    const fi = this.fish;
+    if (race.state === "run" && t > fi.next && calm === 1) {
+      fi.next = t + 2.5 + Math.random() * 3;
+      const pl = race.racers.find((r) => !r.bot) || race.racers[0];
+      for (let n = 0; n < 12; n++) {
+        const fx = pl.x + (Math.random() - 0.5) * 7,
+          fy = pl.y + (Math.random() - 0.5) * 9;
+        const [ci, cj] = race.map.cell(fx, fy),
+          [ci2, cj2] = race.map.cell(fx + 0.8, fy);
+        const wet = (a, b) => race.map.inside(a, b) && !race.map.isLand(a, b) && !race.bridged(a, b);
+        if (wet(ci, cj) && wet(ci2, cj2)) {
+          fi.from.copy(W3(fx, fy, 0));
+          fi.to.copy(W3(fx + 0.8, fy, 0));
+          fi.at = t;
+          this.splash([fx, fy], 6);
+          break;
+        }
+      }
+    }
+    const fl = (t - fi.at) / 0.8;
+    fi.g.visible = fl >= 0 && fl < 1;
+    if (fi.g.visible) {
+      fi.g.position.lerpVectors(fi.from, fi.to, fl);
+      fi.g.position.y += Math.sin(fl * pie) * 0.9;
+      const dir = fi.to.clone().sub(fi.from).normalize();
+      fi.g.rotation.set(0, Math.atan2(-dir.x, -dir.z), 0);
+      fi.g.rotateX((0.5 - fl) * 2.2);
+      fi.wasUp = true;
+    } else if (fi.wasUp) {
+      fi.wasUp = false;
+      this.puff(fi.to.clone().setY(0.1), 6, "#ffffff");
+    }
     // Кучи
     this.piles.forEach((pv) => {
       const shown = pv.p.n > 0;
