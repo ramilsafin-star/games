@@ -147,4 +147,11 @@ const GAMES = [
     cover: "covers/raduga.jpg",
     color: "#ff6f9c",
   },
+  {
+    id: "strazh",
+    title: "Страж орбиты",
+    url: "strazh/",
+    cover: "covers/strazh.jpg",
+    color: "#2f8fff",
+  },
 ];

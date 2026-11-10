@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#05060f" />
+    <title>Страж орбиты</title>
+    <meta name="description" content="Космический 3D-шутер: ты стрелок орбитальной станции. Отбивай волны дронов лазерами и ракетами, выбирай улучшения, сражайся с флагманом." />
+    <link rel="icon" href="./icon-192.png" />
+    <link rel="apple-touch-icon" href="./icon-180.png" />
+    <link rel="stylesheet" href="./style.css?v=9ef72205" />
+  </head>
+  <body>
+    <canvas id="stage" aria-label="Страж орбиты: води пальцем, чтобы целиться и стрелять"></canvas>
+    <canvas id="hud" aria-hidden="true"></canvas>
+    <header class="top">
+      <!-- Сюда портал вставляет кнопку «Все игры» (games-portal/build.mjs) -->
+      <nav class="home-slot"><a href="../" aria-label="Все игры">🎮</a></nav>
+      <div class="stat"><span>ВОЛНА</span><b id="wave">1</b></div>
+      <div class="stat"><span>СЧЁТ</span><b id="score">0</b></div>
+      <div id="bossbar" hidden><i id="bossfill"></i><span>ФЛАГМАН</span></div>
+      <span class="grow"></span>
+      <button id="sound" class="round" aria-label="Звук" aria-pressed="true">🔊</button>
+      <button id="pause-button" class="round" aria-label="Пауза" hidden>Ⅱ</button>
+    </header>
+    <div class="bars">
+      <div class="bar shield"><i id="shield"></i><span>ЩИТ</span></div>
+      <div class="bar hull"><i id="hull"></i><span>КОРПУС</span></div>
+    </div>
+    <button id="rocket" aria-label="Залп ракет" disabled>🚀<i id="rocket-cd"></i><span id="rocket-time" aria-hidden="true"></span></button>
+    <div id="banner" hidden></div>
+    <section id="menu" class="panel">
+      <h1>СТРАЖ ОРБИТЫ</h1>
+      <p>Ты стрелок орбитальной станции. Дроны идут волнами — не дай им пробить корпус.</p>
+      <ul>
+        <li>👆 Веди пальцем — прицел поворачивается, лазеры стреляют</li>
+        <li>🔥 Следи за нагревом: перегретые пушки молчат</li>
+        <li>🚀 Ракеты сами находят ближайшие цели</li>
+      </ul>
+      <p class="desktop-controls">На клавиатуре: WASD или стрелки · пробел — лазеры · E — ракеты · Esc — пауза</p>
+      <button id="start" class="big" disabled>В БОЙ</button>
+      <p id="load-status" role="status">Запускаем 3D-сцену…</p>
+      <p class="best">Лучший результат: волна <b id="best">0</b></p>
+    </section>
+    <section id="upgrade" class="panel" hidden>
+      <h2>Волна отбита! Выбери улучшение</h2>
+      <div id="cards"></div>
+    </section>
+    <section id="paused" class="panel" aria-labelledby="pause-title" hidden>
+      <h2 id="pause-title">Пауза</h2>
+      <button id="resume" class="big">ПРОДОЛЖИТЬ</button>
+    </section>
+    <section id="dead" class="panel" hidden>
+      <h2>Корпус пробит</h2>
+      <p id="result"></p>
+      <p>Щит и корпус восстановятся. Улучшения останутся, счёт уменьшится на 20%.</p>
+      <button id="retry" class="big">ЕЩЁ РАЗ</button>
+    </section>
+    <script type="module" src="./js/boot.js?v=9ef72205"></script>
+  </body>
+</html>
