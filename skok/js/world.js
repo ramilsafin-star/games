@@ -2,15 +2,15 @@
 // гайки, винтики, кнопки, кубики-платформы, золотые шестерёнки, флажки на карандашах,
 // коробка с деталями на финише и заводной зайчик Скок на пружинке.
 // Логика (jump.js) живёт в плоскости: x — вдоль верстака, y — вверх; в 3D это (x, y, 0).
-import * as T from "../vendor/three/three.module.min.js?v=05a058e9";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=05a058e9";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=05a058e9";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=05a058e9";
-import { polish } from "./gfx.js?v=05a058e9";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=05a058e9";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=05a058e9";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=05a058e9";
-import { HERO } from "./jump.js?v=05a058e9";
+import * as T from "../vendor/three/three.module.min.js?v=97fb4cb8";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=97fb4cb8";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=97fb4cb8";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=97fb4cb8";
+import { polish } from "./gfx.js?v=97fb4cb8";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=97fb4cb8";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=97fb4cb8";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=97fb4cb8";
+import { HERO } from "./jump.js?v=97fb4cb8";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;
@@ -165,9 +165,11 @@ function bunny() {
     const eye = new T.Mesh(new T.SphereGeometry(0.042, 12, 8), glossy("#20162a", { roughness: 0.1 }));
     eye.position.set(s * 0.085, 0.045, 0.2);
     head.add(eye);
+    (head.userData.eyes ||= []).push(white, eye);
     const shine = new T.Mesh(new T.SphereGeometry(0.013, 8, 6), new T.MeshBasicMaterial({ color: "#ffffff" }));
     shine.position.set(s * 0.085 + 0.013, 0.065, 0.238);
     head.add(shine);
+    head.userData.eyes.push(shine);
     const cheek = new T.Mesh(new T.SphereGeometry(0.04, 10, 8), pink);
     cheek.scale.set(1, 0.6, 0.4);
     cheek.position.set(s * 0.14, -0.04, 0.15);
@@ -459,6 +461,7 @@ export class World {
       if (o.geometry && o.geometry !== GEAR_GEO) o.geometry.dispose();
     });
     G.clear();
+    this.toys = [];
     this.def = def;
     this.P = P;
     const th = THEMES[def.theme] || THEMES.bench;
@@ -854,7 +857,12 @@ export class World {
     for (let x = x0 + 26; x < x1; x += 34 + R() * 10) {
       const shelf = new T.Mesh(new RoundedBoxGeometry(6, 0.18, 1.1, 2, 0.05), glossy(th.wood[1], { roughness: 0.6, clearcoat: 0.2 }));
       add(shelf, x, 3.3, -5.4);
-      for (let k = 0; k < 4; k++) G.add(this.toy(k + Math.floor(R() * 6), x - 2.2 + k * 1.45, 3.4, -5.4, pick(bright)));
+      for (let k = 0; k < 4; k++) {
+        const ty = this.toy(k + Math.floor(R() * 6), x - 2.2 + k * 1.45, 3.4, -5.4, pick(bright));
+        ty.userData.baseY = ty.position.y;
+        this.toys.push(ty);
+        G.add(ty);
+      }
     }
     // Инструменты на перфорированной доске
     for (let x = x0 + 4; x < x1; x += 9 + R() * 7) {
@@ -1148,6 +1156,7 @@ export class World {
       h.svv -= 7;
       this.puff(new T.Vector3(hx, hy + 0.05, 0), 5, "#f6e2c8");
     } else if (e.type === "gear") {
+      this.joyAt = this.time;
       const g = this.gears[e.g.id];
       if (g && !g.taken) {
         g.taken = true;
@@ -1248,6 +1257,25 @@ export class World {
     // Ушки болтаются в полёте, ключик крутится, пока едет
     h.ears.forEach((e, k) => (e.rotation.x = calm ? 0 : clamp(-st.vy * 0.05, -0.5, 0.5) + Math.sin(t * 9 + k) * (running ? 0.08 : 0.03)));
     if (run.state === "run") h.key.rotation.z += dt * 7;
+    // Живая мордочка: моргает, в прыжке смотрит вверх, на спуске — вниз; от шестерёнки голова «пружинит»
+    const hu = h.head.userData;
+    if (hu.eyes) {
+      if (hu.blinkAt == null || t > hu.blinkAt + 0.13) hu.blinkAt = t + 1.5 + Math.random() * 3;
+      const open = !calm && t > hu.blinkAt ? 0.12 : 1;
+      for (const e of hu.eyes) e.scale.y = open;
+      const want = air && !calm ? clamp(-st.vy * 0.045, -0.4, 0.35) : 0;
+      hu.pitch = (hu.pitch || 0) + (want - (hu.pitch || 0)) * Math.min(1, dt * 10);
+      h.head.rotation.x = hu.pitch;
+      const joy = Math.max(0, 1 - (t - (this.joyAt ?? -9)) * 2.4);
+      h.head.scale.setScalar(1 + (calm ? 0 : Math.sin(joy * pie * 3) * joy * 0.14));
+    }
+    // Игрушки на полке болеют за зайчика: покачиваются и подпрыгивают, когда он проезжает мимо
+    for (const ty of this.toys || []) {
+      const d = st.x - ty.position.x,
+        near = calm ? 0 : Math.exp(-(d * d) / 8);
+      ty.position.y = ty.userData.baseY + Math.abs(Math.sin(t * 8 + ty.position.x)) * 0.28 * near;
+      ty.rotation.z = calm ? 0 : Math.sin(t * 2 + ty.position.x) * 0.05 + Math.sin(t * 11 + ty.position.x) * 0.1 * near;
+    }
     // Столкновение: отскок назад, звёздочки над головой
     const since = t - this.hitT;
     if (run.state === "hit") {
