@@ -138,6 +138,18 @@ export class Crane {
     frame.castShadow = true;
     frame.frustumCulled = false;
     this.head.add(frame);
+    // Сигнальные огни: красные маячки на вершине и на кончике стрелы мигают по очереди,
+    // в рубке крановщика горит тёплый свет
+    const lampGeo = new T.SphereGeometry(0.42, 10, 8);
+    this.beacons = [[0, 9.9, 0], [JIB, 1.0, 0], [-15, 0.9, 0]].map(([x, y, z]) => {
+      const lamp = new T.Mesh(lampGeo, new T.MeshBasicMaterial({ color: "#ff3b2e" }));
+      lamp.position.set(x, y, z);
+      this.head.add(lamp);
+      return lamp;
+    });
+    this.cabLight = new T.Mesh(new T.BoxGeometry(1.7, 0.8, 0.08), new T.MeshBasicMaterial({ color: "#ffd98a" }));
+    this.cabLight.position.set(1.4, -1.25, 2.95);
+    this.head.add(this.cabLight);
     this.trolley = new T.Mesh(block(2, 0.5, 1.6, 0, -0.3, 0, "#e23b2e"), paint);
     this.trolley.castShadow = true;
     this.head.add(this.trolley);
@@ -245,6 +257,13 @@ export class Crane {
     }
     this.head.position.y = this.jibY;
     this.head.rotation.y = this.angle;
+    const now = performance.now() / 1000;
+    this.beacons.forEach((lamp, i) => {
+      const on = Math.max(0, Math.sin(now * 3.2 - i * 2.1)) ** 3;
+      lamp.material.color.setRGB(0.35 + on * 3.4, 0.03 + on * 0.25, 0.03 + on * 0.2);
+      lamp.scale.setScalar(0.8 + on * 0.5);
+    });
+    this.cabLight.material.color.setRGB(1.5, 1.15, 0.6).multiplyScalar(0.8 + Math.sin(now * 1.3) * 0.08);
     this.trolley.position.x = this.radius;
     const top = tmpB.set(this.bx, this.jibY - 0.5, this.bz).clone();
     this.hook.position.copy(this.pos);
