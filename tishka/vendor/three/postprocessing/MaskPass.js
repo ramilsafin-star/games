@@ -1,4 +1,4 @@
-import { Pass } from './Pass.js?v=dbc40355';
+import { Pass } from './Pass.js?v=4d105ea8';
 
 /**
  * This pass can be used to define a mask during post processing.

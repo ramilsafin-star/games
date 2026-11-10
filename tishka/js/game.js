@@ -1,8 +1,8 @@
 // «Звездочёт Тишка»: мышонок пробирается по обсерватории, настраивает телескопы и не попадается в свет
 // фонарика робота-сторожа. Логика — sim.js (проверяется tests/rooms.mjs), 3D — world.js, комнаты — rooms.js.
-import { World } from "./world.js?v=dbc40355";
-import { ROOMS } from "./rooms.js?v=dbc40355";
-import { Game } from "./sim.js?v=dbc40355";
+import { World } from "./world.js?v=4d105ea8";
+import { ROOMS } from "./rooms.js?v=4d105ea8";
+import { Game } from "./sim.js?v=4d105ea8";
 
 const el = (id) => document.getElementById(id);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

@@ -1,15 +1,15 @@
 // 3D «Звездочёта Тишки»: обсерватория-станция парит среди звёзд. Пол в клетку, стены, ящики, телескопы,
 // лифт, мышонок Тишка, роботы-сторожа Бип с фонариком. Свет фонарика на полу считается так же, как обнаружение.
 // Клетка (x, z) из sim.js — это мир (x, 0, z).
-import * as T from "../vendor/three/three.module.min.js?v=dbc40355";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=dbc40355";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=dbc40355";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=dbc40355";
-import { polish } from "./gfx.js?v=dbc40355";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=dbc40355";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=dbc40355";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=dbc40355";
-import { coneRays, TUNE_R } from "./sim.js?v=dbc40355";
+import * as T from "../vendor/three/three.module.min.js?v=4d105ea8";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=4d105ea8";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=4d105ea8";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=4d105ea8";
+import { polish } from "./gfx.js?v=4d105ea8";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=4d105ea8";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=4d105ea8";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=4d105ea8";
+import { coneRays, TUNE_R } from "./sim.js?v=4d105ea8";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;
@@ -100,6 +100,7 @@ function mouse() {
     ear.scale.set(1, 1, 0.35);
     ear.position.set(s * 0.17, 0.15, -0.02);
     head.add(ear);
+    (head.userData.ears ||= []).push(ear);
     const inner = new T.Mesh(new T.SphereGeometry(0.09, 14, 10), pink);
     inner.scale.set(1, 1, 0.3);
     inner.position.set(s * 0.17, 0.15, 0.02);
@@ -110,6 +111,7 @@ function mouse() {
     const shine = new T.Mesh(new T.SphereGeometry(0.013, 8, 6), new T.MeshBasicMaterial({ color: "#ffffff" }));
     shine.position.set(s * 0.08 + 0.012, 0.055, 0.195);
     head.add(shine);
+    (head.userData.eyes ||= []).push(eye, shine);
     const foot = new T.Mesh(new T.SphereGeometry(0.07, 10, 8), pink);
     foot.scale.set(1, 0.5, 1.4);
     foot.position.set(s * 0.1, 0.03, 0.04);
@@ -136,7 +138,7 @@ function mouse() {
   body.add(tail);
   g.traverse((o) => o.isMesh && (o.castShadow = true));
   g.scale.setScalar(1.55);
-  return { group: g, body, head, feet: body.children.filter((o) => o.userData.side) };
+  return { group: g, body, head, tail, feet: body.children.filter((o) => o.userData.side) };
 }
 
 // ---------- Робот-сторож Бип ----------
@@ -722,6 +724,7 @@ export class World {
     const s = this.scopes[i];
     if (!s) return;
     const p = s.group.position;
+    this.joyAt = this.time;
     this.burst([p.x, 1, p.z], 40, ["#ffe066", s.tubeCol, "#ffffff"], 4);
     s.lens.material.emissiveIntensity = 3;
     this.tween(1.2, (q) => (s.beam.material.opacity = 0.55 * Math.min(1, q * 2)));
@@ -729,6 +732,7 @@ export class World {
   gotStar() {
     if (!this.starMesh) return;
     const { mesh, halo } = this.starMesh;
+    this.joyAt = this.time;
     this.burst([mesh.position.x, 0.6, mesh.position.z], 30, ["#ffe066", "#ffffff", "#ff9fd0"], 3.5);
     this.tween(0.5, (p) => {
       mesh.scale.setScalar(1 + p);
@@ -813,6 +817,27 @@ export class World {
     m.body.rotation.z = p.moving ? Math.sin(walk) * 0.08 : 0;
     m.feet.forEach((f) => (f.position.z = 0.04 + (p.moving ? Math.sin(walk + (f.userData.side > 0 ? 0 : pie)) * 0.08 : 0)));
     m.head.rotation.y = p.moving ? 0 : Math.sin(t * 0.8) * 0.3 * calm;
+    // Живой мышонок: моргает, шевелит ушками и хвостиком; когда робот настораживается —
+    // пригибается и прижимает ушки; от настроенного телескопа и звёздочки подпрыгивает
+    {
+      const hu = m.head.userData;
+      if (hu.blinkAt == null || t > hu.blinkAt + 0.13) hu.blinkAt = t + 1.5 + Math.random() * 3;
+      const open = calm === 1 && t > hu.blinkAt ? 0.12 : 1;
+      for (const e of hu.eyes || []) e.scale.y = open;
+      let fear = 0;
+      for (const gd of g.guards) fear = Math.max(fear, gd.attention || 0);
+      hu.duck = (hu.duck || 0) + (Math.min(1, fear * 1.6) - (hu.duck || 0)) * Math.min(1, dt * 8);
+      const duck = hu.duck * (calm === 1 ? 1 : 0);
+      const joy = calm === 1 ? clamp(1 - (t - (this.joyAt ?? -9)) / 0.5, 0, 1) : 0,
+        up = joy > 0 ? Math.sin((1 - joy) * pie) : 0;
+      m.body.position.y += up * 0.22;
+      m.body.scale.set(1 + duck * 0.1 - up * 0.06, 1 - duck * 0.2 + up * 0.12, 1 + duck * 0.1 - up * 0.06);
+      (hu.ears || []).forEach((e, i) => {
+        const k = (t * 0.6 + i * 0.4) % 2.7;
+        e.rotation.x = -duck * 0.7 + (k < 0.25 && !duck ? Math.sin((k / 0.25) * pie * 2) * 0.25 * calm : 0);
+      });
+      m.tail.rotation.y = Math.sin(t * (p.moving ? 9 : 2.5)) * (p.moving ? 0.25 : 0.12) * calm + Math.sin(t * 30) * 0.06 * duck;
+    }
     this.ghost.position.copy(m.group.position);
     this.ghost.rotation.copy(m.group.rotation);
     this.ghost.scale.copy(m.group.scale);
