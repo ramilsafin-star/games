@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#7fd0ff" />
+    <title>Дворовой кубок</title>
+    <meta name="description" content="Футбол один на один во дворе: зверята с большими головами, звёздный удар и кубок чемпиона." />
+    <link rel="icon" href="./icon-192.png" />
+    <link rel="apple-touch-icon" href="./icon-180.png" />
+    <script src="./vendor/vk/vk-bridge.min.js?v=bb673277"></script>
+    <script src="./js/vk-host.js?v=bb673277"></script>
+    <link rel="stylesheet" href="./style.css?v=bb673277" />
+  </head>
+  <body>
+    <canvas id="stage" aria-label="Футбольное поле во дворе"></canvas>
+    <header class="top">
+      <div id="board" class="board" hidden>
+        <div class="team"><img id="pic0" alt="" /><span class="meter"><i id="star0"></i></span></div>
+        <div class="score"><b id="score">0 : 0</b><small id="clock">1:00</small></div>
+        <div class="team right"><span class="meter"><i id="star1"></i></span><img id="pic1" alt="" /></div>
+      </div>
+      <div class="tools">
+        <button id="pause" class="round" aria-label="Пауза" hidden></button>
+        <button id="music" class="round"></button>
+        <button id="sound" class="round"></button>
+      </div>
+    </header>
+    <div id="banner" class="banner" aria-live="polite"></div>
+
+    <!-- Кнопки на экране: у каждого игрока свои -->
+    <div id="pad0" class="pad left" hidden>
+      <div class="move"><button class="btn" data-k="left" aria-label="Влево">◀</button><button class="btn" data-k="right" aria-label="Вправо">▶</button></div>
+      <div class="act"><button class="btn jump" data-k="jump" aria-label="Прыжок">⤒</button><button class="btn kick" data-k="kick" aria-label="Удар">⚽</button><button class="btn lob" data-k="lob" aria-label="Навес">⤴</button></div>
+    </div>
+    <div id="pad1" class="pad right" hidden>
+      <div class="act"><button class="btn lob" data-k="lob" aria-label="Навес">⤴</button><button class="btn kick" data-k="kick" aria-label="Удар">⚽</button><button class="btn jump" data-k="jump" aria-label="Прыжок">⤒</button></div>
+      <div class="move"><button class="btn" data-k="left" aria-label="Влево">◀</button><button class="btn" data-k="right" aria-label="Вправо">▶</button></div>
+    </div>
+
+    <section id="title" class="screen title">
+      <div class="logo">
+        <h1><span>Дворовой</span><span>кубок</span></h1>
+        <p>Футбол один на один во дворе!</p>
+      </div>
+      <div class="modes">
+        <button id="mode-cup" class="big">🏆 Кубок</button>
+        <button id="mode-two" class="big alt">👫 Вдвоём</button>
+      </div>
+      <p id="cups" class="cups"></p>
+    </section>
+
+    <section id="pick" class="screen dim" hidden>
+      <div class="sheet">
+        <h2 id="pick-title">Выбери футболиста</h2>
+        <div id="heroes" class="heroes"></div>
+      </div>
+    </section>
+
+    <section id="ladder" class="screen dim" hidden>
+      <div class="sheet">
+        <h2>Кубок двора</h2>
+        <div id="steps" class="steps"></div>
+        <button id="go" class="big">На поле ▶</button>
+      </div>
+    </section>
+
+    <section id="paused" class="screen dim" hidden>
+      <div class="card">
+        <h2>Пауза</h2>
+        <div class="row">
+          <button id="quit" class="round wide" aria-label="Выйти в меню">🏠</button>
+          <button id="resume" class="big">▶ Дальше</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="result" class="screen dim" hidden>
+      <div class="card">
+        <div id="result-pic" class="result-pic"></div>
+        <h2 id="result-title"></h2>
+        <p id="result-score" class="result-score"></p>
+        <div class="row">
+          <button id="again" class="round wide" aria-label="Сыграть ещё раз">↻</button>
+          <button id="next" class="big">Дальше ▶</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="rotate" aria-live="polite">
+      <div><b>📱</b><p>Поверни телефон боком —<br />так видно всё поле!</p><button id="portrait-ok" class="later">Играть так</button></div>
+    </div>
+    <div id="nogl" class="screen nogl" hidden>
+      <p>Тут нужна 3D-графика (WebGL), а браузер её не включил. Попробуйте другой браузер.</p>
+    </div>
+    <script src="./js/audio.js?v=bb673277"></script>
+    <script type="module" src="./js/game.js?v=bb673277"></script>
+    <script src="./js/juice.js?v=bb673277"></script>
+  </body>
+</html>
