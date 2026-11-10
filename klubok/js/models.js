@@ -1,6 +1,6 @@
 // Фигурки «Волшебного клубочка»: котёнок Пуговка, клубочек, друзья у выхода, угощения, ключи.
 // Всё из простых фигур Three.js, без загружаемых моделей.
-import * as T from "../vendor/three/three.module.min.js?v=9240d4b6";
+import * as T from "../vendor/three/three.module.min.js?v=bad15ac6";
 
 const pie = Math.PI;
 export const glossy = (color, extra = {}) => new T.MeshPhysicalMaterial({ color, roughness: 0.35, clearcoat: 0.7, clearcoatRoughness: 0.2, ...extra });
@@ -103,6 +103,7 @@ export function kitten() {
     const ear = at(new T.Mesh(new T.ConeGeometry(0.12, 0.22, 4), fur), s * 0.2, 0.28, -0.02);
     ear.rotation.set(0, pie / 4, -s * 0.32);
     head.add(ear);
+    (head.userData.ears ||= []).push(ear);
     const inner = at(new T.Mesh(new T.ConeGeometry(0.065, 0.13, 4), pink), s * 0.195, 0.26, 0.025);
     inner.rotation.set(0, pie / 4, -s * 0.32);
     head.add(inner);

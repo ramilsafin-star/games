@@ -1,16 +1,16 @@
 // 3D «Волшебного клубочка»: лабиринт-диорама в одном из пяти миров, котёнок Пуговка с клубочком,
 // ниточка от старта до котёнка, следы лапок, подсказка-дорожка из искр, друг у выхода, салют.
 // Логика (maze.js) решает, куда бежит котёнок; здесь всё рисуется по тем же клеткам.
-import * as T from "../vendor/three/three.module.min.js?v=9240d4b6";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=9240d4b6";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=9240d4b6";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=9240d4b6";
-import { polish } from "./gfx.js?v=9240d4b6";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=9240d4b6";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=9240d4b6";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=9240d4b6";
-import { DX, DY, isOpen, nb, xy, threadStep } from "./maze.js?v=9240d4b6";
-import { kitten, yarnBall, YARN, FRIENDS, ITEMS, keyModel, KEY_COLORS, glossy, matte, glowColor, glowSprite, canvasTexture } from "./models.js?v=9240d4b6";
+import * as T from "../vendor/three/three.module.min.js?v=bad15ac6";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=bad15ac6";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=bad15ac6";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=bad15ac6";
+import { polish } from "./gfx.js?v=bad15ac6";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=bad15ac6";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=bad15ac6";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=bad15ac6";
+import { DX, DY, isOpen, nb, xy, threadStep } from "./maze.js?v=bad15ac6";
+import { kitten, yarnBall, YARN, FRIENDS, ITEMS, keyModel, KEY_COLORS, glossy, matte, glowColor, glowSprite, canvasTexture } from "./models.js?v=bad15ac6";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;
@@ -1112,6 +1112,7 @@ export class World {
     const it = this.items[i];
     if (!it || it.taken) return;
     it.taken = true;
+    this.joyAt = this.time;
     const at = it.g.position.clone();
     this.burst(at, 34, [it.color, "#ffffff", "#ffe14a"], 4);
     const s0 = it.g.scale.x;
@@ -1479,6 +1480,34 @@ export class World {
     // Моргание
     const blink = t % 3.6 < 0.12 ? 0.1 : 1;
     c.eyes.forEach((e) => (e.scale.y = blink));
+    // Ушки подрагивают: по очереди, раз в пару секунд
+    (c.head.userData.ears || []).forEach((e, i) => {
+      const k = (t * 0.7 + i * 0.37) % 2.6;
+      e.rotation.x = k < 0.25 ? Math.sin((k / 0.25) * pie * 2) * 0.35 : 0;
+    });
+    // Радость от находки: котёнок подпрыгивает и вытягивается
+    const joy = clamp(1 - (t - (this.joyAt ?? -9)) / 0.55, 0, 1);
+    if (joy > 0 && !this.cheer) {
+      const up = Math.sin((1 - joy) * pie);
+      c.body.position.y += up * 0.35;
+      c.g.scale.set(1.25 * (1 - up * 0.08), 1.25 * (1 + up * 0.14), 1.25 * (1 - up * 0.08));
+    } else if (!this.cheer) c.g.scale.setScalar(1.25);
+    // Стоит на месте — с любопытством поглядывает на ближайшую находку
+    let lookY = 0;
+    if (!moving && !this.cheer) {
+      let best = 4.5 * 4.5,
+        near = null;
+      for (const it of this.items || []) {
+        if (it.taken) continue;
+        const d2 = it.g.userData.base.distanceToSquared(this.hero);
+        if (d2 < best) (best = d2), (near = it.g.userData.base);
+      }
+      if (near) {
+        const want = Math.atan2(near.x - this.hero.x, near.z - this.hero.z) - c.g.rotation.y;
+        lookY = clamp(Math.atan2(Math.sin(want), Math.cos(want)), -0.7, 0.7);
+      }
+    }
+    c.head.rotation.y += (lookY - c.head.rotation.y) * Math.min(1, dt * 5);
     // Ниточка до клубочка
     this.updateTail();
     // Стрелки «куда можно»: светятся и покачиваются
@@ -1513,8 +1542,46 @@ export class World {
     if (this.exit) {
       this.exit.star.rotation.y = t * 1.6;
       this.exit.portal.material.opacity = 0.35 + Math.sin(t * 2.5) * 0.12;
-      if (!this.cheer) this.exit.friend.rotation.y = Math.sin(t * 0.9) * 0.25;
+      if (!this.cheer) {
+        this.exit.friend.rotation.y = Math.sin(t * 0.9) * 0.25;
+        // Друг замечает котёнка и нетерпеливо подпрыгивает, когда тот уже близко
+        const fp = this.exit.friend.getWorldPosition(new T.Vector3());
+        const close = clamp(1 - fp.distanceTo(this.hero) / (S * 3.2), 0, 1);
+        this.exit.friend.position.y = Math.abs(Math.sin(t * 7)) * 0.3 * close;
+      }
     }
+    // Бабочки в цветущем саду
+    if (this.wi === 0 && !this.motion.matches) {
+      if (!this.flies) {
+        const wingGeo = new T.PlaneGeometry(0.22, 0.28);
+        wingGeo.translate(0.11, 0, 0);
+        wingGeo.rotateX(-pie / 2);
+        this.flies = ["#ff8fc7", "#ffd84a", "#8fd0ff"].map((col, i) => {
+          const g = new T.Group();
+          const mat = new T.MeshBasicMaterial({ color: col, side: T.DoubleSide });
+          const wings = [1, -1].map((sd) => {
+            const h = new T.Group();
+            h.scale.x = sd;
+            h.add(new T.Mesh(wingGeo, mat));
+            g.add(h);
+            return h;
+          });
+          this.scene.add(g);
+          return { g, wings, ph: i * 2.1 };
+        });
+      }
+      for (const f of this.flies) {
+        f.g.visible = true;
+        const a = t * 0.5 + f.ph;
+        const at = (q, v) => v.set(this.hero.x + Math.sin(q) * (3 + f.ph * 0.4), 1.5 + Math.sin(q * 2.3) * 0.4, this.hero.z + Math.cos(q * 1.3) * 2.6);
+        f.g.lookAt(at(a + 0.03, new T.Vector3()));
+        at(a, f.g.position);
+        f.g.position.y += Math.sin(t * 8 + f.ph) * 0.06;
+        const flap = Math.sin(t * 17 + f.ph) * 0.95;
+        f.wings[0].rotation.z = flap;
+        f.wings[1].rotation.z = -flap;
+      }
+    } else for (const f of this.flies || []) f.g.visible = false;
     for (const s of this.twinkles || []) if (s.parent) s.material.opacity = 0.25 + Math.max(0, Math.sin(t * 2 + s.userData.tw)) * 0.75;
     for (const b of this.bobbers || []) if (b.parent) b.position.y = -1 + Math.sin(t * 0.8 + b.userData.bob) * 0.4;
     // Подсказка
