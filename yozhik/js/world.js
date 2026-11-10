@@ -1,15 +1,15 @@
 // 3D-мир «Ёжика-почтальона»: диорама с разрезом земли, почта и станция, рельсы с опорами,
 // ёжик в вагончике, кольца с печатями, частицы. Игровая плоскость — z = 0, x вправо, y вверх.
-import * as T from "../vendor/three/three.module.min.js?v=81d83b1d";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=81d83b1d";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=81d83b1d";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=81d83b1d";
-import { polish } from "./gfx.js?v=81d83b1d";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=81d83b1d";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=81d83b1d";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=81d83b1d";
-import { groundAt, platforms, railAt } from "./physics.js?v=81d83b1d";
-import { STORIES } from "./levels.js?v=81d83b1d";
+import * as T from "../vendor/three/three.module.min.js?v=2aa0575c";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=2aa0575c";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=2aa0575c";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=2aa0575c";
+import { polish } from "./gfx.js?v=2aa0575c";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=2aa0575c";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=2aa0575c";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=2aa0575c";
+import { groundAt, platforms, railAt } from "./physics.js?v=2aa0575c";
+import { STORIES } from "./levels.js?v=2aa0575c";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;
@@ -177,6 +177,7 @@ function hedgehog() {
     const shine = new T.Mesh(new T.SphereGeometry(0.014, 8, 6), new T.MeshBasicMaterial({ color: "#ffffff" }));
     shine.position.set(0.13, 0.1, 0.08 + s * 0.08);
     head.add(shine);
+    (head.userData.eyes ||= []).push(eye, shine);
     const cheek = new T.Mesh(new T.SphereGeometry(0.035, 10, 8), matte("#ff9fb0"));
     cheek.scale.set(1, 0.6, 0.4);
     cheek.position.set(0.12, -0.03, 0.12 + s * 0.06);
@@ -1540,6 +1541,7 @@ export class World {
     return g;
   }
   ringTaken(i) {
+    this.joyAt = this.time;
     const r = this.rings[i];
     if (!r || r.userData.taken) return;
     r.userData.taken = true;
@@ -2238,12 +2240,28 @@ export class World {
     if (this.recipient) {
       const r = this.recipient,
         happy = this.cheer && t - this.cheer < 3;
-      r.position.y = this.data.finish[1] + (happy ? Math.abs(Math.sin((t - this.cheer) * 9)) * 0.45 : Math.abs(Math.sin(t * 2)) * 0.04 * calm);
+      // Чем ближе вагончик, тем нетерпеливее подпрыгивает получатель
+      const near = this.wagon && this.wagonSpeed > 0.5 ? clamp(1 - Math.abs(this.wagon.group.position.x - r.position.x) / 8, 0, 1) : 0;
+      r.position.y = this.data.finish[1] + (happy ? Math.abs(Math.sin((t - this.cheer) * 9)) * 0.45 : (Math.abs(Math.sin(t * 2)) * 0.04 + Math.abs(Math.sin(t * 7)) * 0.2 * near) * calm);
       r.userData.head.rotation.z = happy ? Math.sin(t * 12) * 0.2 : Math.sin(t * 1.3) * 0.08 * calm;
     }
     // Вагончик: дымок у паровоза, пламя у ракеты, искры на скорости
     const w = this.wagon;
     if (w) {
+      // Ёжик-машинист живой: моргает, на скорости задирает нос и подпрыгивает на сиденье,
+      // от пойманного колечка голова радостно «пружинит»
+      if (w.head) {
+        const hu = w.head.userData,
+          fast = clamp(this.wagonSpeed / 12, 0, 1);
+        if (hu.blinkAt == null || t > hu.blinkAt + 0.13) hu.blinkAt = t + 1.5 + Math.random() * 3;
+        const open = calm === 1 && t > hu.blinkAt ? 0.12 : 1;
+        for (const e of hu.eyes || []) e.scale.y = open;
+        hu.baseY ??= w.head.position.y;
+        w.head.rotation.z = (Math.sin(t * 1.5) * 0.05 + fast * 0.25) * calm;
+        w.head.position.y = hu.baseY + Math.abs(Math.sin(t * 17)) * 0.018 * fast * calm;
+        const joy = clamp(1 - (t - (this.joyAt ?? -9)) * 2.4, 0, 1);
+        w.head.scale.setScalar(1 + Math.sin(joy * pie * 3) * joy * 0.16 * calm);
+      }
       if (w.flame) w.flame.scale.setScalar(0.4 + Math.min(1, this.wagonSpeed / 12) * 0.7 + Math.sin(t * 40) * 0.08);
       if (w.smoke && this.wagonSpeed > 0.5 && Math.random() < dt * 8) {
         const p = new T.Vector3();

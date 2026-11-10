@@ -1,8 +1,8 @@
 // «Ёжик-почтальон»: ребёнок рисует пальцем рельсы от почты до станции, вагончик с ёжиком едет сам.
 // Физика — physics.js (шаг 1/120 с, заезд повторяется точно), картинка — world.js, уровни — levels.js.
-import { World, SKINS, railUp } from "./world.js?v=81d83b1d";
-import { LEVELS, WORLDS, STORIES } from "./levels.js?v=81d83b1d";
-import { Run, DT, processStroke, makeRail, anchors, canDraw, blockedSegment, SNAP, drawStrokes, fixedRails, railAt, predictJumps, bendRail } from "./physics.js?v=81d83b1d";
+import { World, SKINS, railUp } from "./world.js?v=2aa0575c";
+import { LEVELS, WORLDS, STORIES } from "./levels.js?v=2aa0575c";
+import { Run, DT, processStroke, makeRail, anchors, canDraw, blockedSegment, SNAP, drawStrokes, fixedRails, railAt, predictJumps, bendRail } from "./physics.js?v=2aa0575c";
 
 const el = (id) => document.getElementById(id);
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
