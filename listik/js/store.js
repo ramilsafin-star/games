@@ -1,7 +1,7 @@
 // Сцена магазина на Three.js: всё, что видно и что движется. Правила покупки живут в game.js.
-import * as T from "../vendor/three/three.module.min.js?v=231c0133";
-import "./gfx.js?v=231c0133";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=231c0133";
+import * as T from "../vendor/three/three.module.min.js?v=d6a10efd";
+import "./gfx.js?v=d6a10efd";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=d6a10efd";
 import {
   shop,
   counter,
@@ -21,7 +21,7 @@ import {
   heart,
   group,
   orb,
-} from "./models.js?v=231c0133";
+} from "./models.js?v=d6a10efd";
 
 const clamp = T.MathUtils.clamp,
   mix = T.MathUtils.lerp,
@@ -742,6 +742,65 @@ export class Store {
         this.confetti.setMatrixAt(i, this.dummy.matrix);
       });
       this.confetti.instanceMatrix.needsUpdate = true;
+    }
+    // Покупатель следит глазами за товаром, который кассир несёт к сканеру
+    if (who) {
+      const it = this.drag?.it;
+      const yaw = it ? clamp((it.mesh.position.x - who.root.position.x) * 0.22, -0.5, 0.5) : 0;
+      this.lookYaw = (this.lookYaw || 0) + (yaw - (this.lookYaw || 0)) * clamp(dt * 6, 0, 1);
+      who.head.rotation.y = this.lookYaw * motion;
+      who.head.rotation.x = Math.abs(this.lookYaw) * 0.3 * motion;
+    }
+    // Уют: в свете ламп плавают золотые пылинки, по лавке порхает бабочка
+    if (!this.motes) {
+      const n = 46,
+        pos = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) pos.set([(Math.random() - 0.5) * 12, 0.6 + Math.random() * 4, -2 + Math.random() * 3.6], i * 3);
+      const geo = new T.BufferGeometry();
+      geo.setAttribute("position", new T.BufferAttribute(pos, 3));
+      this.motes = new T.Points(geo, new T.PointsMaterial({ color: "#ffe9a8", size: 0.07, transparent: true, opacity: 0.55, depthWrite: false, blending: T.AdditiveBlending }));
+      this.motes.userData.base = pos.slice();
+      this.scene.add(this.motes);
+      const fly = new T.Group();
+      const wingGeo = new T.PlaneGeometry(0.2, 0.26);
+      wingGeo.translate(0.1, 0, 0);
+      const wingMat = new T.MeshBasicMaterial({ color: "#ff8fc7", side: T.DoubleSide });
+      const wings = [1, -1].map((sd) => {
+        const w = new T.Mesh(wingGeo, wingMat);
+        w.rotation.x = -pie / 2;
+        const hinge = new T.Group();
+        hinge.scale.x = sd;
+        hinge.add(w);
+        fly.add(hinge);
+        return hinge;
+      });
+      const body = new T.Mesh(new T.CapsuleGeometry(0.025, 0.16, 4, 8), new T.MeshBasicMaterial({ color: "#5b4a3c" }));
+      body.rotation.x = pie / 2;
+      fly.add(body);
+      fly.scale.setScalar(0.75);
+      this.scene.add(fly);
+      this.butterfly = { g: fly, wings };
+    }
+    this.motes.visible = this.butterfly.g.visible = !!motion;
+    if (motion) {
+      const mp = this.motes.geometry.attributes.position,
+        base = this.motes.userData.base;
+      for (let i = 0; i < mp.count; i++) {
+        mp.setX(i, base[i * 3] + Math.sin(t * 0.23 + i) * 0.35);
+        mp.setY(i, 0.6 + ((base[i * 3 + 1] + t * (0.05 + (i % 5) * 0.012)) % 4));
+      }
+      mp.needsUpdate = true;
+      this.motes.material.opacity = 0.4 + 0.15 * Math.sin(t * 0.9);
+      const bf = this.butterfly,
+        a = t * 0.45;
+      const at = (q) => bf.g.position.set(Math.sin(q) * 5.2, 3.7 + Math.sin(q * 2.3) * 0.45 + Math.sin(t * 7) * 0.05, -1.5 + Math.cos(q * 1.7) * 0.5);
+      at(a + 0.02);
+      const ahead = bf.g.position.clone();
+      at(a);
+      bf.g.lookAt(ahead);
+      const flap = Math.sin(t * 16) * 0.9;
+      bf.wings[0].rotation.z = flap;
+      bf.wings[1].rotation.z = -flap;
     }
     if (!force) this.aimCamera(dt);
     this.renderer.render(this.scene, this.camera);
