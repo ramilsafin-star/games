@@ -1,4 +1,4 @@
-const CACHE = "bibika-v30-gfx";
+const CACHE = "bibika-v31-juice";
 const FILES = [
   "./",
   "./index.html",
@@ -12,6 +12,7 @@ const FILES = [
   "./js/missions.js",
   "./js/powers.js",
   "./js/3d/blasts.js",
+  "./js/juice.js",
   "./js/3d/boot.js",
   "./js/3d/gfx.js",
   "./js/3d/scenery.js",

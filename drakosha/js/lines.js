@@ -1,6 +1,6 @@
 // Все фразы Дракоши. Их записывает скрипт озвучки games-portal/tools/voices.mjs голосом Gemini:
 // lines → voices/<имя>.mp3, слова → voices/w-<asset>.mp3 («Это ёжик!»), загадки → voices/h-<asset>.mp3.
-import { CARDS } from "./words.js?v=c14a4128";
+import { CARDS } from "./words.js?v=9aa9927a";
 
 export const lines = {
   hello: "Привет! Я Дракоша, почтальон волшебной почты! На письмах стёрлись слова. Поможешь их угадать?",

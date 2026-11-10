@@ -1,15 +1,15 @@
 // 3D «Гонки бобрят»: острова с мягкими берегами, вода с бликами, дорога, кучи брёвнышек, мостики,
 // бобрята в кепках с брёвнышками на спине, ворота, финиш с почтовым ящиком, утки и лодочки.
 // Клетка гонки (x, y) — это мир (x, 0, −y).
-import * as T from "../vendor/three/three.module.min.js?v=bc1281a1";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=bc1281a1";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=bc1281a1";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=bc1281a1";
-import { polish } from "./gfx.js?v=bc1281a1";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=bc1281a1";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=bc1281a1";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=bc1281a1";
-import { shoreField, landHeight } from "./race.js?v=bc1281a1";
+import * as T from "../vendor/three/three.module.min.js?v=6061072f";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=6061072f";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=6061072f";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=6061072f";
+import { polish } from "./gfx.js?v=6061072f";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=6061072f";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=6061072f";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=6061072f";
+import { shoreField, landHeight } from "./race.js?v=6061072f";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;

@@ -1,8 +1,8 @@
 // Домик на дереве: каждая часть появляется по мере того, как её строит ребёнок.
-import * as T from "../vendor/three/three.module.min.js?v=45a02ded";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=45a02ded";
-import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js?v=45a02ded";
-import { mat, easeBack, easeOut, TRUNK_Z } from "./world.js?v=45a02ded";
+import * as T from "../vendor/three/three.module.min.js?v=88d2ca30";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=88d2ca30";
+import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js?v=88d2ca30";
+import { mat, easeBack, easeOut, TRUNK_Z } from "./world.js?v=88d2ca30";
 
 export const DECK_Y = 5.6;
 export const WALL_H = 3.1,

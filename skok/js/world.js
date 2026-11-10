@@ -2,15 +2,15 @@
 // гайки, винтики, кнопки, кубики-платформы, золотые шестерёнки, флажки на карандашах,
 // коробка с деталями на финише и заводной зайчик Скок на пружинке.
 // Логика (jump.js) живёт в плоскости: x — вдоль верстака, y — вверх; в 3D это (x, y, 0).
-import * as T from "../vendor/three/three.module.min.js?v=cc40c0ef";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=cc40c0ef";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=cc40c0ef";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=cc40c0ef";
-import { polish } from "./gfx.js?v=cc40c0ef";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=cc40c0ef";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=cc40c0ef";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=cc40c0ef";
-import { HERO } from "./jump.js?v=cc40c0ef";
+import * as T from "../vendor/three/three.module.min.js?v=3dfd3e9f";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=3dfd3e9f";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=3dfd3e9f";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=3dfd3e9f";
+import { polish } from "./gfx.js?v=3dfd3e9f";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=3dfd3e9f";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=3dfd3e9f";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=3dfd3e9f";
+import { HERO } from "./jump.js?v=3dfd3e9f";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;

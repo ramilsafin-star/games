@@ -1,14 +1,14 @@
 // 3D «Велопанды»: трасса-диорама с разрезом земли, панда в шлеме на велосипеде, звёздочки, ворота старта,
 // финиш с почтовым ящиком и другом-получателем, таблички через каждые 10 м, флажок рекорда. Вид сбоку.
-import * as T from "../vendor/three/three.module.min.js?v=df813824";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=df813824";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=df813824";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=df813824";
-import { polish } from "./gfx.js?v=df813824";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=df813824";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=df813824";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=df813824";
-import { makeGround, CONFIG } from "./ride.js?v=df813824";
+import * as T from "../vendor/three/three.module.min.js?v=8b951b98";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=8b951b98";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=8b951b98";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=8b951b98";
+import { polish } from "./gfx.js?v=8b951b98";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=8b951b98";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=8b951b98";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=8b951b98";
+import { makeGround, CONFIG } from "./ride.js?v=8b951b98";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;

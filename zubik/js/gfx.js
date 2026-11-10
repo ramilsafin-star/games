@@ -1,7 +1,7 @@
 // Общая «полировка» цвета для игр без пост-обработки: сочность бледных цветов
 // и мягкий контраст прямо в шейдерах материалов (без лишних проходов, скорость та же).
 // Подключается первым импортом: шейдеры должны собраться уже с этой добавкой.
-import * as T from "../vendor/three/three.module.min.js?v=15dc8320";
+import * as T from "../vendor/three/three.module.min.js?v=013fe0bd";
 
 if (!T.ShaderChunk.colorspace_fragment.includes("gfxS")) {
   T.ShaderChunk.colorspace_fragment += `

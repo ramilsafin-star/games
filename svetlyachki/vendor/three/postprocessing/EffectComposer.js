@@ -4,10 +4,10 @@ import {
 	NoBlending,
 	Vector2,
 	WebGLRenderTarget
-} from '../three.module.min.js?v=8dc05680';
-import { CopyShader } from '../shaders/CopyShader.js?v=8dc05680';
-import { ShaderPass } from './ShaderPass.js?v=8dc05680';
-import { ClearMaskPass, MaskPass } from './MaskPass.js?v=8dc05680';
+} from '../three.module.min.js?v=f05515bf';
+import { CopyShader } from '../shaders/CopyShader.js?v=f05515bf';
+import { ShaderPass } from './ShaderPass.js?v=f05515bf';
+import { ClearMaskPass, MaskPass } from './MaskPass.js?v=f05515bf';
 
 /**
  * Used to implement post-processing effects in three.js.

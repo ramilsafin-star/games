@@ -1,6 +1,6 @@
-import { flavors } from "./models.js?v=b102cc67";
-import { Park } from "./park.js?v=b102cc67";
-import { icon, speaker, picto, tune } from "./icons.js?v=b102cc67";
+import { flavors } from "./models.js?v=265a53a5";
+import { Park } from "./park.js?v=265a53a5";
+import { icon, speaker, picto, tune } from "./icons.js?v=265a53a5";
 
 const el = (id) => document.getElementById(id);
 // Порядок гостей совпадает с pals в models.js. voice — файл в voices/ со словами из thanks.

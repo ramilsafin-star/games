@@ -1,6 +1,6 @@
 // Общая «полировка» картинки: сглаживание краёв (MSAA), лёгкая резкость,
 // сочность бледных цветов, мягкий контраст и виньетка. Один проход после OutputPass.
-import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=c14a4128";
+import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=9aa9927a";
 
 export function polish(composer, opt = {}) {
   const o = { vibrance: 0.4, contrast: 0.12, vignette: 0.22, sharpen: 0.3, ...opt };
