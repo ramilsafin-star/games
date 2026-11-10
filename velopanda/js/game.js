@@ -1,8 +1,8 @@
 // «Велопанда»: панда едет на заднем колесе. Держишь палец — колесо поднимается, отпустил — опускается.
 // Физика — ride.js (проверяется tests/ride.mjs), трассы — tracks.js, 3D — world.js.
-import { World, THEMES, BIKES } from "./world.js?v=dae0ee37";
-import { TRACKS } from "./tracks.js?v=dae0ee37";
-import { Ride, STEP, CONFIG } from "./ride.js?v=dae0ee37";
+import { World, THEMES, BIKES } from "./world.js?v=4b7c1a2f";
+import { TRACKS } from "./tracks.js?v=4b7c1a2f";
+import { Ride, STEP, CONFIG } from "./ride.js?v=4b7c1a2f";
 
 const el = (id) => document.getElementById(id);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

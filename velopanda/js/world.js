@@ -1,14 +1,14 @@
 // 3D «Велопанды»: трасса-диорама с разрезом земли, панда в шлеме на велосипеде, звёздочки, ворота старта,
 // финиш с почтовым ящиком и другом-получателем, таблички через каждые 10 м, флажок рекорда. Вид сбоку.
-import * as T from "../vendor/three/three.module.min.js?v=dae0ee37";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=dae0ee37";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=dae0ee37";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=dae0ee37";
-import { polish } from "./gfx.js?v=dae0ee37";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=dae0ee37";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=dae0ee37";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=dae0ee37";
-import { makeGround, CONFIG } from "./ride.js?v=dae0ee37";
+import * as T from "../vendor/three/three.module.min.js?v=4b7c1a2f";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=4b7c1a2f";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=4b7c1a2f";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=4b7c1a2f";
+import { polish } from "./gfx.js?v=4b7c1a2f";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=4b7c1a2f";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=4b7c1a2f";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=4b7c1a2f";
+import { makeGround, CONFIG } from "./ride.js?v=4b7c1a2f";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;
@@ -225,12 +225,15 @@ function rider(bike) {
     patch.position.set(0.215, 0.03, s * 0.095);
     patch.rotation.x = s * -0.45;
     head.add(patch);
+    head.userData.eyes ||= [];
+    head.userData.ears ||= [];
     const eye = new T.Mesh(new T.SphereGeometry(0.034, 10, 8), new T.MeshBasicMaterial({ color: "#ffffff" }));
     eye.position.set(0.25, 0.05, s * 0.09);
     head.add(eye);
     const pupil = new T.Mesh(new T.SphereGeometry(0.018, 8, 6), new T.MeshBasicMaterial({ color: "#1d1420" }));
     pupil.position.set(0.272, 0.05, s * 0.09);
     head.add(pupil);
+    head.userData.eyes.push(eye, pupil);
     const cheek = new T.Mesh(new T.SphereGeometry(0.035, 10, 8), matte("#ff9fb8"));
     cheek.scale.set(0.4, 0.6, 1);
     cheek.position.set(0.22, -0.07, s * 0.15);
@@ -238,6 +241,7 @@ function rider(bike) {
     const ear = new T.Mesh(new T.SphereGeometry(0.08, 12, 10), black);
     ear.position.set(-0.02, 0.17, s * 0.21);
     head.add(ear);
+    head.userData.ears.push(ear);
     // Ручки: от плеча к рулю, пересчитываются каждый кадр (панда держится прямо, а велосипед встаёт)
     const arm = new T.Mesh(new T.CapsuleGeometry(0.055, 0.3, 6, 8), black);
     g.add(arm);
@@ -761,7 +765,22 @@ export class World {
     });
     // Голова держит взгляд вперёд, панда радуется на заднем колесе
     // Мордочка повёрнута к зрителю
-    rd.head.rotation.set(0, -0.85, -ride.a * 0.2);
+    rd.head.rotation.set(0, -0.85, -ride.a * 0.2 + (moving ? Math.sin(this.spin * 0.9) * 0.05 : 0));
+    // Живая мордочка: моргает, ушки трепещут на ветру, от звёздочки голова радостно «пружинит»
+    const hu = rd.head.userData,
+      tt = this.time;
+    if (hu.eyes) {
+      if (hu.blinkAt == null || tt > hu.blinkAt + 0.13) hu.blinkAt = tt + 1.5 + Math.random() * 3;
+      const open = tt > hu.blinkAt ? 0.1 : 1;
+      for (const e of hu.eyes) e.scale.y = open;
+      hu.ears.forEach((e, i) => {
+        const wind = moving ? 1 : 0.15;
+        e.scale.set(1 + Math.sin(tt * 17 + i * 2) * 0.1 * wind, 1 - Math.sin(tt * 17 + i * 2) * 0.08 * wind, 1);
+        e.position.x = -0.02 - 0.02 * wind;
+      });
+      const joy = Math.max(0, 1 - (tt - (this.joyAt ?? -9)) * 2.2);
+      rd.head.scale.setScalar(1 + Math.sin(joy * pie * 3) * joy * 0.16);
+    }
     if (rd.fire) rd.fire.scale.setScalar(moving ? 0.6 + Math.sin(this.time * 30) * 0.12 : 0.001);
     // Тени под колёсами: под передним — чем выше колесо, тем меньше и бледнее
     const fw = ride.frontWheel();
@@ -814,6 +833,7 @@ export class World {
     const s = this.stars[i];
     if (!s) return;
     s.taken = true;
+    this.joyAt = this.time;
     this.burst(s.mesh.position, 26, ["#ffe066", "#ffffff", "#ff9fd0", "#7fe8ff"], 3);
     this.tween(0.4, (p) => {
       s.mesh.scale.setScalar(1 + p * 1.2);
@@ -943,6 +963,35 @@ export class World {
     }
     if (this.onFrame) this.onFrame(dt);
     for (const c of this.clouds || []) c.position.x += dt * 0.4;
+    // Птички в небе: летят стайкой мимо, машут крыльями и возвращаются с другой стороны
+    if (!this.birds) {
+      const wingGeo = new T.BufferGeometry();
+      wingGeo.setAttribute("position", new T.Float32BufferAttribute([0, 0.05, 0, 0.75, 0.1, 0, 0.7, -0.02, 0, 0, -0.12, 0], 3));
+      wingGeo.setIndex([0, 1, 2, 0, 2, 3]);
+      const mat = new T.MeshBasicMaterial({ color: "#3b4a6b", side: T.DoubleSide, fog: false });
+      this.birds = [0, 1, 2, 3, 4].map((i) => {
+        const b = new T.Group();
+        const wings = [1, -1].map((sd) => {
+          const w = new T.Mesh(wingGeo, mat);
+          w.scale.x = sd;
+          b.add(w);
+          return w;
+        });
+        b.userData = { wings, off: i * 1.7 - 3 + (i % 2) * 0.6, h: 5 + (i % 3) * 0.7, ph: i * 1.3 };
+        b.scale.setScalar(0.55);
+        this.scene.add(b);
+        return b;
+      });
+    }
+    for (const b of this.birds) {
+      const u = b.userData;
+      // Круг длиной 60 м вокруг камеры: птицы обгоняют панду
+      const lap = ((t * 2.2 + u.off + 318) % 60) - 30;
+      b.position.set((this.camX || 0) + lap, u.h + Math.sin(t * 0.8 + u.ph) * 0.4, -14 - u.ph);
+      const flap = Math.sin(t * 9 + u.ph) * 0.7;
+      u.wings[0].rotation.z = flap;
+      u.wings[1].rotation.z = -flap;
+    }
     if (this.friend) {
       const happy = this.cheer && t - this.cheer < 3;
       this.friend.position.y = (this.g ? this.g(this.friend.position.x) : 0) + (happy ? Math.abs(Math.sin((t - this.cheer) * 9)) * 0.5 : Math.abs(Math.sin(t * 2)) * 0.04);
