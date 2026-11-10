@@ -1,14 +1,15 @@
 // 3D «Гонки бобрят»: острова с мягкими берегами, вода с бликами, дорога, кучи брёвнышек, мостики,
 // бобрята в кепках с брёвнышками на спине, ворота, финиш с почтовым ящиком, утки и лодочки.
 // Клетка гонки (x, y) — это мир (x, 0, −y).
-import * as T from "../vendor/three/three.module.min.js?v=d5be8bac";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=d5be8bac";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=d5be8bac";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=d5be8bac";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=d5be8bac";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=d5be8bac";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=d5be8bac";
-import { shoreField, landHeight } from "./race.js?v=d5be8bac";
+import * as T from "../vendor/three/three.module.min.js?v=bc1281a1";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=bc1281a1";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=bc1281a1";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=bc1281a1";
+import { polish } from "./gfx.js?v=bc1281a1";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=bc1281a1";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=bc1281a1";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=bc1281a1";
+import { shoreField, landHeight } from "./race.js?v=bc1281a1";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;
@@ -221,6 +222,7 @@ export class World {
     this.bloom = new UnrealBloomPass(new T.Vector2(256, 256), 0.5, 0.4, 1.35);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
+    polish(this.composer);
     this.glow = { on: true, slow: 0, seen: 0 };
     this.trackGroup = new T.Group();
     this.scene.add(this.trackGroup);

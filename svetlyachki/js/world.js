@@ -1,13 +1,14 @@
 // 3D «Светлячкового концерта»: ночная поляна, концертный домик с окошками, Сова-дирижёр, зверята-музыканты,
 // четыре светящиеся дорожки, кружки-барабаны и светлячки-нотки. Дорожки идут от домика (−z) к игроку (z = 0).
-import * as T from "../vendor/three/three.module.min.js?v=e395e2f3";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=e395e2f3";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=e395e2f3";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=e395e2f3";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=e395e2f3";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=e395e2f3";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=e395e2f3";
-import { APPROACH, WINDOW } from "./rhythm.js?v=e395e2f3";
+import * as T from "../vendor/three/three.module.min.js?v=8dc05680";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=8dc05680";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=8dc05680";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=8dc05680";
+import { polish } from "./gfx.js?v=8dc05680";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=8dc05680";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=8dc05680";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=8dc05680";
+import { APPROACH, WINDOW } from "./rhythm.js?v=8dc05680";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;
@@ -92,6 +93,7 @@ export class Stage {
     this.bloom = new UnrealBloomPass(new T.Vector2(256, 256), 0.7, 0.45, 1.05);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
+    polish(this.composer);
     this.glow = { on: true, slow: 0, seen: 0 };
     this.build();
     this.resize = () => {

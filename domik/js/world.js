@@ -1,5 +1,6 @@
 // Мир игры: небо, поляна, большое дерево, свет и камера. Домик строится в house.js.
-import * as T from "../vendor/three/three.module.min.js?v=cbdaeeb3";
+import * as T from "../vendor/three/three.module.min.js?v=45a02ded";
+import "./gfx.js?v=45a02ded";
 
 export const mats = new Map();
 export function mat(color, rough = 0.8, metal = 0) {

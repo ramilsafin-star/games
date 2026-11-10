@@ -1,15 +1,16 @@
 // 3D «Волшебного клубочка»: лабиринт-диорама в одном из пяти миров, котёнок Пуговка с клубочком,
 // ниточка от старта до котёнка, следы лапок, подсказка-дорожка из искр, друг у выхода, салют.
 // Логика (maze.js) решает, куда бежит котёнок; здесь всё рисуется по тем же клеткам.
-import * as T from "../vendor/three/three.module.min.js?v=014c9569";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=014c9569";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=014c9569";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=014c9569";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=014c9569";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=014c9569";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=014c9569";
-import { DX, DY, isOpen, nb, xy, threadStep } from "./maze.js?v=014c9569";
-import { kitten, yarnBall, YARN, FRIENDS, ITEMS, keyModel, KEY_COLORS, glossy, matte, glowColor, glowSprite, canvasTexture } from "./models.js?v=014c9569";
+import * as T from "../vendor/three/three.module.min.js?v=2d041045";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=2d041045";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=2d041045";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=2d041045";
+import { polish } from "./gfx.js?v=2d041045";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=2d041045";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=2d041045";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=2d041045";
+import { DX, DY, isOpen, nb, xy, threadStep } from "./maze.js?v=2d041045";
+import { kitten, yarnBall, YARN, FRIENDS, ITEMS, keyModel, KEY_COLORS, glossy, matte, glowColor, glowSprite, canvasTexture } from "./models.js?v=2d041045";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;
@@ -170,6 +171,7 @@ export class World {
     this.bloom = new UnrealBloomPass(new T.Vector2(256, 256), 0.55, 0.45, 0.92);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
+    polish(this.composer);
     this.glow = { on: true, slow: 0, seen: 0 };
     // Небо
     const skyGeo = new T.SphereGeometry(600, 24, 16);

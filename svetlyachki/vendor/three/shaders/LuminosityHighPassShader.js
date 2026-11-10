@@ -1,6 +1,6 @@
 import {
 	Color
-} from '../three.module.min.js?v=e395e2f3';
+} from '../three.module.min.js?v=8dc05680';
 
 /**
  * @module LuminosityHighPassShader

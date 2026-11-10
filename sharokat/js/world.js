@@ -1,6 +1,6 @@
 // Всё, что видно вокруг шара: небо, острова, облака, арки, препятствия, кристаллы, шар и эффекты
-import * as T from "../vendor/three/three.module.min.js?v=3eed4cb9";
-import { HALF, rng } from "./track.js?v=3eed4cb9";
+import * as T from "../vendor/three/three.module.min.js?v=8580e2bc";
+import { HALF, rng } from "./track.js?v=8580e2bc";
 
 const pie = Math.PI;
 export const R = 0.6; // радиус шара

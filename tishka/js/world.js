@@ -1,14 +1,15 @@
 // 3D «Звездочёта Тишки»: обсерватория-станция парит среди звёзд. Пол в клетку, стены, ящики, телескопы,
 // лифт, мышонок Тишка, роботы-сторожа Бип с фонариком. Свет фонарика на полу считается так же, как обнаружение.
 // Клетка (x, z) из sim.js — это мир (x, 0, z).
-import * as T from "../vendor/three/three.module.min.js?v=7df14f11";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=7df14f11";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=7df14f11";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=7df14f11";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=7df14f11";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=7df14f11";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=7df14f11";
-import { coneRays, TUNE_R } from "./sim.js?v=7df14f11";
+import * as T from "../vendor/three/three.module.min.js?v=b717a707";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=b717a707";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=b717a707";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=b717a707";
+import { polish } from "./gfx.js?v=b717a707";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=b717a707";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=b717a707";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=b717a707";
+import { coneRays, TUNE_R } from "./sim.js?v=b717a707";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;
@@ -239,6 +240,7 @@ export class World {
     this.bloom = new UnrealBloomPass(new T.Vector2(256, 256), 0.6, 0.45, 1.1);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
+    polish(this.composer);
     this.glow = { on: true, slow: 0, seen: 0 };
     this.raycaster = new T.Raycaster();
     this.floorPlane = new T.Plane(new T.Vector3(0, 1, 0), 0);

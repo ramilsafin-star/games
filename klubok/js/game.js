@@ -1,10 +1,10 @@
 // «Волшебный клубочек»: котёнок Пуговка проходит лабиринты. Свайп (или нажатие в сторону) — котёнок
 // бежит по коридору до развилки; клубочек тянет за собой ниточку; кнопка-клубочек показывает дорогу.
 // Логика — maze.js (tests/maze.mjs), миры и уровни — levels.js, 3D — world.js.
-import { World } from "./world.js?v=014c9569";
-import { LEVELS, WORLDS, easy, surprise } from "./levels.js?v=014c9569";
-import * as M from "./maze.js?v=014c9569";
-import { KEY_COLORS } from "./models.js?v=014c9569";
+import { World } from "./world.js?v=2d041045";
+import { LEVELS, WORLDS, easy, surprise } from "./levels.js?v=2d041045";
+import * as M from "./maze.js?v=2d041045";
+import { KEY_COLORS } from "./models.js?v=2d041045";
 
 const el = (id) => document.getElementById(id);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

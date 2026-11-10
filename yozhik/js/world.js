@@ -1,14 +1,15 @@
 // 3D-мир «Ёжика-почтальона»: диорама с разрезом земли, почта и станция, рельсы с опорами,
 // ёжик в вагончике, кольца с печатями, частицы. Игровая плоскость — z = 0, x вправо, y вверх.
-import * as T from "../vendor/three/three.module.min.js?v=10b8a11f";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=10b8a11f";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=10b8a11f";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=10b8a11f";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=10b8a11f";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=10b8a11f";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=10b8a11f";
-import { groundAt, platforms, railAt } from "./physics.js?v=10b8a11f";
-import { STORIES } from "./levels.js?v=10b8a11f";
+import * as T from "../vendor/three/three.module.min.js?v=48b905f3";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=48b905f3";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=48b905f3";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=48b905f3";
+import { polish } from "./gfx.js?v=48b905f3";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=48b905f3";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=48b905f3";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=48b905f3";
+import { groundAt, platforms, railAt } from "./physics.js?v=48b905f3";
+import { STORIES } from "./levels.js?v=48b905f3";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;
@@ -370,6 +371,7 @@ export class World {
     this.bloom = new UnrealBloomPass(new T.Vector2(256, 256), 0.5, 0.35, 1.7);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
+    polish(this.composer);
     this.glow = { on: true, slow: 0, seen: 0 };
     this.focus = null;
     this.resize = () => {

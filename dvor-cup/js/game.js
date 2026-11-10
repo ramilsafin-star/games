@@ -1,7 +1,7 @@
 // «Дворовой кубок»: футбол один на один. Кубок — три матча против всё более сильных соперников,
 // «Вдвоём» — два игрока на одном экране. Матч — match.js (проверяется tests/match.mjs), 3D — world.js.
-import { World, ANIMALS } from "./world.js?v=5ff6bcb3";
-import { Match, Bot, STEP } from "./match.js?v=5ff6bcb3";
+import { World, ANIMALS } from "./world.js?v=1aaaf61d";
+import { Match, Bot, STEP } from "./match.js?v=1aaaf61d";
 
 const el = (id) => document.getElementById(id);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

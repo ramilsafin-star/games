@@ -1,6 +1,7 @@
 // Сцена магазина на Three.js: всё, что видно и что движется. Правила покупки живут в game.js.
-import * as T from "../vendor/three/three.module.min.js?v=a2db44a6";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=a2db44a6";
+import * as T from "../vendor/three/three.module.min.js?v=9cd45e7f";
+import "./gfx.js?v=9cd45e7f";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=9cd45e7f";
 import {
   shop,
   counter,
@@ -20,7 +21,7 @@ import {
   heart,
   group,
   orb,
-} from "./models.js?v=a2db44a6";
+} from "./models.js?v=9cd45e7f";
 
 const clamp = T.MathUtils.clamp,
   mix = T.MathUtils.lerp,
@@ -57,7 +58,7 @@ export class Store {
     const sun = new T.DirectionalLight(0xfff1dc, 2.2);
     sun.position.set(-3, 9, 7);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.mapSize.set(2048, 2048);
     Object.assign(sun.shadow.camera, { left: -6, right: 6, top: 5, bottom: -4, near: 0.1, far: 26 });
     sun.shadow.normalBias = 0.025;
     sun.shadow.bias = -0.0003;

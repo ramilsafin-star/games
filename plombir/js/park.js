@@ -1,5 +1,6 @@
-import * as T from "../vendor/three/three.module.min.js?v=c154e7bd";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=c154e7bd";
+import * as T from "../vendor/three/three.module.min.js?v=b102cc67";
+import "./gfx.js?v=b102cc67";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=b102cc67";
 import {
   scenery,
   truck,
@@ -18,7 +19,7 @@ import {
   balloons,
   butterfly,
   bulbs,
-} from "./models.js?v=c154e7bd";
+} from "./models.js?v=b102cc67";
 
 const clamp = T.MathUtils.clamp,
   mix = T.MathUtils.lerp;
@@ -61,7 +62,7 @@ export class Park {
     const sun = new T.DirectionalLight(0xfff3db, 2.58);
     sun.position.set(-5, 9, 6);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.mapSize.set(2048, 2048);
     Object.assign(sun.shadow.camera, {
       left: -7,
       right: 7,

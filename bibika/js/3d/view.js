@@ -1,4 +1,5 @@
 import * as T from "../../vendor/three/three.module.min.js";
+import "./gfx.js";
 import { RoomEnvironment } from "../../vendor/three/RoomEnvironment.js";
 import {
   vehicle,

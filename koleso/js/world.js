@@ -1,14 +1,15 @@
 // 3D «Колеса огоньков»: ночной парк аттракционов, колесо обозрения с кабинками,
 // огоньки с мордочками на ободе, шарики, енотик Фоня с корзинкой, стрелка перед поворотом, салют.
 // Логика (wheel.js) задаёт угол колеса θ(t) и места огоньков; здесь всё рисуется по тем же числам.
-import * as T from "../vendor/three/three.module.min.js?v=ec1eb721";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=ec1eb721";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=ec1eb721";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=ec1eb721";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=ec1eb721";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=ec1eb721";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=ec1eb721";
-import { RADIUS, CONTACT, FLIGHT } from "./wheel.js?v=ec1eb721";
+import * as T from "../vendor/three/three.module.min.js?v=a32e36af";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=a32e36af";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=a32e36af";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=a32e36af";
+import { polish } from "./gfx.js?v=a32e36af";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=a32e36af";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=a32e36af";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=a32e36af";
+import { RADIUS, CONTACT, FLIGHT } from "./wheel.js?v=a32e36af";
 
 const pie = Math.PI;
 const D2R = pie / 180;
@@ -248,6 +249,7 @@ export class World {
     this.bloom = new UnrealBloomPass(new T.Vector2(256, 256), 0.85, 0.5, 0.95);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
+    polish(this.composer);
     this.glow = { on: true, slow: 0, seen: 0 };
     this.makeParticles();
     this.buildPark();
