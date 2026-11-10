@@ -1,14 +1,14 @@
 // 3D «Светлячкового концерта»: ночная поляна, концертный домик с окошками, Сова-дирижёр, зверята-музыканты,
 // четыре светящиеся дорожки, кружки-барабаны и светлячки-нотки. Дорожки идут от домика (−z) к игроку (z = 0).
-import * as T from "../vendor/three/three.module.min.js?v=f05515bf";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=f05515bf";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=f05515bf";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=f05515bf";
-import { polish } from "./gfx.js?v=f05515bf";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=f05515bf";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=f05515bf";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=f05515bf";
-import { APPROACH, WINDOW } from "./rhythm.js?v=f05515bf";
+import * as T from "../vendor/three/three.module.min.js?v=06963f92";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=06963f92";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=06963f92";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=06963f92";
+import { polish } from "./gfx.js?v=06963f92";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=06963f92";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=06963f92";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=06963f92";
+import { APPROACH, WINDOW } from "./rhythm.js?v=06963f92";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;
@@ -372,6 +372,9 @@ export class Stage {
       S.add(m);
       return m;
     });
+    // Падающая звезда: головка и хвост из тающих огоньков
+    this.meteor = { parts: [0, 1, 2, 3, 4].map((i) => glowSprite(i ? "#bfe6ff" : "#ffffff", 2.4 - i * 0.4, 0)), at: 0, next: 5, from: new T.Vector3(), dir: new T.Vector3() };
+    for (const sp of this.meteor.parts) S.add(sp);
     this.owl = this.makeOwl();
     this.owl.position.set(0, 13.8, HOUSE_Z + 1.2);
     this.owl.scale.setScalar(1.7);
@@ -385,6 +388,8 @@ export class Stage {
     body.scale.set(1, 1.1, 0.9);
     body.position.y = 0.6;
     g.add(body);
+    g.userData.body = body;
+    g.userData.eyes = [];
     const head = new T.Group();
     head.position.y = 1.45;
     g.add(head);
@@ -416,9 +421,11 @@ export class Stage {
       const eye = new T.Mesh(new T.SphereGeometry(0.08, 12, 8), glossy("#1d1420", { roughness: 0.1 }));
       eye.position.set(s * (kind === "frog" ? 0.26 : 0.17), eyeY, 0.44);
       head.add(eye);
+      g.userData.eyes.push(eye);
       const shine = new T.Mesh(new T.SphereGeometry(0.025, 8, 6), new T.MeshBasicMaterial({ color: "#ffffff" }));
       shine.position.set(s * (kind === "frog" ? 0.26 : 0.17) + 0.025, eyeY + 0.03, 0.51);
       head.add(shine);
+      g.userData.eyes.push(shine);
       const cheek = new T.Mesh(new T.SphereGeometry(0.08, 10, 8), matte("#ff9fb0"));
       cheek.scale.set(1, 0.6, 0.4);
       cheek.position.set(s * 0.3, -0.08, 0.4);
@@ -437,6 +444,7 @@ export class Stage {
     const body = new T.Mesh(new T.SphereGeometry(0.6, 20, 16), matte("#8a6a4a"));
     body.scale.set(1, 1.15, 0.9);
     g.add(body);
+    g.userData.eyes = [];
     const belly = new T.Mesh(new T.SphereGeometry(0.45, 16, 12), matte("#f2dcc0"));
     belly.scale.set(0.9, 1.1, 0.5);
     belly.position.set(0, -0.08, 0.32);
@@ -445,9 +453,11 @@ export class Stage {
       const eye = new T.Mesh(new T.SphereGeometry(0.2, 16, 12), matte("#ffffff"));
       eye.position.set(s * 0.22, 0.35, 0.42);
       g.add(eye);
+      g.userData.eyes.push(eye);
       const pupil = new T.Mesh(new T.SphereGeometry(0.1, 12, 8), glossy("#1d1420", { roughness: 0.1 }));
       pupil.position.set(s * 0.22, 0.35, 0.58);
       g.add(pupil);
+      g.userData.eyes.push(pupil);
       const tuft = new T.Mesh(new T.ConeGeometry(0.12, 0.3, 8), matte("#6e5238"));
       tuft.position.set(s * 0.35, 0.72, 0);
       tuft.rotation.z = -s * 0.4;
@@ -627,7 +637,10 @@ export class Stage {
     const at = new T.Vector3(LANE_X[lane], 0.8, 0);
     this.burst(at, perfect ? 34 : 20, [LANE_COLORS[lane], "#ffffff", "#fff3a0"], perfect ? 4.5 : 3.2);
     const m = this.musicians[lane];
-    if (m) m.userData.hop = 1;
+    if (m) {
+      m.userData.hop = 1;
+      if (perfect) m.userData.spin = 1;
+    }
     if (target != null) this.sendLight(at, target, LANE_COLORS[lane]);
   }
   // Огонёк летит дугой к окошку или лампочке гирлянды и зажигает её
@@ -677,6 +690,8 @@ export class Stage {
   beat(strong) {
     for (const l of this.lanes) l.pulse = strong ? 1 : 0.6;
     this.owlBeat = this.time;
+    this.bob = strong ? 1 : 0.6;
+    this.beatNo = (this.beatNo || 0) + 1;
   }
   // Какая дорожка под пальцем: ближайший кружок по горизонтали экрана (только включённые)
   laneAt(clientX, clientY, active) {
@@ -751,16 +766,56 @@ export class Stage {
       l.halo.material.opacity = l.flash * 0.9 + l.early * 0.35 + l.pulse * 0.15;
       l.halo.scale.setScalar(1 + (1 - l.flash) * 0.5 * l.flash);
     }
+    // Моргание: у каждого свой счётчик, глазки на миг сплющиваются
+    const blink = (u) => {
+      if (u.blinkAt == null) u.blinkAt = t + 1 + Math.random() * 3;
+      if (t > u.blinkAt + 0.14) u.blinkAt = t + 1.8 + Math.random() * 3.5;
+      const k = t > u.blinkAt ? 0.12 : 1;
+      for (const e of u.eyes) e.scale.y = k;
+    };
+    this.bob = (this.bob || 0) * Math.pow(0.004, dt);
+    const side = (this.beatNo || 0) % 2 ? 1 : -1;
+    this.swing = (this.swing || 0) + (side - (this.swing || 0)) * Math.min(1, dt * 7);
     for (const m of this.musicians) {
       const u = m.userData;
       u.hop *= Math.pow(0.01, dt);
+      u.spin = (u.spin || 0) * Math.pow(0.02, dt);
       m.position.y = 0.6 + Math.sin((1 - u.hop) * pie) * u.hop * 0.9;
+      // Танец: приседают на долю, качаются из стороны в сторону, тянутся в прыжке
+      const squash = this.bob * 0.14 * calm,
+        stretch = u.hop * 0.18;
+      m.scale.set(1 + squash - stretch * 0.5, 1 - squash + stretch, 1 + squash - stretch * 0.5);
+      m.rotation.z = this.swing * 0.12 * calm * Math.min(1, this.bob * 8);
+      m.rotation.y = (1 - Math.pow(1 - u.spin, 2)) * pie * 2 * (u.spin > 0.01 ? 1 : 0);
+      u.body.scale.y = 1.1 * (1 + Math.sin(t * 1.8 + m.position.x) * 0.03);
       u.head.rotation.z = Math.sin(t * 2 + m.position.x) * 0.08 * calm;
+      u.head.rotation.x = -u.hop * 0.35;
+      blink(u);
     }
     if (this.owl) {
       const since = t - (this.owlBeat || -9);
       this.owl.userData.arm.rotation.z = -0.4 + Math.max(0, 1 - since * 3) * 0.9 * calm;
       this.owl.rotation.y = Math.sin(t * 0.7) * 0.15 * calm;
+      const k = 1.7 * (1 + Math.sin(t * 1.5) * 0.015);
+      this.owl.scale.set(k * (1 + this.bob * 0.06 * calm), k * (1 - this.bob * 0.08 * calm), k);
+      blink(this.owl.userData);
+    }
+    // Падающая звезда раз в несколько секунд
+    const me = this.meteor;
+    if (me && calm === 1) {
+      if (t > me.next) {
+        const dirX = Math.random() < 0.5 ? 1 : -1;
+        me.from.set(-dirX * (8 + Math.random() * 22), 24 + Math.random() * 10, HOUSE_Z - 12);
+        me.dir.set(dirX * 26, -9 - Math.random() * 5, 0);
+        me.at = t;
+        me.next = t + 5 + Math.random() * 8;
+      }
+      const life = (t - me.at) / 1.1;
+      me.parts.forEach((sp, i) => {
+        const lt = life - i * 0.035;
+        sp.material.opacity = lt > 0 && lt < 1 ? Math.sin(lt * pie) * (0.9 - i * 0.15) : 0;
+        sp.position.copy(me.from).addScaledVector(me.dir, Math.max(0, lt) * 1.1);
+      });
     }
     for (const a of this.aurora) a.material.uniforms.time.value = t * calm;
     this.stars.material.opacity = 0.75 + Math.sin(t * 1.3) * 0.15;

@@ -1,8 +1,8 @@
 // «Почта Дракоши»: на письме стёрлось слово — угадывай буквы, пока не улетели четыре марки.
 // Правила — rules.js (проверяются tests/rules.mjs), 3D — world.js, слова и картинки — words.js.
-import { World } from "./world.js?v=9aa9927a";
-import { CARDS, THEMES } from "./words.js?v=9aa9927a";
-import { Round, Deck, ALPHABET, STAMPS } from "./rules.js?v=9aa9927a";
+import { World } from "./world.js?v=19e66c1e";
+import { CARDS, THEMES } from "./words.js?v=19e66c1e";
+import { Round, Deck, ALPHABET, STAMPS } from "./rules.js?v=19e66c1e";
 
 const el = (id) => document.getElementById(id);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

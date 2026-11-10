@@ -1,15 +1,11 @@
-// Общая «полировка» картинки: сглаживание краёв (MSAA), лёгкая резкость,
+// Общая «полировка» картинки: лёгкая резкость,
 // сочность бледных цветов, мягкий контраст и виньетка. Один проход после OutputPass.
-import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=71e76b0b";
+import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=34014e05";
 
 export function polish(composer, opt = {}) {
   const o = { vibrance: 0.4, contrast: 0.12, vignette: 0.22, sharpen: 0.3, ...opt };
-  // RenderPass всегда рисует в renderTarget2 (после него два прохода со сменой буфера),
-  // поэтому сглаживание нужно только ему
-  try {
-    const gl = composer.renderer.getContext();
-    composer.renderTarget2.samples = Math.min(4, gl.getParameter(gl.MAX_SAMPLES) || 0);
-  } catch {}
+  // Сглаживание MSAA здесь не включать: с ним свои шейдеры (сияние, дорожки) дают на краях NaN,
+  // и свечение растягивает его в чёрные прямоугольники
   const pass = new ShaderPass({
     uniforms: {
       tDiffuse: { value: null },

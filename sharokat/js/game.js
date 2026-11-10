@@ -1,14 +1,14 @@
 // «Шарокат»: шар катится по радужным горкам в небе. Здесь игровой цикл, физика шара, камера, меню.
-import * as T from "../vendor/three/three.module.min.js?v=d94aef2b";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=d94aef2b";
-import { Track, trackMesh, railLights, tubeMeshes, HALF } from "./track.js?v=d94aef2b";
-import { R, sky, scenery, supports, gates, boostPads, obstacles, trampolines, gemField, skins, skinMaterial, ballMesh, effects } from "./world.js?v=d94aef2b";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=d94aef2b";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=d94aef2b";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=d94aef2b";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=d94aef2b";
-import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=d94aef2b";
-import { themeFor } from "./themes.js?v=d94aef2b";
+import * as T from "../vendor/three/three.module.min.js?v=cb0a4b60";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=cb0a4b60";
+import { Track, trackMesh, railLights, tubeMeshes, HALF } from "./track.js?v=cb0a4b60";
+import { R, sky, scenery, supports, gates, boostPads, obstacles, trampolines, gemField, skins, skinMaterial, ballMesh, effects } from "./world.js?v=cb0a4b60";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=cb0a4b60";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=cb0a4b60";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=cb0a4b60";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=cb0a4b60";
+import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=cb0a4b60";
+import { themeFor } from "./themes.js?v=cb0a4b60";
 
 // 20 уровней: каждая из 10 тем встречается дважды
 const LEVELS = 20;
@@ -427,8 +427,6 @@ const vivid = new ShaderPass({
     }`,
 });
 composer.addPass(vivid);
-// Сглаживание краёв: сцена рисуется в renderTarget2
-composer.renderTarget2.samples = 4;
 // Если кадры медленные (старый iPad), свечение выключается само
 const glow = { on: true, slow: 0, checked: 0 };
 function watchSpeed(dt) {

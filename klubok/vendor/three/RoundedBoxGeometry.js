@@ -1,7 +1,7 @@
 import {
 	BoxGeometry,
 	Vector3
-} from './three.module.min.js?v=d82ea34f';
+} from './three.module.min.js?v=9240d4b6';
 
 const _tempNormal = new Vector3();
 

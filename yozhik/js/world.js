@@ -1,15 +1,15 @@
 // 3D-мир «Ёжика-почтальона»: диорама с разрезом земли, почта и станция, рельсы с опорами,
 // ёжик в вагончике, кольца с печатями, частицы. Игровая плоскость — z = 0, x вправо, y вверх.
-import * as T from "../vendor/three/three.module.min.js?v=167f02d8";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=167f02d8";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=167f02d8";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=167f02d8";
-import { polish } from "./gfx.js?v=167f02d8";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=167f02d8";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=167f02d8";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=167f02d8";
-import { groundAt, platforms, railAt } from "./physics.js?v=167f02d8";
-import { STORIES } from "./levels.js?v=167f02d8";
+import * as T from "../vendor/three/three.module.min.js?v=81d83b1d";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=81d83b1d";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=81d83b1d";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=81d83b1d";
+import { polish } from "./gfx.js?v=81d83b1d";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=81d83b1d";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=81d83b1d";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=81d83b1d";
+import { groundAt, platforms, railAt } from "./physics.js?v=81d83b1d";
+import { STORIES } from "./levels.js?v=81d83b1d";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;

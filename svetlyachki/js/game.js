@@ -1,8 +1,8 @@
 // «Светлячковый концерт»: светлячки-нотки летят по дорожкам, ребёнок нажимает на кружок в такт —
 // звучит нота мелодии, светлячок зажигает окошко концертного домика. Ритм — rhythm.js, 3D — world.js.
-import { Stage, LANE_COLORS } from "./world.js?v=f05515bf";
-import { SONGS, CHORDS } from "./songs.js?v=f05515bf";
-import { parseSong, Judge, Clock, WINDOW } from "./rhythm.js?v=f05515bf";
+import { Stage, LANE_COLORS } from "./world.js?v=06963f92";
+import { SONGS, CHORDS } from "./songs.js?v=06963f92";
+import { parseSong, Judge, Clock, WINDOW } from "./rhythm.js?v=06963f92";
 
 const el = (id) => document.getElementById(id);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

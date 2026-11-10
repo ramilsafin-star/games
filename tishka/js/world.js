@@ -1,15 +1,15 @@
 // 3D «Звездочёта Тишки»: обсерватория-станция парит среди звёзд. Пол в клетку, стены, ящики, телескопы,
 // лифт, мышонок Тишка, роботы-сторожа Бип с фонариком. Свет фонарика на полу считается так же, как обнаружение.
 // Клетка (x, z) из sim.js — это мир (x, 0, z).
-import * as T from "../vendor/three/three.module.min.js?v=d5f7d380";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=d5f7d380";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=d5f7d380";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=d5f7d380";
-import { polish } from "./gfx.js?v=d5f7d380";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=d5f7d380";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=d5f7d380";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=d5f7d380";
-import { coneRays, TUNE_R } from "./sim.js?v=d5f7d380";
+import * as T from "../vendor/three/three.module.min.js?v=dbc40355";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=dbc40355";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=dbc40355";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=dbc40355";
+import { polish } from "./gfx.js?v=dbc40355";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=dbc40355";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=dbc40355";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=dbc40355";
+import { coneRays, TUNE_R } from "./sim.js?v=dbc40355";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;

@@ -1,16 +1,16 @@
 // 3D «Волшебного клубочка»: лабиринт-диорама в одном из пяти миров, котёнок Пуговка с клубочком,
 // ниточка от старта до котёнка, следы лапок, подсказка-дорожка из искр, друг у выхода, салют.
 // Логика (maze.js) решает, куда бежит котёнок; здесь всё рисуется по тем же клеткам.
-import * as T from "../vendor/three/three.module.min.js?v=d82ea34f";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=d82ea34f";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=d82ea34f";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=d82ea34f";
-import { polish } from "./gfx.js?v=d82ea34f";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=d82ea34f";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=d82ea34f";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=d82ea34f";
-import { DX, DY, isOpen, nb, xy, threadStep } from "./maze.js?v=d82ea34f";
-import { kitten, yarnBall, YARN, FRIENDS, ITEMS, keyModel, KEY_COLORS, glossy, matte, glowColor, glowSprite, canvasTexture } from "./models.js?v=d82ea34f";
+import * as T from "../vendor/three/three.module.min.js?v=9240d4b6";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=9240d4b6";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=9240d4b6";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=9240d4b6";
+import { polish } from "./gfx.js?v=9240d4b6";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=9240d4b6";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=9240d4b6";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=9240d4b6";
+import { DX, DY, isOpen, nb, xy, threadStep } from "./maze.js?v=9240d4b6";
+import { kitten, yarnBall, YARN, FRIENDS, ITEMS, keyModel, KEY_COLORS, glossy, matte, glowColor, glowSprite, canvasTexture } from "./models.js?v=9240d4b6";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;
