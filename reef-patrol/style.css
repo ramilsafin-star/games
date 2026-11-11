@@ -87,7 +87,7 @@ p { color: var(--soft); margin: 12px 0; line-height: 1.4; }
   position: absolute; bottom: var(--inset-bottom); left: max(14px,env(safe-area-inset-left));
   width: min(200px,45vw); padding: 10px 12px 12px; background: #092d43e8; border: 1px solid #94cfc497; border-radius: 13px;
 }
-.health > div:first-child { display: flex; justify-content: space-between; margin-bottom: 6px; color: #d2f1df; font-size: 10px; font-weight: 900; letter-spacing: .13em; }
+.health > div:nth-child(2) { display: flex; justify-content: space-between; margin-bottom: 6px; color: #d2f1df; font-size: 10px; font-weight: 900; letter-spacing: .13em; }
 .track { height: 8px; overflow: hidden; border-radius: 8px; background: #031d2c; }
 .track i { display: block; height: 100%; transform-origin: left; background: linear-gradient(90deg,#47d3bd,#d5f892); }
 .health.low i { background: linear-gradient(90deg,#ff716f,#ffd38b); }
@@ -108,6 +108,26 @@ p { color: var(--soft); margin: 12px 0; line-height: 1.4; }
 .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; margin-top: 16px; }
 .choice { min-height: 94px; border: 1px solid #8dcbc6; border-radius: 15px; background: #184b65; color: var(--ink); padding: 10px; }
 .choice b, .choice small { display: block; }
+.choice i { display: block; font-style: normal; font-size: 26px; line-height: 1.1; margin-bottom: 5px; }
+.choice:active { transform: translateY(2px); background: #1f5b78; }
+.choices.three { grid-template-columns: repeat(3, 1fr); }
+.sheet .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.sheet .row .choice { min-height: 50px; font-weight: 800; }
+.sheet .row.solo { grid-template-columns: minmax(0, 220px); justify-content: center; }
+.sheet .note { margin: 9px 0 0; font-size: 12px; color: #9fc4c6; }
+.facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 4px 0 10px; }
+.facts span { padding: 7px 2px; border-radius: 11px; background: #0f415a; color: var(--soft); font-size: 11px; }
+.facts b { display: block; color: var(--ink); font-size: 17px; }
+#announcement small { display: block; margin-bottom: 7px; font-size: .36em; letter-spacing: .22em; color: #bff3e2; }
+#combo {
+  position: absolute; left: 0; bottom: calc(100% + 8px); white-space: nowrap;
+  padding: 5px 11px; border-radius: 12px; background: #3a2f12e6; border: 1px solid #ffdf8a; color: #ffe89a;
+  font-size: 13px; font-weight: 900; letter-spacing: .04em;
+}
+#mods { margin-top: 7px; font-size: 14px; line-height: 1; letter-spacing: .06em; white-space: nowrap; overflow: hidden; }
+.boss[data-kind="titan"] { background: #542a26ed; border-color: #ffb89a; }
+.boss[data-kind="titan"] .track { background: #33110e; }
+.boss[data-kind="titan"] i { background: linear-gradient(90deg,#ff8a6a,#ffd98a); }
 .choice small { margin-top: 6px; color: var(--soft); font-size: 12px; }
 .result-score { font-size: 28px; font-weight: 900; color: #f9e9a4; }
 @media (pointer: coarse) { .desktop { display: none; } }
@@ -128,7 +148,16 @@ p { color: var(--soft); margin: 12px 0; line-height: 1.4; }
   .points { padding-left: 6px; min-width: 43px; font-size: 13px; }
   #pulse { width: 76px; height: 76px; border-radius: 23px; right: 12px; }
   #pulse svg { width: 34px; height: 34px; }
-  #lesson { bottom: calc(var(--inset-bottom) + 86px); }
+  #lesson { bottom: calc(var(--inset-bottom) + 86px); white-space: normal; width: max-content; max-width: 62vw; }
+  .sheet { padding: 18px 14px; }
+  .choices.three { gap: 7px; }
+  .choices.three .choice { padding: 9px 4px; min-height: 112px; }
+  .choices.three .choice b { font-size: 13px; }
+  .choices.three .choice small { font-size: 11px; }
+}
+@media (max-width: 400px) {
+  .depth .word { display: none; }
+  .depth::before { content: "▾"; font-size: 13px; color: #b0d9e2; }
 }
 @media (orientation: landscape) and (max-height: 505px) {
   .intro-card { width: min(430px,52vw); margin: 0 0 var(--inset-bottom) 15px; padding: 13px 17px; }
@@ -138,4 +167,17 @@ p { color: var(--soft); margin: 12px 0; line-height: 1.4; }
   .intro-card .primary { margin-top: 8px; }
   #best { margin-top: 8px; }
   #pulse { width: 70px; height: 70px; }
+  .sheet { padding: 12px 18px; }
+  .sheet h2 { font-size: 24px; margin: 3px 0; }
+  .sheet p { margin: 5px 0; font-size: 13px; }
+  .choices { margin-top: 8px; }
+  .choice { min-height: 70px; }
+  .choice i { display: inline; font-size: 18px; margin-right: 4px; }
+  .choice b { display: inline; }
+  .facts { margin: 2px 0 6px; }
+  .facts span { padding: 4px 2px; }
+  .result-score { font-size: 22px; margin: 2px 0; }
+  .sheet .primary { min-height: 44px; margin-top: 8px; }
+  .sheet .row { margin-top: 8px; }
+  .sheet .row .choice { min-height: 42px; }
 }

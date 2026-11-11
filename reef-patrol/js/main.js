@@ -1,5 +1,5 @@
-import { DEPTHS, Patrol } from "./rules.js?v=d76d4a47";
-import { ReefView } from "./view.js?v=d76d4a47";
+import { DEPTHS, Patrol } from "./rules.js?v=253dead7";
+import { ReefView } from "./view.js?v=253dead7";
 
 const id = name => document.getElementById(name);
 const canvas = id("reef");
@@ -10,12 +10,24 @@ const recordKey = "reef-patrol-v1";
 let saved = {};
 try { saved = JSON.parse(localStorage.getItem(recordKey)) || {}; } catch {}
 let best = Number.isSafeInteger(saved.best) && saved.best > 0 ? saved.best : 0;
+let deep = Number.isSafeInteger(saved.deep) && saved.deep > 0 ? Math.min(saved.deep, DEPTHS.length + 1) : 0; // DEPTHS.length + 1 — рейс пройден
 let muted = saved.muted === true;
 let audio = null;
 
 function save() {
-  try { localStorage.setItem(recordKey, JSON.stringify({ best, muted })); } catch {}
+  try { localStorage.setItem(recordKey, JSON.stringify({ best, deep, muted })); } catch {}
 }
+
+// Модули дока: значок, название, что даёт
+const MODULE_INFO = {
+  rapid: ["⚡", "Быстрый лазер", "На 30% больше выстрелов"],
+  armor: ["🛡", "Крепкий корпус", "+35 к прочности и ремонт"],
+  twin: ["✴", "Ещё один ствол", "Залп шире и заметно сильнее"],
+  magnet: ["🧲", "Магнит", "Жемчуг летит сам и чинит лучше"],
+  pulse: ["🌊", "Мощный импульс", "Заряжается быстрее, бьёт сильнее"],
+  engine: ["🚀", "Турбина", "Лодка плывёт быстрее"],
+};
+const BOSS_NAMES = { boss: "КРАКЕН-9", titan: "КЛЕШНЯ-ВЕЛИКАН" };
 
 function wakeAudio() {
   if (muted) return;
@@ -59,6 +71,16 @@ function playEvent(e) {
       break;
     case "beam-fire": tone(260, 70, 0.36, 0.14, 0, "sawtooth"); break;
     case "hurt": tone(178, 70, 0.24, 0.11, 0, "triangle"); break;
+    case "swell": tone(190, 420, 0.5, 0.05, 0, "triangle"); break;
+    case "pop":
+      tone(240, 60, 0.3, 0.11, 0, "triangle");
+      tone(900, 300, 0.12, 0.04);
+      break;
+    case "lane-warning":
+      tone(520, 780, 0.14, 0.06, 0, "square");
+      tone(520, 780, 0.14, 0.06, 0.2, "square");
+      break;
+    case "dash": tone(700, 120, 0.4, 0.09, 0, "sawtooth"); break;
     case "pearl":
       tone(660, 845, 0.18, 0.06);
       tone(990, 1270, 0.22, 0.052, 0.095);
@@ -79,10 +101,16 @@ function ratio(element, value) {
   if (element.style.transform !== scaled) element.style.transform = scaled;
 }
 
-function announce(message) {
+function announce(message, above = "") {
   const banner = id("announcement");
   banner.classList.remove("show");
-  banner.textContent = message;
+  banner.textContent = "";
+  if (above) {
+    const small = document.createElement("small");
+    small.textContent = above;
+    banner.append(small);
+  }
+  banner.append(message);
   void banner.offsetWidth;
   banner.classList.add("show");
 }
@@ -163,7 +191,7 @@ function currentMove() {
 
 function launch() {
   wakeAudio();
-  game.pulse();
+  if (game.pulse()) usedPulse = true;
 }
 id("pulse").addEventListener("pointerdown", event => {
   if (event.pointerType === "touch") launch();
@@ -185,15 +213,19 @@ paintSound();
 
 function paintRecord() {
   id("best").hidden = best === 0;
-  text(id("best"), "Рекорд экспедиции  ✦ " + best);
+  const reach = deep > DEPTHS.length ? "рейс пройден" : deep ? `глубина ${deep} из ${DEPTHS.length}` : "";
+  text(id("best"), "Рекорд экспедиции  ✦ " + best + (reach ? "  ·  " + reach : ""));
 }
 paintRecord();
 
+let pressedPanel = false; // нажатие началось на самой панели, а не на арене под ней
 function showPanel(markup) {
+  pressedPanel = false;
   id("panel-body").innerHTML = markup;
   id("panel").hidden = false;
   id("panel-body").querySelector("button").focus({ preventScroll: true });
 }
+id("panel").addEventListener("pointerdown", () => (pressedPanel = true));
 
 function pause() {
   if (!active()) return;
@@ -210,12 +242,24 @@ function resume() {
 }
 id("pause").onclick = pause;
 
+let told = new Set(); // подсказки, которые в этом рейсе уже показаны
+let usedPulse = false;
+
 function start() {
   clearInput();
   wakeAudio();
   hasMoved = false;
+  usedPulse = false;
+  told = new Set();
   view.reset();
   game.start();
+}
+
+function again() {
+  clearInput();
+  wakeAudio();
+  view.reset();
+  game.retry();
 }
 id("start").onclick = start;
 
@@ -238,29 +282,62 @@ function paintMode() {
     showPanel('<div class="eyebrow">РИФ 07</div><h2 id="panel-title">Пауза</h2><p>Субмарина ждёт команды.</p><button class="primary" data-action="resume">Продолжить</button>');
   } else if (mode === "upgrade") {
     clearInput();
-    showPanel('<div class="eyebrow">ПОЛОВИНА МАРШРУТА</div><h2 id="panel-title">Улучши субмарину</h2><p>Выбери один модуль для глубоководного участка.</p><div class="choices"><button class="choice" data-action="rapid"><b>⚡ Быстрый лазер</b><small>На 35% больше выстрелов</small></button><button class="choice" data-action="armor"><b>🛡 Крепкий корпус</b><small>+35 к прочности и ремонт</small></button></div>');
+    const cards = game.offer.map(kind => {
+      const [icon, name, about] = MODULE_INFO[kind];
+      const third = kind === "twin" && game.player.barrels === 2;
+      return `<button class="choice" data-action="module" data-kind="${kind}"><i aria-hidden="true">${icon}</i><b>${third ? "Третий ствол" : name}</b><small>${about}</small></button>`;
+    }).join("");
+    showPanel(`<div class="eyebrow">ДОК-СТАНЦИЯ · ГЛУБИНА ${game.wave} ПРОЙДЕНА</div><h2 id="panel-title">Улучши субмарину</h2><p>Выбери один модуль. Впереди глубже и опаснее.</p><div class="choices three">${cards}</div>`);
   } else if (mode === "won" || mode === "lost") {
     clearInput();
     const win = mode === "won";
-    if (game.score > best) { best = game.score; save(); }
+    const reached = win ? DEPTHS.length + 1 : game.wave;
+    if (game.score > best || reached > deep) {
+      best = Math.max(best, game.score);
+      deep = Math.max(deep, reached);
+      save();
+    }
     paintRecord();
-    showPanel(`<div class="eyebrow">${win ? "ЭКСПЕДИЦИЯ ЗАВЕРШЕНА" : "СИГНАЛ ИЗ ДОКА"}</div>
-      <h2 id="panel-title">${win ? "Жемчужина спасена!" : "Субмарина повреждена"}</h2>
-      <p class="result-score">✦ ${game.score}</p>
-      <p>${win ? "Кракен-9 обезврежен. Риф снова свободен." : "Подбирай жемчужины для ремонта и используй импульс против залпов."}</p>
-      <button class="primary" data-action="retry">Новый рейс</button>
-      <button class="choice" data-action="dock">В док</button>`);
+    const minutes = Math.floor(game.time / 60);
+    const seconds = String(Math.floor(game.time % 60)).padStart(2, "0");
+    const facts = `<div class="facts"><span><b>${game.destroyed}</b> роботов</span><span><b>${game.collected}</b> жемчужин</span><span><b>${game.bestCombo}</b> подряд</span><span><b>${minutes}:${seconds}</b> в рейсе</span></div>`;
+    if (win) {
+      showPanel(`<div class="eyebrow">ЭКСПЕДИЦИЯ ЗАВЕРШЕНА</div>
+        <h2 id="panel-title">Жемчужина спасена!</h2>
+        <p class="result-score">✦ ${game.score}</p>${facts}
+        <p>Кракен-9 обезврежен. Риф снова свободен${game.retries ? "" : " — и ни одной потерянной лодки"}.</p>
+        <button class="primary" data-action="retry">Новый рейс</button>
+        <div class="row solo"><button class="choice" data-action="dock">В док</button></div>`);
+    } else {
+      const tip = game.enemies.some(enemy => enemy.kind === "boss") ? "Луч Кракена бьёт по прямой: увидел розовую полосу — сразу в сторону."
+        : game.enemies.some(enemy => enemy.kind === "titan") ? "Великан бросается по светлой полосе. Уйди вбок и стреляй, пока он пятится."
+        : "Подбирай жемчужины для ремонта, а импульс береги для залпов и толпы.";
+      showPanel(`<div class="eyebrow">СИГНАЛ ИЗ ДОКА · ГЛУБИНА ${game.wave} ИЗ ${DEPTHS.length}</div>
+        <h2 id="panel-title">Субмарина повреждена</h2>
+        <p class="result-score">✦ ${game.score}</p>${facts}
+        <p>${tip}</p>
+        <button class="primary" data-action="again">Ещё раз с этой глубины</button>
+        <p class="note">Модули останутся, роботы здесь станут слабее, счёт уменьшится на четверть.</p>
+        <div class="row"><button class="choice" data-action="retry">Новый рейс</button><button class="choice" data-action="dock">В док</button></div>`);
+    }
   }
 }
 
 id("panel-body").addEventListener("click", event => {
-  const action = event.target.closest("[data-action]")?.dataset.action;
+  // палец, который вёл лодку и отпустился уже над панелью, ничего не выбирает
+  if (event.detail !== 0 && !pressedPanel) return;
+  pressedPanel = false;
+  const button = event.target.closest("[data-action]");
+  const action = button?.dataset.action;
   if (action === "resume") resume();
   else if (action === "retry") start();
+  else if (action === "again") again();
   else if (action === "dock") dock();
-  else if (action === "rapid" || action === "armor") {
+  else if (action === "module") {
     wakeAudio();
-    game.upgrade(action);
+    game.upgrade(button.dataset.kind);
+    tone(523, 784, 0.2, 0.07);
+    tone(784, 1046, 0.25, 0.06, 0.12);
   }
 });
 
@@ -268,21 +345,35 @@ const wave = id("wave"), score = id("score"), hp = id("hp");
 const pulse = id("pulse"), pulseLabel = id("pulse-label");
 const boss = id("boss"), bossFill = id("boss-fill"), healthFill = id("health-fill");
 const lesson = id("lesson");
+const combo = id("combo"), mods = id("mods"), bossName = id("boss-name");
 
 function paintHud() {
   if (game.mode === "menu") return;
   const p = game.player;
   text(wave, game.wave + " / " + DEPTHS.length);
   text(score, game.score);
+  combo.hidden = game.combo < 2 || !active();
+  if (game.combo >= 2) text(combo, "серия ×" + game.multiplier().toFixed(1));
+  mods.hidden = game.modules.length === 0;
+  text(mods, game.modules.map(kind => MODULE_INFO[kind][0]).join(" "));
   text(hp, Math.ceil(p.health));
   ratio(healthFill, p.health / p.maxHealth);
   healthFill.closest(".health").classList.toggle("low", p.health < p.maxHealth * 0.36);
   pulse.disabled = game.mode !== "play" || p.cooldown > 0;
   text(pulseLabel, p.cooldown > 0 ? Math.ceil(p.cooldown) + " с" : "ИМПУЛЬС");
-  const flagship = game.enemies.find(enemy => enemy.kind === "boss");
+  const flagship = game.enemies.find(enemy => BOSS_NAMES[enemy.kind]);
   boss.hidden = !flagship;
-  if (flagship) ratio(bossFill, Math.max(0, flagship.health / flagship.maxHealth));
-  lesson.hidden = hasMoved || game.wave !== 1 || game.time > 6 || game.mode !== "play";
+  if (flagship) {
+    text(bossName, BOSS_NAMES[flagship.kind]);
+    boss.dataset.kind = flagship.kind;
+    ratio(bossFill, Math.max(0, flagship.health / flagship.maxHealth));
+  }
+  // две подсказки: как плыть (первая глубина) и зачем импульс (вторая, пока им не пользовались)
+  const teachMove = !hasMoved && game.wave === 1 && game.time < 6;
+  const teachPulse = !usedPulse && game.wave === 2 && p.cooldown === 0 && game.shots.some(shot => !shot.friendly);
+  lesson.hidden = game.mode !== "play" || !(teachMove || teachPulse);
+  if (teachMove) text(lesson, "Проведи пальцем, чтобы плыть");
+  else if (teachPulse) text(lesson, "ИМПУЛЬС сбивает заряды и роботов рядом");
 }
 
 function resize() {
@@ -296,13 +387,28 @@ resize();
 let last = 0;
 let previous = "";
 let accumulator = 0;
+let rush = 1; // ускорение времени, только для проверок
 const STEP = 1 / 60;
+
+// Ручки для проверок из консоли и для роботов: состояние, прыжок на глубину, ускорение времени.
+window.reefPatrol = {
+  game,
+  view,
+  state: () => ({ mode: game.mode, wave: game.wave, score: game.score, health: game.player.health, enemies: game.enemies.length, offer: game.offer }),
+  jump(depth) {
+    game.enemies.length = game.shots.length = game.pearls.length = game.queue.length = 0;
+    game.beam = null;
+    game.wave = Math.max(0, Math.min(DEPTHS.length - 1, depth - 1));
+    game.nextWave();
+  },
+  speed(k) { rush = Math.max(0.1, Math.min(8, k)); },
+};
 
 function frame(ms) {
   const dt = last ? Math.min(0.05, (ms - last) / 1000) : 0;
   last = ms;
   if (active()) {
-    accumulator += dt;
+    accumulator += dt * rush;
     const move = currentMove();
     while (accumulator >= STEP) {
       game.step(STEP, move);
@@ -312,9 +418,16 @@ function frame(ms) {
   for (const e of game.events.splice(0)) {
     view.event(e);
     playEvent(e);
-    if (e.type === "wave") announce(e.name);
-    if (e.type === "beam-warning") announce("Уйди с линии луча!");
-    if (e.type === "clear") announce(game.wave === DEPTHS.length ? "Жемчужина освобождена" : "Волна отбита");
+    if (e.type === "wave") announce(e.name, "ГЛУБИНА " + e.wave);
+    else if (e.type === "beam-warning") announce("Уйди с линии луча!");
+    else if (e.type === "clear") announce(game.wave === DEPTHS.length ? "Жемчужина освобождена" : "Глубина пройдена");
+    else if (e.type === "swell" && !told.has("swell")) {
+      told.add("swell");
+      announce("Ёж раздувается — отплыви!");
+    } else if (e.type === "lane-warning" && !told.has(e.row ? "eel" : "titan")) {
+      told.add(e.row ? "eel" : "titan");
+      announce(e.row ? "Угорь! Уйди с полосы" : "Великан бросается — в сторону!");
+    }
   }
   if (previous !== game.mode) {
     previous = game.mode;

@@ -1,5 +1,5 @@
-import * as T from "../vendor/three/three.module.min.js?v=d76d4a47";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=d76d4a47";
+import * as T from "../vendor/three/three.module.min.js?v=253dead7";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=253dead7";
 
 export const GEO = {
   sphere: new T.SphereGeometry(1, 22, 15),
@@ -32,6 +32,16 @@ const lilac = enamel("#e7a3ed");
 const plum = enamel("#69539f");
 const goldGlow = glow("#ffd77f");
 const magenta = glow("#ff9ecf");
+const sunny = enamel("#ffd66b", 0.42);
+const cream = enamel("#fff1c9", 0.5);
+const tangerine = enamel("#ff9a4d", 0.4);
+const teal = enamel("#2fb3a6", 0.3);
+const mint = enamel("#8cf0cf", 0.34);
+const navy = enamel("#27506f", 0.36);
+const voltGlow = glow("#b6fff0");
+const steel = enamel("#6f8fa6", 0.3, 0.45);
+const crimson = enamel("#d9485f", 0.36);
+const emberGlow = glow("#ffb36b");
 
 export function mesh(geometry, material, x, y, z, sx, sy = sx, sz = sx) {
   const object = new T.Mesh(geometry, material);
@@ -86,6 +96,14 @@ export function submarine() {
   propeller.add(mesh(GEO.sphere, pale, 0, 0, 0, 0.115));
   g.add(propeller);
   g.userData.propeller = propeller;
+  // стволы модуля «Второй ствол»: сначала пара по бокам, потом верхний
+  const side = new T.Group();
+  for (const s of [-1, 1]) side.add(disc(ink, s * 0.73, -0.11, -0.98, 0.1, 0.5), disc(laserBlue, s * 0.73, -0.11, -1.25, 0.12, 0.07));
+  const top = new T.Group();
+  top.add(disc(ink, 0, 0.36, -1.12, 0.1, 0.56), disc(laserBlue, 0, 0.36, -1.42, 0.12, 0.07));
+  side.visible = top.visible = false;
+  g.add(side, top);
+  g.userData.barrels = [side, top];
   return g;
 }
 
@@ -188,7 +206,115 @@ function kraken() {
   return g;
 }
 
-export const enemyModels = { crab, jelly, mine, boss: kraken };
+// Рыба-ёж: круглый, в шипах; userData.body раздувается перед хлопком
+function puffer() {
+  const g = new T.Group();
+  const body = new T.Group();
+  body.add(mesh(GEO.sphere, sunny, 0, 0, 0, 0.74, 0.7, 0.78),
+    mesh(GEO.sphere, cream, 0, -0.2, 0.02, 0.64, 0.5, 0.68));
+  const up = new T.Vector3(0, 1, 0);
+  for (let i = 0; i < 14; i++) {
+    // шипы по сфере золотым сечением
+    const y = 1 - (i + 0.5) / 14 * 1.7;
+    const r = Math.sqrt(Math.max(0, 1 - y * y));
+    const a = i * 2.39996;
+    const dir = new T.Vector3(Math.cos(a) * r, y, Math.sin(a) * r);
+    const spike = mesh(GEO.cone, tangerine, dir.x * 0.78, dir.y * 0.72, dir.z * 0.8, 0.1, 0.34, 0.1);
+    spike.quaternion.setFromUnitVectors(up, dir);
+    body.add(spike);
+  }
+  g.add(body);
+  for (const s of [-1, 1]) {
+    g.add(mesh(GEO.sphere, pale, s * 0.3, 0.2, -0.66, 0.17),
+      mesh(GEO.sphere, ink, s * 0.31, 0.21, -0.78, 0.09));
+    const fin = mesh(GEO.box, tangerine, s * 0.8, 0, 0.1, 0.3, 0.07, 0.28);
+    fin.rotation.y = s * 0.5;
+    g.add(fin);
+  }
+  g.add(mesh(GEO.box, tangerine, 0, 0.05, 0.86, 0.07, 0.42, 0.3),
+    mesh(GEO.sphere, ink, 0, -0.08, -0.75, 0.12, 0.06, 0.06));
+  g.userData.body = body;
+  return g;
+}
+
+// Электроугорь: цепочка звеньев вдоль оси z, голова впереди (−z); userData.spine извивается
+function eel() {
+  const g = new T.Group();
+  const spine = [];
+  for (let i = 0; i < 7; i++) {
+    const size = 0.5 - i * 0.045;
+    const link = new T.Group();
+    link.position.z = -0.55 + i * 0.52;
+    link.add(mesh(GEO.sphere, i % 2 ? teal : navy, 0, 0, 0, size, size * 0.86, 0.42));
+    if (i && i < 6) link.add(mesh(GEO.sphere, voltGlow, 0, size * 0.8, 0, 0.09, 0.05, 0.16));
+    g.add(link);
+    spine.push(link);
+  }
+  const head = spine[0];
+  head.add(mesh(GEO.sphere, navy, 0, 0.02, -0.34, 0.47, 0.4, 0.46),
+    mesh(GEO.box, mint, 0, -0.16, -0.62, 0.5, 0.14, 0.3));
+  for (const s of [-1, 1]) {
+    head.add(mesh(GEO.sphere, voltGlow, s * 0.25, 0.2, -0.62, 0.11),
+      mesh(GEO.cone, mint, s * 0.3, 0.42, -0.2, 0.07, 0.4, 0.07));
+  }
+  const tail = mesh(GEO.box, mint, 0, 0, 0.3, 0.06, 0.5, 0.42);
+  spine[6].add(tail);
+  g.userData.spine = spine;
+  return g;
+}
+
+// Клешня-великан: бронированный краб-босс с двумя огромными клешнями
+function titan() {
+  const g = new T.Group();
+  g.add(mesh(GEO.sphere, crimson, 0, 0.1, 0, 1.7, 1.02, 1.36),
+    mesh(GEO.sphere, steel, 0, 0.62, 0.18, 1.38, 0.62, 1.1),
+    mesh(GEO.box, navy, 0, 0.12, -1.08, 1.5, 0.5, 0.5),
+    mesh(GEO.sphere, emberGlow, 0, 1.08, 0.2, 0.34, 0.2, 0.34));
+  for (let i = 0; i < 3; i++) g.add(mesh(GEO.cone, steel, (i - 1) * 0.72, 1.12, 0.42 - Math.abs(i - 1) * 0.2, 0.2, 0.5, 0.2));
+  const limbs = [];
+  for (const s of [-1, 1]) {
+    g.add(mesh(GEO.sphere, ink, s * 0.5, 0.52, -1.18, 0.26),
+      mesh(GEO.sphere, emberGlow, s * 0.5, 0.56, -1.36, 0.13));
+    for (let i = 0; i < 3; i++) {
+      const leg = mesh(GEO.box, navy, s * 1.72, -0.3, 0.86 - i * 0.62, 1.0, 0.3, 0.3);
+      leg.rotation.y = s * (i - 1) * 0.36;
+      g.add(leg);
+    }
+    const claw = new T.Group();
+    claw.position.set(s * 1.5, 0.12, -0.9);
+    const jaw = mesh(GEO.cone, steel, s * 0.52, 0.02, -1.24, 0.3, 0.74, 0.3);
+    const thumb = mesh(GEO.cone, crimson, s * 0.12, 0.02, -1.1, 0.2, 0.5, 0.2);
+    jaw.rotation.x = thumb.rotation.x = -Math.PI / 2;
+    claw.add(mesh(GEO.box, navy, s * 0.14, 0, -0.2, 0.36, 0.3, 0.6),
+      mesh(GEO.sphere, crimson, s * 0.36, 0, -0.66, 0.66, 0.46, 0.8), jaw, thumb);
+    limbs.push(claw);
+    g.add(claw);
+  }
+  g.userData.limbs = limbs;
+  return g;
+}
+
+export const enemyModels = { crab, jelly, mine, puffer, eel, titan, boss: kraken };
+
+// Рыбка для стаек у дна: тело и хвост одним куском, нос смотрит в −z; красится общим материалом стаи
+export function fishGeometry() {
+  const body = new T.SphereGeometry(1, 10, 7).toNonIndexed();
+  body.scale(0.13, 0.19, 0.36);
+  const tail = new T.ConeGeometry(0.2, 0.26, 4).toNonIndexed();
+  tail.scale(0.22, 1, 1);
+  tail.rotateX(-Math.PI / 2); // остриём к телу
+  tail.translate(0, 0, 0.44);
+  const fish = new T.BufferGeometry();
+  for (const name of ["position", "normal"]) {
+    const a = body.getAttribute(name).array;
+    const b = tail.getAttribute(name).array;
+    const joined = new Float32Array(a.length + b.length);
+    joined.set(a);
+    joined.set(b, a.length);
+    fish.setAttribute(name, new T.BufferAttribute(joined, 3));
+  }
+  return fish;
+}
 
 export function pearl(rare) {
   const g = new T.Group();

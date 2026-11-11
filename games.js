@@ -161,4 +161,11 @@ const GAMES = [
     cover: "covers/reef-patrol.jpg",
     color: "#37ac98",
   },
+  {
+    id: "kanyon",
+    title: "Грозовой каньон",
+    url: "kanyon/",
+    cover: "covers/kanyon.jpg",
+    color: "#e0792e",
+  },
 ];

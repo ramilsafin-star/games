@@ -1,0 +1,801 @@
+// Правила «Грозового каньона» без графики: их можно гонять в Node (см. tests/sim.mjs).
+// Истребитель «Стриж» летит вглубь каньона. Он стоит в плоскости z = 0, а мир едет навстречу (в сторону +z).
+// x — вбок, y — высота, z — глубина (далеко впереди — большие отрицательные числа).
+export const SCROLL = 42; // скорость мира, единиц в секунду
+export const FAR = -170; // здесь всё появляется
+const TAU = Math.PI * 2;
+const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+
+// pool — из каких сценок собирается зона, attacks — приёмы босса
+export const ZONES = [
+  { name: "Рассветный каньон", boss: "Сторож ущелья", hp: 520, segments: 7,
+    first: ["line", "rings", "slalom", "darts"], pool: ["line", "slalom", "darts", "arch", "turrets", "rings"], attacks: ["fan", "burst"] },
+  { name: "Хрустальный грот", boss: "Кристальный страж", hp: 760, segments: 8,
+    first: ["mines"], pool: ["line", "sweep", "slalom", "darts", "arch", "turrets", "mines", "bomber", "rings"], attacks: ["fan", "mines", "burst"] },
+  { name: "Грозовой перевал", boss: "Громовержец", hp: 980, segments: 8,
+    first: ["storm"], pool: ["sweep", "storm", "darts", "arch", "turrets", "bomber", "mines", "line", "rings"], attacks: ["storm", "fan", "darts", "burst"] },
+  { name: "Лавовое ущелье", boss: "Горн", hp: 1200, segments: 9,
+    first: ["geysers"], pool: ["geysers", "sweep", "slalom", "darts", "arch", "turrets", "bomber", "mines", "storm", "rings"], attacks: ["beam", "fan", "geysers", "burst"] },
+  { name: "Небесная цитадель", boss: "Цитадель", hp: 1650, segments: 9,
+    first: ["sweep"], pool: ["sweep", "storm", "darts", "arch", "turrets", "bomber", "mines", "slalom", "line", "geysers"], attacks: ["beam", "fan", "darts", "storm", "burst", "mines"] },
+];
+
+// hit — урон при столкновении
+const UNITS = {
+  scout: { hp: 24, r: 1.5, points: 50, hit: 14 },
+  dart: { hp: 12, r: 1.0, points: 40, hit: 16 },
+  turret: { hp: 36, r: 1.3, points: 80, hit: 14 },
+  mine: { hp: 12, r: 1.05, points: 30, hit: 18 },
+  bomber: { hp: 150, r: 2.7, points: 200, hit: 20 },
+  boss: { hp: 500, r: 5, points: 1000, hit: 24 },
+};
+
+// Модули ангара. Брать можно повторно, пока не упрёшься в предел.
+export const MODULES = ["rapid", "spread", "armor", "rockets", "magnet", "wing"];
+const BOLT_SPEED = 150;
+const ROCKET_TIME = 9;
+
+function seeded(seed) {
+  return () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+}
+
+// План зоны: список «что и когда долетит до игрока». Время появления считается назад от этого момента.
+function plan(index, random) {
+  const zone = ZONES[index];
+  const list = [];
+  let t = 3;
+  const hard = index / (ZONES.length - 1); // 0..1
+  const enemy = (dt, kind, u, v, extra = {}) => list.push({ at: t + dt - 1.5, type: "enemy", kind, u, v, ...extra });
+  const rock = (dt, kind, u, extra = {}) => list.push({ at: t + dt + FAR / SCROLL, type: "rock", kind, u, ...extra });
+  const hazard = (dt, kind, extra = {}) => list.push({ at: t + dt - 1.1, type: "hazard", kind, ...extra });
+  const side = () => (random() < 0.5 ? -1 : 1);
+  const P = {
+    // строй разведчиков: зависают впереди и стреляют
+    line() {
+      const n = 4 + Math.round(hard * 2) + (random() < 0.5 ? 1 : 0);
+      const v = 0.45 + random() * 0.35;
+      for (let i = 0; i < n; i++) enemy(i * 0.22, "scout", (i - (n - 1) / 2) / Math.max(1, n - 1) * 1.5, v + (i % 2) * 0.12, { stay: 6.5 });
+      return 6;
+    },
+    // звено проносится поперёк каньона змейкой
+    sweep() {
+      const n = 5 + Math.round(hard * 2);
+      const s = side();
+      for (let i = 0; i < n; i++) enemy(i * 0.35, "scout", s * 0.1, 0.35 + random() * 0.45, { stay: 7, sway: 0.75, rate: 0.9, phase: i * 0.55 * s });
+      return 6.5;
+    },
+    darts() {
+      const n = 3 + Math.round(hard * 3);
+      for (let i = 0; i < n; i++) enemy(i * 0.75, "dart", random() * 1.8 - 0.9, 0.15 + random() * 0.7);
+      return n * 0.75 + 1.6;
+    },
+    // слалом между скалами
+    slalom() {
+      const n = 4 + Math.round(hard * 2);
+      let s = side();
+      for (let i = 0; i < n; i++) {
+        rock(i * 1.05, "pillar", s * (0.35 + random() * 0.3));
+        s = -s;
+      }
+      if (hard > 0.4) enemy(1, "scout", 0, 0.8, { stay: 5 });
+      return n * 1.05 + 1;
+    },
+    // арка (пролети снизу), затем гряда (перелети сверху)
+    arch() {
+      const n = 2 + Math.round(hard * 2);
+      let low = random() < 0.5;
+      for (let i = 0; i < n; i++) {
+        rock(i * 1.7, low ? "ridge" : "arch", 0);
+        low = !low;
+      }
+      return n * 1.7 + 0.8;
+    },
+    // пушки на скальных столбах по краям
+    turrets() {
+      const n = 2 + Math.round(hard * 2);
+      let s = side();
+      for (let i = 0; i < n; i++) {
+        const u = s * (0.5 + random() * 0.35);
+        rock(i * 1.5, "stub", u);
+        list.push({ at: t + i * 1.5 + FAR / SCROLL, type: "enemy", kind: "turret", u, v: 0.44 });
+        s = -s;
+      }
+      return n * 1.5 + 1.5;
+    },
+    // кольца-ворота с кристаллами: награда за точный полёт
+    rings() {
+      const phase = random() * TAU;
+      for (let i = 0; i < 5; i++) rock(i * 0.85, "ring", Math.sin(phase + i * 0.9) * 0.6, { v: 0.5 + Math.cos(phase * 1.3 + i * 0.7) * 0.3 });
+      return 5;
+    },
+    mines() {
+      const n = 6 + Math.round(hard * 5);
+      for (let i = 0; i < n; i++) list.push({ at: t + i * 0.42 + FAR / SCROLL, type: "enemy", kind: "mine", u: random() * 1.8 - 0.9, v: 0.1 + random() * 0.8 });
+      return n * 0.42 + 1.2;
+    },
+    bomber() {
+      enemy(0, "bomber", side() * 0.3, 0.72, { stay: 9 });
+      enemy(0.8, "scout", -0.75, 0.4, { stay: 7 });
+      enemy(1.0, "scout", 0.75, 0.4, { stay: 7 });
+      return 8.5;
+    },
+    // гроза: молнии бьют туда, где сейчас истребитель
+    storm() {
+      const n = 4 + Math.round(hard * 3);
+      for (let i = 0; i < n; i++) hazard(i * 0.95, "bolt", { aimed: i % 3 !== 2, u: random() * 1.8 - 0.9 });
+      if (hard > 0.3) enemy(0.5, "scout", side() * 0.5, 0.75, { stay: 5 });
+      return n * 0.95 + 1;
+    },
+    // лавовые гейзеры: столбы снизу до середины высоты
+    geysers() {
+      const n = 5 + Math.round(hard * 2);
+      for (let i = 0; i < n; i++) hazard(i * 0.8, "geyser", { aimed: i % 2 === 0, u: random() * 1.8 - 0.9 });
+      enemy(1.2, "scout", side() * 0.6, 0.85, { stay: 5 });
+      return n * 0.8 + 1;
+    },
+  };
+  let last = "";
+  for (let i = 0; i < zone.segments; i++) {
+    let name = zone.first[i];
+    while (!name || name === last) name = zone.pool[Math.floor(random() * zone.pool.length)];
+    last = name;
+    t += P[name]() + 0.9 - hard * 0.5;
+  }
+  return { list: list.sort((a, b) => a.at - b.at), end: t };
+}
+
+export class Raid {
+  constructor(random = Math.random) {
+    this.random = random;
+    // границы полёта задаёт экран: x — полуширина, bottom..top — высота
+    this.bounds = { x: 7, bottom: 0.9, top: 6.6 };
+    this.reset();
+  }
+
+  reset() {
+    this.mode = "menu";
+    this.zone = 0;
+    this.time = 0;
+    this.zoneTime = 0;
+    this.score = 0;
+    this.destroyed = 0;
+    this.collected = 0;
+    this.combo = 0;
+    this.comboUntil = 0;
+    this.bestCombo = 0;
+    this.retries = 0;
+    this.ease = 0; // сколько раз подряд игрок погиб в этой зоне
+    this.clean = true; // зона без единой пробоины
+    this.modules = [];
+    this.serial = 0;
+    this.player = {
+      x: 0, y: 3.4, vx: 0, vy: 0, health: 100, maxHealth: 100, safe: 0,
+      next: 0, interval: 0.17, power: 6, spread: 0, speed: 1,
+      rockets: 4, rocketPower: 1, rocketTime: ROCKET_TIME, cooldown: 0, magnet: 0, wing: 0, wingNext: 0,
+    };
+    this.aim = null; // по кому сейчас доводятся лазеры
+    this.offer = [];
+    this.script = [];
+    this.planEnd = 0;
+    this.bossDone = false;
+    this.enemies = [];
+    this.rocks = [];
+    this.hazards = [];
+    this.bolts = []; // наши лазеры
+    this.shots = []; // вражеские заряды
+    this.rockets = [];
+    this.gems = [];
+    this.events = [];
+  }
+
+  emit(type, values = {}) {
+    this.events.push({ type, ...values });
+  }
+
+  start() {
+    this.reset();
+    this.nextZone();
+  }
+
+  nextZone() {
+    const zone = ZONES[this.zone];
+    if (!zone) return;
+    this.zone++;
+    this.mode = "play";
+    this.zoneTime = 0;
+    this.bossDone = false;
+    this.clean = true;
+    const p = this.player;
+    p.health = Math.min(p.maxHealth, p.health + 15);
+    const made = plan(this.zone - 1, seeded(Math.floor(this.random() * 1e9)));
+    this.script = made.list;
+    this.planEnd = made.end;
+    this.emit("zone", { zone: this.zone, name: zone.name });
+  }
+
+  makeOffer() {
+    const p = this.player;
+    const pool = MODULES.filter(kind => !(kind === "spread" && p.spread >= 2) && !(kind === "wing" && p.wing >= 2));
+    const offer = [];
+    while (offer.length < 3 && pool.length) offer.push(pool.splice(Math.floor(this.random() * pool.length), 1)[0]);
+    return offer;
+  }
+
+  upgrade(kind) {
+    if (this.mode !== "upgrade" || !this.offer.includes(kind)) return;
+    const p = this.player;
+    if (kind === "rapid") p.interval *= 0.8;
+    else if (kind === "spread") p.spread++;
+    else if (kind === "armor") {
+      p.maxHealth += 35;
+      p.health = Math.min(p.maxHealth, p.health + 50);
+    } else if (kind === "rockets") {
+      p.rockets += 2;
+      p.rocketTime *= 0.82;
+    } else if (kind === "magnet") p.magnet++;
+    else if (kind === "wing") p.wing++;
+    this.modules.push(kind);
+    this.offer = [];
+    this.nextZone();
+  }
+
+  // после гибели: та же зона заново, модули остаются, счёт меньше на четверть, враги слабее
+  retry() {
+    if (this.mode !== "lost") return;
+    this.score = Math.round(this.score * 0.75);
+    this.retries++;
+    this.ease++;
+    this.combo = 0;
+    this.enemies.length = this.rocks.length = this.hazards.length = this.bolts.length = 0;
+    this.shots.length = this.rockets.length = this.gems.length = 0;
+    const p = this.player;
+    Object.assign(p, { x: 0, y: 3.4, vx: 0, vy: 0, cooldown: 0, safe: 2 });
+    this.zone--;
+    this.nextZone();
+    p.health = p.maxHealth;
+  }
+
+  mercy() {
+    return Math.max(0.5, 1 - 0.15 * this.ease);
+  }
+
+  multiplier() {
+    return 1 + Math.min(10, Math.max(0, this.combo - 1)) * 0.1;
+  }
+
+  height(v) {
+    return this.bounds.bottom + v * (this.bounds.top - this.bounds.bottom);
+  }
+
+  spawn(item) {
+    const b = this.bounds;
+    const unit = UNITS[item.kind];
+    const boss = item.kind === "boss";
+    const scale = boss ? 1 : 1 + 0.12 * (this.zone - 1);
+    const hp = Math.round((boss ? ZONES[this.zone - 1].hp : unit.hp * scale) * this.mercy());
+    const fixed = item.kind === "mine" || item.kind === "turret"; // стоят в мире и едут вместе с ним
+    const enemy = {
+      id: ++this.serial, kind: item.kind, r: unit.r,
+      x: item.x ?? item.u * b.x * (fixed ? 0.92 : 0.8), y: item.y ?? this.height(item.v), z: item.z ?? FAR,
+      u: item.u, v: item.v, health: hp, maxHealth: hp, age: 0, flash: 0,
+      state: fixed || item.kind === "dart" ? "fly" : "in",
+      depth: boss ? -33 : item.kind === "bomber" ? -30 : -23 - this.random() * 9,
+      stay: item.stay ?? 6, sway: item.sway ?? 0.12, rate: item.rate ?? 1.3, phase: item.phase ?? this.random() * TAU,
+      fire: boss ? 2 : 0.9 + this.random() * 1.4, attack: 0, burst: 0, burstAt: 0, vx: 0, vy: 0,
+    };
+    this.enemies.push(enemy);
+    return enemy;
+  }
+
+  addRock(item) {
+    const b = this.bounds;
+    const tall = b.top - b.bottom;
+    const rock = { id: ++this.serial, kind: item.kind, z: FAR, x: item.u * b.x, half: 99, y0: -9, y1: 99, depth: 3, done: false };
+    if (item.kind === "pillar") rock.half = Math.min(1.35, b.x * 0.28);
+    else if (item.kind === "stub") {
+      rock.half = Math.min(1.2, b.x * 0.25);
+      rock.y1 = b.bottom + tall * 0.3;
+      rock.x = item.u * b.x * 0.92;
+    } else if (item.kind === "arch") rock.y0 = b.bottom + tall * 0.5; // свободно внизу
+    else if (item.kind === "ridge") rock.y1 = b.bottom + tall * 0.46; // свободно наверху
+    else if (item.kind === "ring") {
+      rock.x = item.u * b.x * 0.8;
+      rock.y = this.height(item.v);
+      rock.r = 1.85;
+    }
+    this.rocks.push(rock);
+  }
+
+  addHazard(item) {
+    const b = this.bounds;
+    const p = this.player;
+    const hazard = { id: ++this.serial, kind: item.kind, warn: item.warn ?? 1.1, live: 0.3, on: false };
+    if (item.kind === "beam") {
+      // луч босса: полоса во всю ширину, идёт сверху вниз или снизу вверх
+      const down = this.random() < 0.5;
+      Object.assign(hazard, { y: down ? b.top + 0.6 : b.bottom - 0.6, vy: (down ? -1 : 1) * 3.4, half: 0.55, live: 9 });
+    } else {
+      hazard.x = item.aimed ? clamp(p.x + (this.random() - 0.5) * 1.2, -b.x, b.x) : item.u * b.x;
+      hazard.half = Math.min(1.15, b.x * 0.26);
+      hazard.y0 = -9;
+      hazard.y1 = item.kind === "geyser" ? b.bottom + (b.top - b.bottom) * 0.56 : 99;
+      if (item.kind === "geyser") hazard.live = 0.6;
+    }
+    this.hazards.push(hazard);
+    this.emit("hazard-warning", { kind: item.kind });
+  }
+
+  movePlayer(dt, move) {
+    const p = this.player;
+    const b = this.bounds;
+    let vx, vy;
+    if (move.target) {
+      vx = (move.target.x - p.x) * 9;
+      vy = (move.target.y - p.y) * 9;
+    } else {
+      vx = move.x * 15;
+      vy = move.y * 11;
+    }
+    const top = 26 * p.speed;
+    const speed = Math.hypot(vx, vy);
+    if (speed > top) {
+      vx *= top / speed;
+      vy *= top / speed;
+    }
+    const blend = Math.min(1, dt * 14);
+    p.vx += (vx - p.vx) * blend;
+    p.vy += (vy - p.vy) * blend;
+    p.x = clamp(p.x + p.vx * dt, -b.x, b.x);
+    p.y = clamp(p.y + p.vy * dt, b.bottom, b.top);
+    p.safe = Math.max(0, p.safe - dt);
+    p.cooldown = Math.max(0, p.cooldown - dt);
+  }
+
+  // ближайшая к линии огня цель: по ней лазеры слегка доводятся
+  pickAim() {
+    const p = this.player;
+    const reach = 2.5 + p.magnet * 0.3;
+    let best = null;
+    let bestScore = Infinity;
+    for (const e of this.enemies) {
+      if (e.z > -5 || e.z < FAR + 8) continue;
+      const off = Math.hypot(e.x - p.x, e.y - p.y) - e.r * 0.6;
+      if (off > reach) continue;
+      const score = off + -e.z * 0.012;
+      if (score < bestScore) {
+        bestScore = score;
+        best = e;
+      }
+    }
+    return best;
+  }
+
+  bolt(x, y, z, target, power, tilt = 0) {
+    let vx = Math.sin(tilt) * BOLT_SPEED;
+    let vy = 0;
+    let vz = -Math.cos(tilt) * BOLT_SPEED;
+    if (target) {
+      const time = Math.max(0.05, (z - target.z) / (BOLT_SPEED + (target.vz || 0)));
+      const dx = target.x + (target.vx || 0) * time - x;
+      const dy = target.y + (target.vy || 0) * time - y;
+      const dz = target.z + (target.vz || 0) * time - z;
+      const length = Math.hypot(dx, dy, dz) || 1;
+      vx = dx / length * BOLT_SPEED + Math.sin(tilt) * BOLT_SPEED;
+      vy = dy / length * BOLT_SPEED;
+      vz = dz / length * BOLT_SPEED;
+    }
+    this.bolts.push({ id: ++this.serial, x, y, z, vx, vy, vz, power });
+  }
+
+  autoFire(dt) {
+    const p = this.player;
+    this.aim = this.pickAim();
+    if (this.time >= p.next) {
+      p.next = this.time + p.interval;
+      for (const s of [-1, 1]) this.bolt(p.x + s * 0.62, p.y - 0.05, -1.2, this.aim, p.power);
+      for (let i = 1; i <= p.spread; i++) {
+        for (const s of [-1, 1]) this.bolt(p.x + s * 0.8, p.y, -1, null, p.power * 0.8, s * 0.055 * i);
+      }
+      this.emit("shot");
+    }
+    // ведомые дроны стреляют сами по ближайшему врагу
+    if (p.wing && this.time >= p.wingNext) {
+      p.wingNext = this.time + 0.44;
+      let target = null;
+      for (const e of this.enemies) if (e.z < -4 && e.z > FAR + 20 && (!target || e.z > target.z)) target = e;
+      if (target) {
+        for (let i = 0; i < p.wing; i++) this.bolt(p.x + (i ? 2 : -2), p.y + 0.6, -0.5, target, 5);
+        this.emit("wing-shot");
+      }
+    }
+  }
+
+  // вражеский заряд летит в точку (tx, ty) на плоскости игрока
+  shoot(from, tx, ty, speed = 30, heavy = false) {
+    const dx = tx - from.x;
+    const dy = ty - from.y;
+    const dz = -from.z;
+    const length = Math.hypot(dx, dy, dz) || 1;
+    this.shots.push({
+      id: ++this.serial, x: from.x, y: from.y, z: from.z + 1.5,
+      vx: dx / length * speed, vy: dy / length * speed, vz: dz / length * speed, heavy,
+    });
+  }
+
+  fireRockets() {
+    const p = this.player;
+    if (this.mode !== "play" || p.cooldown > 0) return false;
+    p.cooldown = p.rocketTime;
+    const targets = this.enemies.filter(e => e.z < -3 && e.z > FAR + 15).sort((a, b) => b.z - a.z);
+    for (let i = 0; i < p.rockets; i++) {
+      const side = i % 2 ? 1 : -1;
+      const row = Math.floor(i / 2);
+      this.rockets.push({
+        id: ++this.serial, x: p.x + side * 0.9, y: p.y - 0.2, z: -0.5,
+        vx: side * (7 + row * 4), vy: 5 - row * 2, vz: -24, life: 3.2,
+        target: targets.length ? targets[i % targets.length].id : 0,
+      });
+    }
+    this.emit("rocket");
+    return true;
+  }
+
+  hurt(amount) {
+    const p = this.player;
+    if (p.safe > 0 || this.mode !== "play") return false;
+    p.safe = 1;
+    p.health = Math.max(0, p.health - Math.round(amount * (1 + 0.05 * (this.zone - 1)) * this.mercy()));
+    this.combo = 0;
+    this.clean = false;
+    this.emit("hurt");
+    if (p.health === 0) {
+      this.mode = "lost";
+      this.emit("lost");
+    }
+    return true;
+  }
+
+  damage(enemy, amount) {
+    if (enemy.state === "in" && enemy.kind === "boss") return; // босс неуязвим, пока прилетает
+    enemy.health -= amount;
+    enemy.flash = 0.12;
+    if (enemy.health <= 0) this.destroy(enemy, true);
+  }
+
+  destroy(enemy, scored) {
+    const index = this.enemies.indexOf(enemy);
+    if (index < 0) return;
+    this.enemies.splice(index, 1);
+    this.emit("burst", { kind: enemy.kind, x: enemy.x, y: enemy.y, z: enemy.z });
+    if (!scored) return;
+    this.destroyed++;
+    this.combo = this.time < this.comboUntil ? this.combo + 1 : 1;
+    this.comboUntil = this.time + 3;
+    this.bestCombo = Math.max(this.bestCombo, this.combo);
+    const boss = enemy.kind === "boss";
+    this.score += Math.round(UNITS[enemy.kind].points * (boss ? this.zone : 1) * this.multiplier());
+    const drops = boss ? 6 : enemy.kind === "bomber" ? 3 : this.destroyed % 2 === 0 ? 1 : 0;
+    for (let i = 0; i < drops; i++) {
+      this.gems.push({
+        id: ++this.serial, kind: (enemy.kind === "bomber" || boss) && i === 0 ? "repair" : "gem",
+        x: enemy.x + (i ? (this.random() - 0.5) * 4 : 0), y: enemy.y + (i ? (this.random() - 0.5) * 2.4 : 0), z: enemy.z - i * 3,
+      });
+    }
+    if (boss) {
+      this.bossDone = true;
+      this.script.length = 0;
+      for (const other of [...this.enemies]) this.destroy(other, false);
+    }
+  }
+
+  moveEnemy(e, dt) {
+    const p = this.player;
+    const b = this.bounds;
+    e.age += dt;
+    e.flash = Math.max(0, e.flash - dt);
+    const before = { x: e.x, y: e.y, z: e.z };
+    if (e.kind === "mine" || e.kind === "turret") {
+      e.z += SCROLL * dt;
+      if (e.kind === "turret" && e.z > -125 && e.z < -50) {
+        e.fire -= dt;
+        if (e.fire <= 0) {
+          e.fire = 1.3;
+          this.shoot(e, p.x, p.y, 58);
+          this.emit("enemy-shot", { kind: e.kind });
+        }
+      }
+      if (e.z > 10) this.enemies.splice(this.enemies.indexOf(e), 1);
+    } else if (e.kind === "dart") {
+      e.z += 78 * dt;
+      if (e.z < -24) {
+        e.x += clamp((p.x - e.x) * 2.4, -7, 7) * dt;
+        e.y += clamp((p.y - e.y) * 2.4, -6, 6) * dt;
+      }
+      if (e.z > 10) this.enemies.splice(this.enemies.indexOf(e), 1);
+    } else {
+      const boss = e.kind === "boss";
+      if (e.state === "in") {
+        e.z += Math.min(95 * dt, e.depth - e.z);
+        if (e.z >= e.depth - 0.01) {
+          e.state = "hover";
+          e.age = 0;
+          if (boss) this.emit("boss", { name: ZONES[this.zone - 1].boss });
+        }
+      } else if (e.state === "hover") {
+        const tx = boss ? Math.sin(e.age * 0.55) * b.x * 0.5 : clamp(e.u + Math.sin(e.age * e.rate + e.phase) * e.sway, -1, 1) * b.x * 0.8;
+        const ty = boss ? this.height(0.62 + Math.sin(e.age * 0.8) * 0.2) : this.height(clamp(e.v + Math.cos(e.age * e.rate * 0.8 + e.phase) * 0.07, 0.05, 1));
+        e.x += (tx - e.x) * Math.min(1, dt * 2.6);
+        e.y += (ty - e.y) * Math.min(1, dt * 2.6);
+        e.fire -= dt;
+        if (boss) this.bossActs(e, dt);
+        else if (e.fire <= 0) {
+          if (e.kind === "bomber") {
+            for (let i = -2; i <= 2; i++) this.shoot(e, p.x + i * 2.2, p.y, 20, true);
+            e.fire = 2.6;
+          } else {
+            this.shoot(e, p.x, p.y, 22);
+            e.fire = 2.2 + this.random() * 1.2 - (this.zone - 1) * 0.12;
+          }
+          this.emit("enemy-shot", { kind: e.kind });
+        }
+        if (!boss && e.age > e.stay) e.state = "out";
+      } else {
+        // улетает вверх и назад
+        e.y += 13 * dt;
+        e.z -= 22 * dt;
+        if (e.y > b.top + 10) this.enemies.splice(this.enemies.indexOf(e), 1);
+      }
+    }
+    e.vx = (e.x - before.x) / dt;
+    e.vy = (e.y - before.y) / dt;
+    e.vz = (e.z - before.z) / dt;
+  }
+
+  bossActs(e, dt) {
+    const p = this.player;
+    const wild = e.health < e.maxHealth / 2;
+    // очередь из трёх прицельных зарядов
+    if (e.burst > 0 && this.time >= e.burstAt) {
+      e.burst--;
+      e.burstAt = this.time + 0.2;
+      this.shoot(e, p.x, p.y, 27, true);
+      this.emit("enemy-shot", { kind: "boss" });
+    }
+    if (e.fire > 0) return;
+    const attacks = ZONES[this.zone - 1].attacks;
+    const name = attacks[e.attack++ % attacks.length];
+    e.fire = (wild ? 1.7 : 2.4) + (name === "beam" ? 1.6 : 0);
+    if (name === "fan") {
+      const n = wild ? 7 : 5;
+      for (let i = 0; i < n; i++) this.shoot(e, p.x + (i - (n - 1) / 2) * 2.1, p.y + (i % 2 ? 0.7 : -0.5), 21, true);
+      this.emit("enemy-shot", { kind: "boss" });
+    } else if (name === "burst") {
+      e.burst = wild ? 5 : 3;
+      e.burstAt = this.time;
+    } else if (name === "darts") {
+      for (const s of wild ? [-1, 0, 1] : [-1, 1]) this.spawn({ kind: "dart", x: e.x + s * 3, y: e.y - 0.5, z: e.z + 2, u: 0, v: 0 });
+    } else if (name === "mines") {
+      for (let i = 0; i < (wild ? 5 : 3); i++) {
+        this.spawn({ kind: "mine", x: clamp(p.x + (this.random() - 0.5) * 7, -this.bounds.x, this.bounds.x), y: clamp(p.y + (this.random() - 0.5) * 3.5, this.bounds.bottom, this.bounds.top), z: e.z + 4 - i * 9, u: 0, v: 0 });
+      }
+    } else if (name === "storm" || name === "geysers") {
+      const kind = name === "storm" ? "bolt" : "geyser";
+      for (let i = 0; i < (wild ? 4 : 3); i++) this.addHazard({ kind, aimed: i === 0, u: this.random() * 1.8 - 0.9, warn: 1.1 + i * 0.35 });
+    } else if (name === "beam") this.addHazard({ kind: "beam", warn: 1.2 });
+  }
+
+  moveHazards(dt) {
+    const p = this.player;
+    const b = this.bounds;
+    for (let i = this.hazards.length - 1; i >= 0; i--) {
+      const h = this.hazards[i];
+      if (!h.on) {
+        h.warn -= dt;
+        if (h.warn <= 0) {
+          h.on = true;
+          this.emit("hazard-live", { kind: h.kind, x: h.x });
+        }
+        continue;
+      }
+      h.live -= dt;
+      if (h.kind === "beam") {
+        h.y += h.vy * dt;
+        if (Math.abs(p.y - h.y) < h.half + 0.32) this.hurt(20);
+        if (h.y < b.bottom - 1.2 || h.y > b.top + 1.2) h.live = 0;
+      } else if (Math.abs(p.x - h.x) < h.half + 0.4 && p.y < h.y1 + 0.3) this.hurt(16);
+      if (h.live <= 0) this.hazards.splice(i, 1);
+    }
+  }
+
+  moveRocks(dt) {
+    const p = this.player;
+    for (let i = this.rocks.length - 1; i >= 0; i--) {
+      const rock = this.rocks[i];
+      const before = rock.z;
+      rock.z += SCROLL * dt;
+      if (rock.kind === "ring") {
+        if (!rock.done && before < 0 && rock.z >= 0) {
+          rock.done = true;
+          if (Math.hypot(p.x - rock.x, p.y - rock.y) <= rock.r) {
+            this.score += Math.round(60 * this.multiplier());
+            p.cooldown = Math.max(0, p.cooldown - 0.8);
+            rock.taken = true;
+            this.emit("ring", { x: rock.x, y: rock.y });
+          }
+        }
+      } else if (!rock.done && Math.abs(rock.z) < rock.depth / 2 + 0.7 &&
+        Math.abs(p.x - rock.x) < rock.half + 0.45 && p.y > rock.y0 - 0.3 && p.y < rock.y1 + 0.3) {
+        rock.done = true; // одна скала бьёт один раз
+        if (this.hurt(18)) this.emit("crash");
+      }
+      if (rock.z > 14) this.rocks.splice(i, 1);
+    }
+  }
+
+  moveBolts(dt) {
+    for (let i = this.bolts.length - 1; i >= 0; i--) {
+      const bolt = this.bolts[i];
+      const z0 = bolt.z;
+      bolt.x += bolt.vx * dt;
+      bolt.y += bolt.vy * dt;
+      bolt.z += bolt.vz * dt;
+      let gone = bolt.z < FAR + 6;
+      // скалы лазер не пробивает
+      if (!gone) {
+        for (const rock of this.rocks) {
+          if (rock.kind !== "ring" && rock.z <= z0 && rock.z >= bolt.z - rock.depth &&
+            Math.abs(bolt.x - rock.x) < rock.half && bolt.y > rock.y0 && bolt.y < rock.y1) {
+            gone = true;
+            this.emit("spark", { x: bolt.x, y: bolt.y, z: rock.z + rock.depth / 2 });
+            break;
+          }
+        }
+      }
+      if (!gone) {
+        for (const e of this.enemies) {
+          // лазер за шаг пролетает 2.5 единицы: проверяем весь отрезок по глубине
+          if (e.z > z0 + e.r || e.z < bolt.z - e.r) continue;
+          if (Math.hypot(bolt.x - e.x, bolt.y - e.y) <= e.r + 0.25) {
+            this.emit("impact", { kind: e.kind, x: bolt.x, y: bolt.y, z: e.z + e.r * 0.6 });
+            this.damage(e, bolt.power);
+            gone = true;
+            break;
+          }
+        }
+      }
+      if (gone) this.bolts.splice(i, 1);
+    }
+  }
+
+  moveShots(dt) {
+    const p = this.player;
+    for (let i = this.shots.length - 1; i >= 0; i--) {
+      const shot = this.shots[i];
+      const z0 = shot.z;
+      shot.x += shot.vx * dt;
+      shot.y += shot.vy * dt;
+      shot.z += shot.vz * dt;
+      if (z0 < 0.6 && shot.z >= -0.6 && Math.abs(shot.x - p.x) < 0.95 && Math.abs(shot.y - p.y) < 0.7) {
+        this.hurt(shot.heavy ? 12 : 9);
+        this.shots.splice(i, 1);
+      } else if (shot.z > 2.2) this.shots.splice(i, 1); // пролетел мимо — исчезает, не долетая до камеры
+    }
+  }
+
+  moveRockets(dt) {
+    for (let i = this.rockets.length - 1; i >= 0; i--) {
+      const r = this.rockets[i];
+      r.life -= dt;
+      let target = this.enemies.find(e => e.id === r.target);
+      if (!target) {
+        target = this.enemies.find(e => e.z < -3 && e.z > FAR + 15);
+        r.target = target ? target.id : 0;
+      }
+      if (target) {
+        const dx = target.x - r.x, dy = target.y - r.y, dz = target.z - r.z;
+        const length = Math.hypot(dx, dy, dz) || 1;
+        const turn = Math.min(1, dt * 5.5);
+        r.vx += (dx / length * 95 - r.vx) * turn;
+        r.vy += (dy / length * 95 - r.vy) * turn;
+        r.vz += (dz / length * 95 - r.vz) * turn;
+        if (length < target.r + 1.3) {
+          this.emit("rocket-hit", { x: r.x, y: r.y, z: r.z });
+          this.damage(target, 34 * this.player.rocketPower);
+          this.rockets.splice(i, 1);
+          continue;
+        }
+      } else r.vz += (-95 - r.vz) * Math.min(1, dt * 3);
+      r.x += r.vx * dt;
+      r.y += r.vy * dt;
+      r.z += r.vz * dt;
+      if (r.life <= 0 || r.z < FAR) this.rockets.splice(i, 1);
+    }
+  }
+
+  moveGems(dt) {
+    const p = this.player;
+    const reach = 3 + p.magnet * 3.5;
+    for (let i = this.gems.length - 1; i >= 0; i--) {
+      const gem = this.gems[i];
+      gem.z += SCROLL * dt;
+      const off = Math.hypot(gem.x - p.x, gem.y - p.y);
+      if (gem.z > -45 && off < reach) {
+        const pull = Math.min(1, dt * (2.2 + p.magnet * 2.5));
+        gem.x += (p.x - gem.x) * pull;
+        gem.y += (p.y - gem.y) * pull;
+      }
+      if (Math.abs(gem.z) < 1.8 && off < 1.7 + p.magnet * 0.5) {
+        if (gem.kind === "repair") p.health = Math.min(p.maxHealth, p.health + 25);
+        else {
+          this.score += 25;
+          p.cooldown = Math.max(0, p.cooldown - 0.5);
+        }
+        this.collected++;
+        this.emit(gem.kind === "repair" ? "repair" : "gem");
+        this.gems.splice(i, 1);
+      } else if (gem.z > 9) this.gems.splice(i, 1);
+    }
+  }
+
+  step(dt, move) {
+    if (this.mode !== "play" && this.mode !== "break") return;
+    this.time += dt;
+    this.movePlayer(dt, move);
+    this.moveGems(dt);
+    if (this.combo > 0 && this.time >= this.comboUntil) this.combo = 0;
+    if (this.mode === "break") {
+      if (this.time < this.breakUntil) return;
+      if (this.zone === ZONES.length) {
+        this.mode = "won";
+        this.emit("won");
+      } else {
+        this.offer = this.makeOffer();
+        this.mode = "upgrade";
+      }
+      return;
+    }
+    this.zoneTime += dt;
+    while (this.script.length && this.script[0].at <= this.zoneTime) {
+      const item = this.script.shift();
+      if (item.type === "enemy") this.spawn(item);
+      else if (item.type === "rock") this.addRock(item);
+      else this.addHazard(item);
+    }
+    // когда сценки кончились и небо почти чистое — выходит хозяин зоны
+    if (!this.bossDone && !this.script.length && this.zoneTime > this.planEnd && !this.enemies.some(e => e.kind === "boss")) {
+      const busy = this.enemies.filter(e => e.kind !== "mine" && e.kind !== "turret").length;
+      if (busy === 0 || this.zoneTime > this.planEnd + 6) {
+        this.emit("boss-warning", { name: ZONES[this.zone - 1].boss });
+        this.spawn({ kind: "boss", u: 0, v: 0.62 });
+      }
+    }
+    this.autoFire(dt);
+    const p = this.player;
+    for (const e of [...this.enemies]) {
+      this.moveEnemy(e, dt);
+      if (!this.enemies.includes(e)) continue;
+      // столкновение: враг совсем рядом с плоскостью игрока
+      if (Math.abs(e.z) < e.r + 0.5 && Math.hypot(e.x - p.x, e.y - p.y) < e.r + 0.5) {
+        if (this.hurt(UNITS[e.kind].hit) && e.kind !== "boss") this.destroy(e, false);
+      }
+    }
+    if (this.mode === "lost") return;
+    this.moveHazards(dt);
+    this.moveRocks(dt);
+    this.moveShots(dt);
+    if (this.mode === "lost") return;
+    this.moveBolts(dt);
+    this.moveRockets(dt);
+    if (this.bossDone && this.mode === "play") {
+      this.mode = "break";
+      this.shots.length = this.hazards.length = 0;
+      this.breakUntil = this.time + (this.zone === ZONES.length ? 3 : 2.8);
+      if (this.clean) this.score += 300;
+      this.emit("clear", { clean: this.clean });
+      this.ease = 0;
+    }
+  }
+}

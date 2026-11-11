@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
     <meta name="theme-color" content="#05060f" />
     <title>Страж орбиты</title>
-    <meta name="description" content="Космический 3D-шутер: ты стрелок орбитальной станции. Отбивай волны дронов лазерами и ракетами, выбирай улучшения, сражайся с флагманом." />
+    <meta name="description" content="Космический 3D-шутер: ты стрелок орбитальной станции. Отбивай волны дронов лазерами и ракетами, срывай залпы копий, выбирай улучшения и снимай щит с флагмана." />
     <link rel="icon" href="./icon-192.png" />
     <link rel="apple-touch-icon" href="./icon-180.png" />
-    <link rel="stylesheet" href="./style.css?v=9b5e14d1" />
+    <link rel="stylesheet" href="./style.css?v=98456336" />
   </head>
   <body>
-    <canvas id="stage" aria-label="Страж орбиты: води пальцем, чтобы целиться и стрелять"></canvas>
+    <canvas id="stage" aria-label="Страж орбиты: коснись врага или веди пальцем, чтобы целиться и стрелять"></canvas>
     <canvas id="hud" aria-hidden="true"></canvas>
     <header class="top">
       <!-- Сюда портал вставляет кнопку «Все игры» (games-portal/build.mjs) -->
@@ -33,9 +33,10 @@
       <h1>СТРАЖ ОРБИТЫ</h1>
       <p>Ты стрелок орбитальной станции. Дроны идут волнами — не дай им пробить корпус.</p>
       <ul>
-        <li>👆 Веди пальцем и держи врага возле прицела</li>
-        <li>🎯 Зелёная рамка означает захват цели</li>
+        <li>🎯 Коснись врага — турель наведётся и откроет огонь</li>
+        <li>👆 Или веди пальцем и целься сам</li>
         <li>🚀 Ракеты сами находят ближайшие цели</li>
+        <li>📦 Сбей зелёный контейнер — получишь бонус</li>
       </ul>
       <p class="desktop-controls">На клавиатуре: WASD или стрелки · пробел — лазеры · E — ракеты · Esc — пауза</p>
       <button id="start" class="big" disabled>В БОЙ</button>
@@ -44,6 +45,7 @@
     </section>
     <section id="upgrade" class="panel" hidden>
       <h2>Волна отбита! Выбери улучшение</h2>
+      <p id="patch" class="patch"></p>
       <div id="cards"></div>
     </section>
     <section id="paused" class="panel" aria-labelledby="pause-title" hidden>
@@ -56,6 +58,6 @@
       <p>Щит и корпус восстановятся. Улучшения останутся, счёт уменьшится на 20%.</p>
       <button id="retry" class="big">ЕЩЁ РАЗ</button>
     </section>
-    <script type="module" src="./js/boot.js?v=9b5e14d1"></script>
+    <script type="module" src="./js/boot.js?v=98456336"></script>
   </body>
 </html>

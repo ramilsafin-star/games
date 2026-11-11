@@ -400,3 +400,68 @@ a:focus-visible {
     animation: none;
   }
 }
+
+.panel .patch {
+  margin: -6px 0 14px;
+  font-size: 15px;
+  color: #9fe6b8;
+}
+.panel .patch:empty {
+  display: none;
+}
+/* Низкий экран (телефон на боку): всё меню должно помещаться без прокрутки */
+@media (max-height: 520px) {
+  .panel {
+    padding: 10px 20px 12px;
+    max-height: calc(100dvh - 12px);
+  }
+  #menu {
+    width: min(760px, 94vw);
+  }
+  .panel h1 {
+    margin-bottom: 2px;
+    font-size: 30px;
+  }
+  .panel h2 {
+    margin-bottom: 8px;
+    font-size: 20px;
+  }
+  .panel p {
+    margin: 4px 0;
+    font-size: 14px;
+  }
+  #menu > p:first-of-type {
+    display: none;
+  }
+  .panel ul {
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 18px;
+    margin: 8px auto;
+    font-size: 14px;
+  }
+  .big {
+    margin-top: 6px;
+    padding: 10px 40px;
+    font-size: 21px;
+  }
+  .card {
+    padding: 8px;
+  }
+  .card .ic {
+    font-size: 30px;
+  }
+  .panel .patch {
+    margin: -4px 0 8px;
+  }
+}
+/* Двойной залп из контейнера снабжения */
+#rocket.boost {
+  border-color: #ffe27a;
+  box-shadow: 0 0 26px #ffd25f;
+}
+
+/* Счётчики и полоса флагмана не перехватывают касания: под ними тоже можно выбрать врага */
+.top > .stat,
+.top > #bossbar {
+  pointer-events: none;
+}
