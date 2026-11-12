@@ -182,4 +182,18 @@ const GAMES = [
     cover: "covers/mayak.jpg",
     color: "#2f5fa8",
   },
+  {
+    id: "liniya",
+    title: "Линия спасения",
+    url: "liniya/",
+    cover: "covers/liniya.jpg",
+    color: "#f2643f",
+  },
+  {
+    id: "vihr",
+    title: "Вихрь",
+    url: "vihr/",
+    cover: "covers/vihr.jpg",
+    color: "#7a5cf0",
+  },
 ];

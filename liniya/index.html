@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2b2560">
+  <title>Линия спасения</title>
+  <meta name="description" content="Физическая головоломка: нарисуй линию — она станет настоящим предметом. Укрой Тошу от жуков и камней, подставь мостик ягоде, проведи друзей по домам. 90 уровней в шести главах.">
+  <link rel="icon" href="./icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="./icon-180.png">
+  <link rel="stylesheet" href="./style.css?v=8e3275de">
+</head>
+<body class="side" data-screen="load">
+  <canvas id="stage" aria-label="Игровое поле"></canvas>
+  <nav class="home-slot"><a class="round" href="../" aria-label="Все игры">🎮</a></nav>
+  <button class="round" id="sound" aria-label="Звук" aria-pressed="true">
+    <svg class="on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path class="w" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>
+    <svg class="off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path class="w" d="M17 9l5 6M22 9l-5 6"/></svg>
+  </button>
+
+  <div id="hud" hidden>
+    <div class="hud-l">
+      <button class="round" id="pause" aria-label="Пауза"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg></button>
+      <div class="lvl" id="lvl">1-1</div>
+    </div>
+    <div class="ink" id="ink" aria-label="Чернила">
+      <svg class="pen" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1-5L15 5l4 4L9 19z"/><path d="M13 7l4 4"/></svg>
+      <div class="bar"><i id="ink-fill"></i><b id="ink-3" title="три звезды"></b><b id="ink-2" title="две звезды"></b></div>
+      <div class="dots" id="dots"></div>
+    </div>
+    <div class="hud-r">
+      <button class="round" id="hint" aria-label="Подсказка"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.4 1.1 2.2h5c0-.8.4-1.6 1.1-2.2A6 6 0 0 0 12 3z"/></svg><b id="hint-n">3</b></button>
+      <button class="round" id="retry" aria-label="Заново"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v5h5"/></svg></button>
+    </div>
+    <div class="pill" id="task"></div>
+    <div class="pill timer" id="timer" hidden></div>
+    <button class="go" id="go" hidden>Пуск <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg></button>
+    <div class="toast" id="toast" aria-live="polite"></div>
+  </div>
+
+  <main id="menu" class="screen" hidden>
+    <div class="menu-card">
+      <p class="eyebrow">ГОЛОВОЛОМКА · 90 УРОВНЕЙ</p>
+      <h1 class="logo"><span>Линия</span> <em>спасения</em>
+        <svg class="squiggle" viewBox="0 0 300 30" aria-hidden="true"><path d="M6 20C40 6 70 26 104 14s66-10 98 2 60 6 92-6"/></svg>
+      </h1>
+      <p class="lead">Нарисуй линию — и она станет настоящей: упадёт, укроет, подставит плечо. Спаси Тошу и друзей!</p>
+      <div class="menu-buttons">
+        <button class="btn primary big" id="play">Играть</button>
+        <button class="btn" id="levels">Уровни</button>
+      </div>
+      <p class="stat" id="menu-stat"></p>
+    </div>
+  </main>
+
+  <section id="map" class="screen" hidden aria-label="Уровни">
+    <header class="map-top">
+      <button class="round" id="map-back" aria-label="В меню"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <div class="chapters" id="chapters" role="tablist"></div>
+      <span class="total" id="map-stars"></span>
+    </header>
+    <div class="map-body">
+      <h2 id="chapter-name"></h2>
+      <div class="grid" id="grid"></div>
+    </div>
+  </section>
+
+  <div id="banner" class="banner" aria-live="polite"></div>
+  <section id="sheet" class="veil" hidden><div class="card" id="sheet-body" role="dialog" aria-modal="true"></div></section>
+  <p id="turn" class="turn">Поверни телефон — так удобнее рисовать</p>
+
+  <div id="loading" class="loading" role="status"><i class="spin"></i><span id="load-text">Загружаем…</span></div>
+  <script src="./vendor/matter.min.js?v=8e3275de"></script>
+  <script type="module" src="./js/boot.js?v=8e3275de"></script>
+</body>
+</html>
