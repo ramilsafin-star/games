@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#10173a">
+  <title>Вираж</title>
+  <meta name="description" content="3D-гонка на игрушечных машинках: четыре трассы, пять соперников, заносы, нитро и Кубок Виража.">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./style.css?v=ef8c7672">
+</head>
+<body data-screen="menu">
+  <canvas id="scene" aria-label="Гоночная трасса"></canvas>
+  <header class="top">
+    <nav class="home-slot"><a class="round" href="../" aria-label="Все игры">🎮</a></nav>
+    <div id="place" class="place" hidden><b id="place-n">6</b><span>место<i>из 6</i></span></div>
+    <div id="laps" class="laps" hidden><span>круг <b id="lap-n">1/3</b></span><em id="clock">0:00.00</em></div>
+    <div class="tools">
+      <button class="round" id="sound" aria-label="Звук" aria-pressed="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.2L12 5.6v12.8l-4.8-3.9H4z" fill="currentColor"/><path class="waves" d="M15.2 8.6a4.6 4.6 0 0 1 0 6.8M17.6 6a8.2 8.2 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path class="cross" d="M15.5 9.5l5 5m0-5l-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <button class="round" id="pause" aria-label="Пауза" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.2" y="5" width="4" height="14" rx="1.3" fill="currentColor"/><rect x="13.8" y="5" width="4" height="14" rx="1.3" fill="currentColor"/></svg>
+      </button>
+    </div>
+  </header>
+  <canvas id="map" width="10" height="10" hidden aria-hidden="true"></canvas>
+  <div id="lights" hidden aria-hidden="true"><i></i><i></i><i></i></div>
+  <div id="banner" aria-live="polite"></div>
+  <div id="hud" hidden>
+    <div class="zone left" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M15 4l-8 8 8 8" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="zone right" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 4l8 8-8 8" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <p id="lesson">Держи палец слева или справа — машина повернёт</p>
+    <div id="gauge" aria-hidden="true">
+      <div class="pips"><i></i><i></i><i></i></div>
+      <div class="speed"><b id="speed">0</b><span>км/ч</span></div>
+    </div>
+    <button id="brake" aria-label="Тормоз"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7.4" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12 8v5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="16" r="1.3" fill="currentColor"/><path d="M3.6 6.5a10.6 10.6 0 0 0 0 11M20.4 6.5a10.6 10.6 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>тормоз</span></button>
+    <button id="nitro" aria-label="Нитро"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 2L5 13.4h5.2L9 22l9-12.2h-5.4z" fill="currentColor"/></svg><span>нитро</span></button>
+  </div>
+  <main id="menu" class="menu">
+    <div class="card">
+      <div class="title"><h1>Вираж</h1><p>Гонки игрушечных машинок</p></div>
+      <div id="tracks" class="tracks" role="radiogroup" aria-label="Трасса"></div>
+      <div class="options">
+        <div id="diffs" class="seg" role="radiogroup" aria-label="Сложность"></div>
+        <div id="cars" class="cars" role="radiogroup" aria-label="Цвет машины"></div>
+      </div>
+      <div class="go">
+        <button id="race" class="primary" disabled>Заезд</button>
+        <button id="cup" class="primary alt" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10v2h3v3a4 4 0 0 1-4 4h-.6A5 5 0 0 1 13 14.9V18h3v3H8v-3h3v-3.1A5 5 0 0 1 8.600 12H8a4 4 0 0 1-4-4V5h3zm0 4H6v1a2 2 0 0 0 1 1.700zm10 0v2.700A2 2 0 0 0 18 8V7z" fill="currentColor"/></svg>Кубок</button>
+      </div>
+      <p id="load" role="status">Строим трассу…</p>
+      <small class="keys">Клавиши: ← → рулить · ↓ тормоз · пробел — нитро · Esc — пауза</small>
+    </div>
+  </main>
+  <section id="panel" class="veil" hidden>
+    <div class="sheet" id="panel-body"></div>
+  </section>
+  <script type="module" src="./js/boot.js?v=ef8c7672"></script>
+</body>
+</html>
