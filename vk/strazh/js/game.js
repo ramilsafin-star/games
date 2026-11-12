@@ -3,16 +3,16 @@
 // Лазеры греются, ракеты наводятся сами. Дроны идут волнами: разведчики, осы звеном, тараны,
 // канонерки, копья с заряжаемым лучом; на каждой пятой волне — флагман с узлами щита.
 // Щит восстанавливается, корпус — нет. Между волнами — выбор улучшения.
-import { T, TAU, rand, pick, clamp, V, hot, metal, lit, GEO, part, at, flare, removeModel, readStorage, writeStorage } from "./kit.js?v=7632fe77";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=7632fe77";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=7632fe77";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=7632fe77";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=7632fe77";
-import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=7632fe77";
-import { buildSpace, SUN_DIR } from "./space.js?v=7632fe77";
-import { createFx, tone, GLOW, SMOKE, RING, STAR } from "./fx.js?v=7632fe77";
-import { MODEL, buildGuns } from "./models.js?v=7632fe77";
-import { Sound } from "./sound.js?v=7632fe77";
+import { T, TAU, rand, pick, clamp, V, hot, metal, lit, GEO, part, at, flare, removeModel, readStorage, writeStorage } from "./kit.js?v=bbca8b34";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=bbca8b34";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=bbca8b34";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=bbca8b34";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=bbca8b34";
+import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=bbca8b34";
+import { buildSpace, SUN_DIR } from "./space.js?v=bbca8b34";
+import { createFx, tone, GLOW, SMOKE, RING, STAR } from "./fx.js?v=bbca8b34";
+import { MODEL, buildGuns } from "./models.js?v=bbca8b34";
+import { Sound } from "./sound.js?v=bbca8b34";
 
 const el = (id) => document.getElementById(id);
 const SAVE = "strazh_save";
@@ -1635,6 +1635,7 @@ resize();
 requestAnimationFrame(frame);
 el("start").disabled = false;
 el("load-status").hidden = true;
+window.vkGameHost?.bannerWhen(() => S.state !== "play");
 
 // Для проверок роботом: состояние боя и цели с экранными координатами.
 window.strazh = {

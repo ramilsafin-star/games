@@ -1,6 +1,6 @@
 // Модели «Стража орбиты»: корабли дронов, флагман, контейнер снабжения и спаренная пушка турели.
 // Все корабли смотрят носом вдоль −Z, двигатели сзади (+Z).
-import { T, TAU, V, metal, lit, GEO, part, at, along, flare } from "./kit.js?v=7632fe77";
+import { T, TAU, V, metal, lit, GEO, part, at, along, flare } from "./kit.js?v=bbca8b34";
 
 const FINISH = /* glsl */ `
   #include <tonemapping_fragment>

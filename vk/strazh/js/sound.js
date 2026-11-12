@@ -1,6 +1,6 @@
 // Звук «Стража орбиты»: всё синтезируется на лету, файлов нет.
 // Эффекты и тихая музыка идут через общий компрессор, чтобы взрывы не перегружали динамик.
-import { readStorage, writeStorage } from "./kit.js?v=7632fe77";
+import { readStorage, writeStorage } from "./kit.js?v=bbca8b34";
 
 const Audio = window.AudioContext || window.webkitAudioContext;
 let ctx = null,

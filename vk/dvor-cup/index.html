@@ -8,10 +8,26 @@
     <meta name="description" content="Футбол один на один во дворе: зверята с большими головами, звёздный удар и кубок чемпиона." />
     <link rel="icon" href="./icon-192.png" />
     <link rel="apple-touch-icon" href="./icon-180.png" />
-    <script src="./vendor/vk/vk-bridge.min.js?v=760b4055"></script>
-    <script src="./js/vk-host.js?v=760b4055" data-keys="dvorcup3d-v1" data-ad-gap="120"></script>
-    <link rel="stylesheet" href="./style.css?v=760b4055" />
-  </head>
+    <script src="./vendor/vk/vk-bridge.min.js?v=0c6b65d0"></script>
+    <script src="./js/vk-host.js?v=0c6b65d0" data-keys="dvorcup3d-v1" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=0c6b65d0" />
+  <style>
+html.vk-banner .screen { padding-bottom: 24px; }
+@media (max-height: 430px) {
+  html.vk-banner .screen { padding-top: 10px; }
+  html.vk-banner .sheet { padding: 12px 16px 14px; }
+  html.vk-banner .sheet h2 { margin: 0 0 8px; font-size: 24px; }
+  html.vk-banner .steps { margin-bottom: 10px; }
+  html.vk-banner .card { padding: 12px 24px 16px; }
+  html.vk-banner .card h2 { margin: 0 0 4px; font-size: 28px; }
+  html.vk-banner .result-pic { font-size: 64px; }
+  html.vk-banner .result-pic img { width: 88px; height: 88px; }
+  html.vk-banner .result-score { margin-bottom: 10px; font-size: 24px; }
+  html.vk-banner .big { height: 62px; font-size: 26px; }
+  html.vk-banner .round.wide { width: 62px; height: 62px; font-size: 28px; }
+}
+</style>
+</head>
   <body>
     <canvas id="stage" aria-label="Футбольное поле во дворе"></canvas>
     <header class="top">
@@ -94,8 +110,8 @@
     <div id="nogl" class="screen nogl" hidden>
       <p>Тут нужна 3D-графика (WebGL), а браузер её не включил. Попробуйте другой браузер.</p>
     </div>
-    <script src="./js/audio.js?v=760b4055"></script>
-    <script type="module" src="./js/game.js?v=760b4055"></script>
-    <script src="./js/juice.js?v=760b4055"></script>
+    <script src="./js/audio.js?v=0c6b65d0"></script>
+    <script type="module" src="./js/game.js?v=0c6b65d0"></script>
+    <script src="./js/juice.js?v=0c6b65d0"></script>
   </body>
 </html>

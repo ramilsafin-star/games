@@ -1,11 +1,11 @@
 // Сцена «Вихря»: игрушечная карта, предметы пачками, вихри, частицы, камера и пьедестал.
 // Правила (rules.js) ничего не знают о графике: сцена только читает их состояние.
-import { T, TAU, clamp, lerp, smooth, PRIM, Shape, canvasTexture } from "./kit.js?v=7cc311db";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=7cc311db";
-import { modelOf, PAINTS, decorTree } from "./models.js?v=7cc311db";
-import { Particles } from "./fx.js?v=7cc311db";
-import { MAPS } from "./rules.js?v=7cc311db";
-import { TRAILS } from "./economy.js?v=7cc311db";
+import { T, TAU, clamp, lerp, smooth, PRIM, Shape, canvasTexture } from "./kit.js?v=aa0c23d8";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=aa0c23d8";
+import { modelOf, PAINTS, decorTree } from "./models.js?v=aa0c23d8";
+import { Particles } from "./fx.js?v=aa0c23d8";
+import { MAPS } from "./rules.js?v=aa0c23d8";
+import { TRAILS } from "./economy.js?v=aa0c23d8";
 
 // Сочность бледных цветов и мягкий контраст прямо в шейдерах (без отдельного прохода)
 if (!T.ShaderChunk.colorspace_fragment.includes("vihrC")) {

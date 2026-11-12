@@ -7,9 +7,14 @@
   <title>Маяк</title>
   <meta name="description" content="Ночная бухта и один луч на всех: веди свет маяка пальцем, показывай лодкам дорогу в гавань и прогоняй морские тени. Десять ночей и шторм на рекорд.">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
-  <script src="./vendor/vk/vk-bridge.min.js?v=fe1036fe"></script>
-    <script src="./js/vk-host.js?v=fe1036fe" data-keys="mayak-v1" data-ad-gap="120"></script>
-    <link rel="stylesheet" href="./style.css?v=fe1036fe">
+  <script src="./vendor/vk/vk-bridge.min.js?v=6fb3d411"></script>
+    <script src="./js/vk-host.js?v=6fb3d411" data-keys="mayak-v1" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=6fb3d411">
+<style>
+html.vk-banner #controls { visibility: hidden; }
+html.vk-banner .veil { padding-bottom: 28px; }
+html.vk-banner .sheet { max-height: 100%; }
+</style>
 </head>
 <body data-mode="menu">
   <canvas id="sea" aria-label="Ночная бухта с маяком"></canvas>
@@ -59,6 +64,6 @@
   <section id="panel" class="veil" hidden aria-labelledby="panel-title">
     <div class="sheet" id="panel-body" tabindex="-1"></div>
   </section>
-  <script type="module" src="./js/boot.js?v=fe1036fe"></script>
+  <script type="module" src="./js/boot.js?v=6fb3d411"></script>
 </body>
 </html>

@@ -1,9 +1,9 @@
 // «Вираж»: меню, управление, приборы, панели, сохранение. Правила — в rules.js, картинка — в view.js.
-import { TRACKS, buildTrack } from "./tracks.js?v=85f7d054";
-import { Cup, DIFFS, LAPS, LIVERIES, NITRO_MAX, PHYS, Race, steerTo } from "./rules.js?v=85f7d054";
-import { View } from "./view.js?v=85f7d054";
-import { Sound } from "./sound.js?v=85f7d054";
-import { clamp, clock, readStorage, writeStorage } from "./kit.js?v=85f7d054";
+import { TRACKS, buildTrack } from "./tracks.js?v=b8d55922";
+import { Cup, DIFFS, LAPS, LIVERIES, NITRO_MAX, PHYS, Race, steerTo } from "./rules.js?v=b8d55922";
+import { View } from "./view.js?v=b8d55922";
+import { Sound } from "./sound.js?v=b8d55922";
+import { clamp, clock, readStorage, writeStorage } from "./kit.js?v=b8d55922";
 
 const el = (id) => document.getElementById(id);
 const STEP = 1 / 120; // шаг правил, секунд
@@ -830,4 +830,5 @@ placeScene();
 attract();
 el("load").hidden = true;
 el("race").disabled = el("cup").disabled = false;
+window.vkGameHost?.bannerWhen(() => screen !== "race" || paused);
 requestAnimationFrame(tick);

@@ -1,7 +1,7 @@
 // Модели «Виража»: игрушечные машинки и декорации. Каждая деталь — простая фигура,
 // детали склеиваются в одну геометрию с цветами в вершинах, чтобы рисоваться одним вызовом.
-import * as T from "../vendor/three/three.module.min.js?v=85f7d054";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=85f7d054";
+import * as T from "../vendor/three/three.module.min.js?v=b8d55922";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=b8d55922";
 
 const M = new T.Matrix4(), Q = new T.Quaternion(), E = new T.Euler(), S = new T.Vector3(), P = new T.Vector3();
 const C = new T.Color();

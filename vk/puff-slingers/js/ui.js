@@ -507,7 +507,7 @@ async function start3D() {
   if (m && m[1] === '0') return;
   try {
     const gl = document.getElementById('gl');
-    const mod = await withTimeout(import('./gl/scene3d.js?v=fdffe6b3').then((x) => x.createScene3D(gl, !!m)), 15000);
+    const mod = await withTimeout(import('./gl/scene3d.js?v=d6bb936e').then((x) => x.createScene3D(gl, !!m)), 15000);
     if (!mod) return;
     scene3d = mod;
     gl.addEventListener('webglcontextlost', () => disable3D('потерян контекст WebGL'));
@@ -582,5 +582,7 @@ async function vkAdBreak() {
   }
   return true;
 }
+// Баннер VK внизу — только на экранах заставки, уровней, паузы, итога и финала; пока летят пушинки, его нет
+window.vkGameHost?.bannerWhen(() => !!UI.current);
 
 boot();

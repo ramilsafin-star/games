@@ -1,11 +1,11 @@
 // «Вихрь»: экраны, управление, раунд, магазин, звук и связь с VK.
-import { MAPS, Round, SKILL_NAMES } from "./rules.js?v=7cc311db";
-import { View } from "./view.js?v=7cc311db";
-import { Sound } from "./sound.js?v=7cc311db";
-import { readStorage, writeStorage } from "./kit.js?v=7cc311db";
+import { MAPS, Round, SKILL_NAMES } from "./rules.js?v=aa0c23d8";
+import { View } from "./view.js?v=aa0c23d8";
+import { Sound } from "./sound.js?v=aa0c23d8";
+import { readStorage, writeStorage } from "./kit.js?v=aa0c23d8";
 import {
   SAVE_KEY, cleanSave, UPGRADES, SKINS, TRAILS, BOTS, upgradeEffects, upgradePrice, buyUpgrade, buyItem, applyResult, progress,
-} from "./economy.js?v=7cc311db";
+} from "./economy.js?v=aa0c23d8";
 
 const id = (name) => document.getElementById(name);
 const host = () => window.vkGameHost;
@@ -797,6 +797,7 @@ try {
   await Promise.race([document.fonts?.ready, new Promise((r) => setTimeout(r, 1500))]);
 } catch {}
 menu();
+host()?.bannerWhen(() => screen === "menu" || screen === "paused" || screen === "result");
 view.resize();
 requestAnimationFrame(frame);
 id("load").hidden = true;

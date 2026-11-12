@@ -8,10 +8,13 @@
     <meta name="description" content="Космический 3D-шутер: ты стрелок орбитальной станции. Отбивай волны дронов лазерами и ракетами, срывай залпы копий, выбирай улучшения и снимай щит с флагмана." />
     <link rel="icon" href="./icon-192.png" />
     <link rel="apple-touch-icon" href="./icon-180.png" />
-    <script src="./vendor/vk/vk-bridge.min.js?v=7632fe77"></script>
-    <script src="./js/vk-host.js?v=7632fe77" data-keys="strazh_save,strazh_mute" data-ad-gap="120"></script>
-    <link rel="stylesheet" href="./style.css?v=7632fe77" />
-  </head>
+    <script src="./vendor/vk/vk-bridge.min.js?v=bbca8b34"></script>
+    <script src="./js/vk-host.js?v=bbca8b34" data-keys="strazh_save,strazh_mute" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=bbca8b34" />
+  <style>
+html.vk-banner #rocket { visibility: hidden; }
+</style>
+</head>
   <body>
     <canvas id="stage" aria-label="Страж орбиты: коснись врага или веди пальцем, чтобы целиться и стрелять"></canvas>
     <canvas id="hud" aria-hidden="true"></canvas>
@@ -62,6 +65,6 @@
       <button id="retry" class="big">ЕЩЁ РАЗ</button>
       <button id="dead-menu" class="ghost">В МЕНЮ</button>
     </section>
-    <script type="module" src="./js/boot.js?v=7632fe77"></script>
+    <script type="module" src="./js/boot.js?v=bbca8b34"></script>
   </body>
 </html>

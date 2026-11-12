@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1f4f9e">
+  <title>Снежный ком</title>
+  <meta name="description" content="3D-раннер: снежный ком катится с горы, растёт в синих воротах и тает в красных. Объезжай камни и прессы, круши ледяные крепости и снеговиков-боссов. 40 уровней на четырёх горах.">
+  <link rel="icon" href="./icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="./icon-180.png">
+  <script src="./vendor/vk/vk-bridge.min.js?v=8ae2940b"></script>
+    <script src="./js/vk-host.js?v=8ae2940b" data-keys="snezhok-v1" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=8ae2940b">
+</head>
+<body data-screen="load">
+  <canvas id="stage" aria-label="Снежный склон"></canvas>
+  <header class="top">
+    
+    <div id="hud" class="hud" hidden>
+      <span class="lvl"><span class="word">УРОВЕНЬ</span> <b id="hud-level">1</b></span>
+      <div class="bar" aria-hidden="true"><i id="hud-progress"></i></div>
+    </div>
+    <div class="coins" id="coins" aria-label="Снежинки"><i class="flake" aria-hidden="true"></i><b id="coin-count">0</b></div>
+    <div class="tools">
+      <button class="round" id="sound" type="button" aria-label="Звук" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="spk" d="M4 9.5h3.2L12 5.6v12.8l-4.8-3.9H4z"/><path class="wave" d="M15.2 9a4.2 4.2 0 0 1 0 6M17.8 6.6a7.6 7.6 0 0 1 0 10.8"/><path class="mute" d="M15.5 9.5l5 5M20.5 9.5l-5 5"/></svg></button>
+      <button class="round" id="pause" type="button" aria-label="Пауза" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6v12M16 6v12"/></svg></button>
+    </div>
+  </header>
+  <div id="size" class="size-tag" hidden>5</div>
+  <div id="floats" aria-hidden="true"></div>
+  <div id="banner" aria-live="polite"></div>
+  <div id="hint" class="hint" hidden></div>
+  <main id="title" class="title" hidden>
+    <div class="title-card">
+      <span class="eyebrow"><i></i> СНЕЖНЫЙ РАННЕР</span>
+      <h1>Снежный <em>ком</em></h1>
+      <p class="tag">Катись с горы, расти в синих воротах и круши ледяные крепости!</p>
+      <div class="picker">
+        <button id="prev" class="round" type="button" aria-label="Предыдущий уровень">‹</button>
+        <div class="pick-text"><b id="pick-level">Уровень 1</b><small id="pick-mountain">Ёлочный склон</small></div>
+        <button id="next" class="round" type="button" aria-label="Следующий уровень">›</button>
+      </div>
+      <button id="play" class="primary" type="button" disabled>Играть</button>
+      <div class="row">
+        <button id="open-upgrades" class="ghost" type="button">Улучшения</button>
+        <button id="open-skins" class="ghost" type="button">Облики</button>
+      </div>
+      <small class="desktop">Мышь, A/D или ←/→ · Esc — пауза</small>
+    </div>
+  </main>
+  <div id="load" class="load" role="status"><i class="spin" aria-hidden="true"></i><span>Лепим снежный ком…</span></div>
+  <section id="panel" class="veil" hidden aria-labelledby="panel-title">
+    <div class="sheet" id="sheet"></div>
+  </section>
+  <script type="module" src="./js/boot.js?v=8ae2940b"></script>
+</body>
+</html>

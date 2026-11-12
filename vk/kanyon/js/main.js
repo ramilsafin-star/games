@@ -1,8 +1,8 @@
 // «Грозовой каньон»: управление, приборы, панели, звук и главный цикл.
-import { LEVELS, ZONES, Raid } from "./rules.js?v=122edb60";
-import { CanyonView } from "./view.js?v=122edb60";
-import { Sound } from "./sound.js?v=122edb60";
-import { readStorage, writeStorage } from "./kit.js?v=122edb60";
+import { LEVELS, ZONES, Raid } from "./rules.js?v=7aee9fb1";
+import { CanyonView } from "./view.js?v=7aee9fb1";
+import { Sound } from "./sound.js?v=7aee9fb1";
+import { readStorage, writeStorage } from "./kit.js?v=7aee9fb1";
 
 const id = name => document.getElementById(name);
 const canvas = id("stage");
@@ -488,4 +488,5 @@ function frame(ms) {
 
 id("start").disabled = false;
 id("load").hidden = true;
+window.vkGameHost?.bannerWhen(() => !active());
 requestAnimationFrame(frame);

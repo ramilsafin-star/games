@@ -1,10 +1,10 @@
 // Сцена «Виража»: дорога, земля, декорации четырёх тем, машины, камера, частицы.
-import * as T from "../vendor/three/three.module.min.js?v=85f7d054";
-import { clamp, damp, lerp, seeded, smooth, wrapAngle } from "./kit.js?v=85f7d054";
-import { trackPoint } from "./tracks.js?v=85f7d054";
-import { LIVERIES, PHYS } from "./rules.js?v=85f7d054";
-import { PROPS, canvasTexture, fuse, makeCar, makePodiumBlock } from "./models.js?v=85f7d054";
-import { Pool, Streaks } from "./fx.js?v=85f7d054";
+import * as T from "../vendor/three/three.module.min.js?v=b8d55922";
+import { clamp, damp, lerp, seeded, smooth, wrapAngle } from "./kit.js?v=b8d55922";
+import { trackPoint } from "./tracks.js?v=b8d55922";
+import { LIVERIES, PHYS } from "./rules.js?v=b8d55922";
+import { PROPS, canvasTexture, fuse, makeCar, makePodiumBlock } from "./models.js?v=b8d55922";
+import { Pool, Streaks } from "./fx.js?v=b8d55922";
 
 const TAU = Math.PI * 2;
 const M = new T.Matrix4(), Q = new T.Quaternion(), E = new T.Euler(), S = new T.Vector3(), P = new T.Vector3();

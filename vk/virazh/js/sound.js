@@ -1,5 +1,5 @@
 // Звук «Виража»: мотор, шины, нитро, сигналы светофора и лёгкая музыка. Всё синтезируется, файлов нет.
-import { readStorage, writeStorage } from "./kit.js?v=85f7d054";
+import { readStorage, writeStorage } from "./kit.js?v=b8d55922";
 
 const Audio = window.AudioContext || window.webkitAudioContext;
 await window.vkGameHost?.ready; // облачное сохранение VK уже в localStorage

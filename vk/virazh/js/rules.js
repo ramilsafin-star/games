@@ -2,8 +2,8 @@
 // Заезд можно гонять в Node в сотни раз быстрее настоящего (tests/sim.mjs).
 // Углы: yaw — куда смотрит нос, va — куда на самом деле летит машина (в заносе они расходятся).
 // Руль: +1 — вправо. Поперёк трассы: d > 0 — левее оси.
-import { clamp, damp, wrapAngle } from "./kit.js?v=85f7d054";
-import { rampHeight, trackPoint } from "./tracks.js?v=85f7d054";
+import { clamp, damp, wrapAngle } from "./kit.js?v=b8d55922";
+import { rampHeight, trackPoint } from "./tracks.js?v=b8d55922";
 
 export const LAPS = 3;
 export const POINTS = [10, 7, 5, 3, 2, 1];

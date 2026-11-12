@@ -7,9 +7,14 @@
   <title>Грозовой каньон</title>
   <meta name="description" content="3D-шутер: истребитель «Стриж» летит через пять зон каньона. Уворачивайся от скал и молний, сбивай роботов-стражей, собирай модули и победи хозяев зон.">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
-  <script src="./vendor/vk/vk-bridge.min.js?v=122edb60"></script>
-    <script src="./js/vk-host.js?v=122edb60" data-keys="kanyon-v1,kanyon_mute" data-ad-gap="120"></script>
-    <link rel="stylesheet" href="./style.css?v=122edb60">
+  <script src="./vendor/vk/vk-bridge.min.js?v=7aee9fb1"></script>
+    <script src="./js/vk-host.js?v=7aee9fb1" data-keys="kanyon-v1,kanyon_mute" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=7aee9fb1">
+<style>
+html.vk-banner #controls { visibility: hidden; }
+html.vk-banner .veil { padding-bottom: 28px; }
+html.vk-banner .sheet { max-height: 100%; }
+</style>
 </head>
 <body data-mode="menu">
   <canvas id="stage" aria-label="Каньон"></canvas>
@@ -54,6 +59,6 @@
   <section id="panel" class="veil" hidden aria-labelledby="panel-title">
     <div class="sheet" id="panel-body"></div>
   </section>
-  <script type="module" src="./js/boot.js?v=122edb60"></script>
+  <script type="module" src="./js/boot.js?v=7aee9fb1"></script>
 </body>
 </html>

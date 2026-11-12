@@ -1,7 +1,7 @@
 // Взрывы: объёмные клубы огня и дыма. Каждый клуб — шар с буграми из объёмного шума.
 // Он непрозрачный, поэтому не мутит кадр, а исчезает рваными дырами
-import * as T from '../../vendor/three/three.module.min.js?v=fdffe6b3';
-import { mergeVertices } from '../../vendor/three/BufferGeometryUtils.js?v=fdffe6b3';
+import * as T from '../../vendor/three/three.module.min.js?v=d6bb936e';
+import { mergeVertices } from '../../vendor/three/BufferGeometryUtils.js?v=d6bb936e';
 
 const CAPACITY = 72;
 const FIRE = 0;

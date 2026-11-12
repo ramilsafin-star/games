@@ -6,9 +6,9 @@
   <title>Пушистый залп</title>
 
 
-  <script src="./vendor/vk/vk-bridge.min.js?v=fdffe6b3"></script>
-    <script src="./js/vk-host.js?v=fdffe6b3" data-keys="puff_slingers_save" data-ad-gap="120"></script>
-    <link rel="stylesheet" href="./style.css?v=fdffe6b3">
+  <script src="./vendor/vk/vk-bridge.min.js?v=d6bb936e"></script>
+    <script src="./js/vk-host.js?v=d6bb936e" data-keys="puff_slingers_save" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=d6bb936e">
   <style>
     /* Кнопки VK-версии в углах экранов */
     .vk-corner { position: absolute; top: calc(12px + var(--safe-top)); z-index: 2; }
@@ -23,6 +23,17 @@
       .level-card { aspect-ratio: 4 / 5; min-height: 0; }
       .level-card .num { font-size: 22px; -webkit-text-stroke-width: 3px; }
       .mini-stars i { width: 13px; height: 13px; }
+    }
+    /* Пока виден баннер VK (он стоит сразу под окном игры), экраны и их прокрутка кончаются
+       не ближе 24 px к нему (правило 5.1.4.2г); на невысоком экране 18 уровней — в два ряда по девять */
+    html.vk-banner .screen { border-bottom: 24px solid transparent; }
+    @media (max-height: 600px) and (min-width: 560px) {
+      html.vk-banner #screen-levels .card { max-width: 760px; }
+      html.vk-banner .levels-grid { grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 6px; }
+      html.vk-banner .level-card { aspect-ratio: 1; min-height: 0; }
+    }
+    @media (max-height: 400px) {
+      html.vk-banner .total-line { display: none; }
     }
     /* Самые низкие экраны (568×320): итог и финал без прокрутки */
     @media (max-height: 340px) {
@@ -144,14 +155,14 @@
     </div>
   </section>
 
-  <script src="./matter.min.js?v=fdffe6b3"></script>
-  <script src="./js/data.js?v=fdffe6b3"></script>
-  <script src="./js/i18n.js?v=fdffe6b3"></script>
-  <script src="./js/audio.js?v=fdffe6b3"></script>
-  <script src="./js/art.js?v=fdffe6b3"></script>
-  <script src="./js/background.js?v=fdffe6b3"></script>
-  <script src="./js/fx.js?v=fdffe6b3"></script>
-  <script src="./js/game.js?v=fdffe6b3"></script>
-  <script src="./js/ui.js?v=fdffe6b3"></script>
+  <script src="./matter.min.js?v=d6bb936e"></script>
+  <script src="./js/data.js?v=d6bb936e"></script>
+  <script src="./js/i18n.js?v=d6bb936e"></script>
+  <script src="./js/audio.js?v=d6bb936e"></script>
+  <script src="./js/art.js?v=d6bb936e"></script>
+  <script src="./js/background.js?v=d6bb936e"></script>
+  <script src="./js/fx.js?v=d6bb936e"></script>
+  <script src="./js/game.js?v=d6bb936e"></script>
+  <script src="./js/ui.js?v=d6bb936e"></script>
 </body>
 </html>

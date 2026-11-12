@@ -1,5 +1,5 @@
-import * as T from "../vendor/three/three.module.min.js?v=7eccd9cb";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=7eccd9cb";
+import * as T from "../vendor/three/three.module.min.js?v=151d9996";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=151d9996";
 
 export const GEO = {
   sphere: new T.SphereGeometry(1, 22, 15),

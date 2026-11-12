@@ -1,6 +1,6 @@
 // Пуфы: объёмная шерсть слоями, живые глаза и мимика. Все размеры в долях радиуса.
-import * as T from '../../vendor/three/three.module.min.js?v=fdffe6b3';
-import { tube, fbm3, merge } from './shapes.js?v=fdffe6b3';
+import * as T from '../../vendor/three/three.module.min.js?v=d6bb936e';
+import { tube, fbm3, merge } from './shapes.js?v=d6bb936e';
 
 const FUR_VERT = `
 attribute float aShell;

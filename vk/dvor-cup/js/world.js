@@ -1,14 +1,14 @@
 // 3D «Дворового кубка»: двор с полем, ворота с сеткой, забор, домики, зрители-зверята, гирлянда флажков,
 // футболисты с большими головами, мяч, следы и искры. Игра идёт в плоскости z = 0, вид сбоку.
-import * as T from "../vendor/three/three.module.min.js?v=760b4055";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=760b4055";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=760b4055";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=760b4055";
-import { polish } from "./gfx.js?v=760b4055";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=760b4055";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=760b4055";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=760b4055";
-import { FIELD, BALL_R } from "./match.js?v=760b4055";
+import * as T from "../vendor/three/three.module.min.js?v=0c6b65d0";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=0c6b65d0";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=0c6b65d0";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=0c6b65d0";
+import { polish } from "./gfx.js?v=0c6b65d0";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=0c6b65d0";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=0c6b65d0";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=0c6b65d0";
+import { FIELD, BALL_R } from "./match.js?v=0c6b65d0";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;

@@ -196,4 +196,11 @@ const GAMES = [
     cover: "covers/vihr.jpg",
     color: "#7a5cf0",
   },
+  {
+    id: "snezhok",
+    title: "Снежный ком",
+    url: "snezhok/",
+    cover: "covers/snezhok.jpg",
+    color: "#2f7fd8",
+  },
 ];

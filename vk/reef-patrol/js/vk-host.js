@@ -4,6 +4,9 @@
 // В VK: сообщает о запуске (VKWebAppInit), шлёт событие «vk-game-visibility» при сворачивании,
 // показывает рекламу между экранами не чаще data-ad-gap секунд и хранит сохранения из data-keys
 // в облаке VK, чтобы прогресс был одинаковым на телефоне и компьютере (правило 2.3.8).
+// Баннер VK внизу экрана — только на спокойных экранах, которые называет сама игра:
+//   vkGameHost.bannerWhen(() => меню, выбор уровня, итоги или пауза)   — или вручную vkGameHost.banner(true | false).
+// Пока баннер на экране, у <html> класс vk-banner (для отступов в VK-версии), на window — событие «vk-banner».
 (() => {
   const me = document.currentScript;
   const bridge = window.vkBridge;
@@ -19,22 +22,41 @@
     interstitial: async () => false,
     rewardReady: false,
     rewarded: async () => false,
+    // Баннер: вне VK вызовы ничего не делают
+    banner: () => {},
+    bannerWhen: () => {},
+    bannerOn: false,
+    bannerHeight: 0,
   };
   window.vkGameHost = host;
   if (!inVk) return;
 
   const send = (method, params) => bridge.send(method, params);
   const fire = (name, detail) => window.dispatchEvent(new CustomEvent(name, { detail }));
-  // VKWebAppInit — сразу, до загрузки ресурсов: VK ждёт его не дольше 30 секунд
-  send("VKWebAppInit").catch(() => console.warn("Не удалось подтвердить запуск в VK."));
+  // VKWebAppInit — сразу, до загрузки ресурсов: VK ждёт его не дольше 30 секунд.
+  // Баннер просим только после ответа на VKWebAppInit.
+  let launched = false;
+  send("VKWebAppInit")
+    .then(() => {
+      launched = true;
+      syncBanner();
+    })
+    .catch(() => console.warn("Не удалось подтвердить запуск в VK."));
 
   bridge.subscribe(({ detail }) => {
+    if (detail.type === "VKWebAppBannerAdUpdated" || detail.type === "VKWebAppBannerAdClosedByUser") {
+      bannerEvent(detail.type, detail.data || {});
+      return;
+    }
     if (detail.type === "VKWebAppViewHide") {
       host.hidden = true;
       pushAll();
-    } else if (detail.type === "VKWebAppViewRestore") host.hidden = false;
-    else return;
+    } else if (detail.type === "VKWebAppViewRestore") {
+      host.hidden = false;
+      calmDown();
+    } else return;
     fire("vk-game-visibility");
+    syncBanner();
   });
 
   // ---------- Сохранения в облаке VK ----------
@@ -132,6 +154,8 @@
     if (host.adShowing) return false;
     host.adShowing = true;
     fire("vk-ad", { on: true, format });
+    // На время ролика баннер убирается (ждём VK не дольше 1,5 с, чтобы ролик не застрял)
+    await Promise.race([syncBanner(), new Promise((r) => setTimeout(r, 1500))]);
     let shown = false;
     try {
       shown = !!(await send("VKWebAppShowNativeAds", { ad_format: format })).result;
@@ -140,9 +164,149 @@
     if (shown) lastAd = Date.now();
     fire("vk-ad", { on: false, format, shown });
     setTimeout(preload, 1000);
+    // После ролика баннер вернётся, только если игра через секунду всё ещё на спокойном экране
+    calmDown();
+    syncBanner();
     return shown;
   }
   host.interstitial = () => (Date.now() - lastAd < gap ? Promise.resolve(false) : show("interstitial"));
   // Ролик за награду — только по нажатию игрока на кнопку, где написано, что он получит
   host.rewarded = () => show("reward");
+
+  // ---------- Баннер ----------
+  // Правила VK 5.1.4: баннер сверху или снизу, не на онбординге, не поверх нужных кнопок,
+  // его не закрывают элементы игры. Мы ставим его снизу с layout_type "resize": VK делает окно игры
+  // ниже на высоту баннера, и баннер стоит под игрой, а не поверх неё. Игра сама решает, где он уместен
+  // (меню, выбор уровня, итоги, пауза), и прячет его, как только начинается игра.
+  // Показ — после секунды спокойного экрана: баннер не выскакивает под палец, который только что играл
+  // (правило 5.1.4.2б). Скрыт на время ролика и пока игра свёрнута. Закрыл игрок баннер крестиком — он не
+  // возвращается, пока игрок снова не поиграет. Если VK положил баннер поверх игры (overlay), он убирается
+  // до конца запуска: экраны игр под наложение не размечены. Нет поддержки или рекламы — тихо ничего не делаем.
+  const SETTLE = 1000;
+  const b = {
+    want: false, // игра на спокойном экране
+    readyAt: 0, // раньше этого времени не показываем
+    maybe: false, // VK, возможно, показывает баннер: прятать при уходе со спокойного экрана
+    closed: false, // игрок закрыл баннер на этом экране
+    miss: false, // на этом экране VK баннер не дал
+    overlay: false, // VK поставил баннер поверх игры — больше не просим
+    job: null,
+    timer: 0,
+    poll: 0,
+  };
+  // Ответ VK ждём не дольше 4 с: зависший запрос не должен застопорить баннер навсегда
+  const ask = (method, params) =>
+    Promise.race([send(method, params), new Promise((_, no) => setTimeout(() => no(new Error("VK не ответил")), 4000))]);
+  const wanted = () =>
+    b.want && !b.closed && !b.miss && !b.overlay && launched && !host.adShowing && !host.hidden && !document.hidden;
+  const calmDown = () => (b.readyAt = Math.max(b.readyAt, Date.now() + SETTLE));
+
+  // Баннер на экране (по ответу VK): класс vk-banner у <html>, высота в --vk-banner-h и событие vk-banner
+  function paint(on, data = {}) {
+    const height = on ? Math.max(0, Math.round(Number(data.banner_height) || 0)) : 0;
+    if (on === host.bannerOn && height === host.bannerHeight) return;
+    host.bannerOn = on;
+    host.bannerHeight = height;
+    const root = document.documentElement;
+    root.classList.toggle("vk-banner", on);
+    root.style.setProperty("--vk-banner-h", height + "px");
+    fire("vk-banner", { on, height, layout: on ? data.layout_type || "" : "" });
+  }
+
+  async function showBanner() {
+    const params = { banner_location: "bottom", layout_type: "resize" };
+    // Телефон боком: низкий вариант баннера, чтобы меню и итоги не теснились
+    if (innerWidth > innerHeight) params.height_type = "compact";
+    b.maybe = true;
+    let r = null;
+    try {
+      r = await ask("VKWebAppShowBannerAd", params);
+    } catch {
+      // Рекламы нет, платформа не умеет или баннер уже показан — спросим VK, что на экране
+      r = await ask("VKWebAppCheckBannerAd").catch(() => null);
+      if (!r?.result) {
+        b.miss = true;
+        b.maybe = !r; // VK не ответил — на всякий случай спрячем
+        return;
+      }
+    }
+    if (!r?.result) {
+      b.miss = true;
+      b.maybe = false;
+      return;
+    }
+    if (r.layout_type === "overlay") b.overlay = true;
+    else paint(true, r);
+  }
+  async function hideBanner() {
+    const done = await ask("VKWebAppHideBannerAd").then(
+      () => true,
+      () => false,
+    );
+    if (!done) {
+      const r = await ask("VKWebAppCheckBannerAd").catch(() => null);
+      if (r?.result) await ask("VKWebAppHideBannerAd").catch(() => {});
+    }
+    b.maybe = false;
+    paint(false);
+  }
+  // Приводит баннер к нужному состоянию; запросы к VK идут строго по одному
+  async function runBanner() {
+    for (let n = 0; n < 4; n++) {
+      const want = wanted() && Date.now() >= b.readyAt;
+      if (want && !b.maybe) await showBanner();
+      else if (!wanted() && b.maybe) await hideBanner();
+      else return;
+    }
+  }
+  function syncBanner() {
+    clearTimeout(b.timer);
+    const early = b.readyAt - Date.now();
+    if (early > 0 && wanted() && !b.maybe) b.timer = setTimeout(syncBanner, early + 20);
+    if (!b.job) {
+      b.job = runBanner()
+        .catch(() => {})
+        .finally(() => {
+          b.job = null;
+          // пока шёл запрос, игра могла сменить экран
+          if ((wanted() && !b.maybe && Date.now() >= b.readyAt) || (!wanted() && b.maybe)) syncBanner();
+        });
+    }
+    return b.job;
+  }
+  function bannerEvent(type, data) {
+    if (type === "VKWebAppBannerAdClosedByUser") {
+      b.closed = true;
+      b.maybe = false;
+      paint(false);
+    } else if (data.result && host.bannerOn) paint(true, data); // новая высота
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) calmDown();
+    syncBanner();
+  });
+
+  host.banner = (on) => {
+    on = !!on;
+    if (on === b.want) return;
+    b.want = on;
+    if (on) {
+      b.closed = b.miss = false;
+      calmDown();
+    }
+    syncBanner();
+  };
+  // Игра даёт проверку «спокойный ли экран»; слой сверяется с ней 10 раз в секунду
+  host.bannerWhen = (calm) => {
+    clearInterval(b.poll);
+    const check = () => {
+      let on = false;
+      try {
+        on = !!calm();
+      } catch {}
+      host.banner(on);
+    };
+    check();
+    b.poll = setInterval(check, 100);
+  };
 })();

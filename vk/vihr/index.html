@@ -8,9 +8,13 @@
   <meta name="description" content="3D-аркада: управляй мультяшным вихрем, втягивай куриц, машины и дома и стань самым большим вихрем раунда.">
   <link rel="icon" href="./icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="./icon-180.png">
-  <script src="./vendor/vk/vk-bridge.min.js?v=7cc311db"></script>
-    <script src="./js/vk-host.js?v=7cc311db" data-keys="vihr-v1" data-ad-gap="120"></script>
-    <link rel="stylesheet" href="./style.css?v=7cc311db">
+  <script src="./vendor/vk/vk-bridge.min.js?v=aa0c23d8"></script>
+    <script src="./js/vk-host.js?v=aa0c23d8" data-keys="vihr-v1" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=aa0c23d8">
+<style>
+html.vk-banner { --bottom: max(24px, env(safe-area-inset-bottom)); }
+@media (max-height: 360px) { html.vk-banner #record { display: none; } }
+</style>
 </head>
 <body data-mode="load">
   <canvas id="stage" aria-label="Карта"></canvas>
@@ -70,6 +74,6 @@
     <div class="sheet" id="panel-body"></div>
   </section>
 
-  <script type="module" src="./js/boot.js?v=7cc311db"></script>
+  <script type="module" src="./js/boot.js?v=aa0c23d8"></script>
 </body>
 </html>

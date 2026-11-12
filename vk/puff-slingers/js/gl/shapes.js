@@ -1,6 +1,6 @@
 // Заготовки геометрии: трубки, скруглённые камни, раскраска вершин и слияние деталей.
-import * as T from '../../vendor/three/three.module.min.js?v=fdffe6b3';
-import { mergeGeometries, mergeVertices } from '../../vendor/three/BufferGeometryUtils.js?v=fdffe6b3';
+import * as T from '../../vendor/three/three.module.min.js?v=d6bb936e';
+import { mergeGeometries, mergeVertices } from '../../vendor/three/BufferGeometryUtils.js?v=d6bb936e';
 
 export const color = (c) => new T.Color(c);
 

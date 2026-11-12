@@ -1,5 +1,5 @@
-import { DEPTHS, Patrol } from "./rules.js?v=7eccd9cb";
-import { ReefView } from "./view.js?v=7eccd9cb";
+import { DEPTHS, Patrol } from "./rules.js?v=151d9996";
+import { ReefView } from "./view.js?v=151d9996";
 
 const id = name => document.getElementById(name);
 const canvas = id("reef");
@@ -477,4 +477,5 @@ function frame(ms) {
 
 id("start").disabled = false;
 id("load").hidden = true;
+window.vkGameHost?.bannerWhen(() => !active());
 requestAnimationFrame(frame);

@@ -1,11 +1,11 @@
 // «Линия спасения»: экраны, ввод, игровой цикл, сохранение и связь с VK.
-import { LEVELS, CHAPTERS, PER_CHAPTER, ATTRACT } from "./levels.js?v=dd96000c";
-import { useMatter, createSim, DT } from "./sim.js?v=dd96000c";
-import { Pen, starsFor, W, H } from "./world.js?v=dd96000c";
-import { View } from "./view.js?v=dd96000c";
-import { Sound } from "./sound.js?v=dd96000c";
-import { FOLK } from "./art.js?v=dd96000c";
-import * as R from "./rules.js?v=dd96000c";
+import { LEVELS, CHAPTERS, PER_CHAPTER, ATTRACT } from "./levels.js?v=b97d5aa8";
+import { useMatter, createSim, DT } from "./sim.js?v=b97d5aa8";
+import { Pen, starsFor, W, H } from "./world.js?v=b97d5aa8";
+import { View } from "./view.js?v=b97d5aa8";
+import { Sound } from "./sound.js?v=b97d5aa8";
+import { FOLK } from "./art.js?v=b97d5aa8";
+import * as R from "./rules.js?v=b97d5aa8";
 
 useMatter(window.Matter);
 const host = window.vkGameHost;
@@ -785,4 +785,5 @@ window.Sound = Sound;
 paintSound();
 $("loading").remove();
 showMenu();
+host?.bannerWhen(() => game.mode === "menu" || game.mode === "map" || !$("sheet").hidden);
 requestAnimationFrame(frame);

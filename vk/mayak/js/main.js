@@ -1,7 +1,7 @@
 // «Маяк»: управление, приборы, подсказки, панели и сохранение. Правила — в rules.js, картинка — в view.js.
-import { NIGHTS, UPGRADES, Bay } from "./rules.js?v=fe1036fe";
-import { BayView } from "./view.js?v=fe1036fe";
-import { Sound } from "./sound.js?v=fe1036fe";
+import { NIGHTS, UPGRADES, Bay } from "./rules.js?v=6fb3d411";
+import { BayView } from "./view.js?v=6fb3d411";
+import { Sound } from "./sound.js?v=6fb3d411";
 
 const id = (name) => document.getElementById(name);
 const canvas = id("sea");
@@ -909,4 +909,5 @@ window.mayak = {
 };
 
 menu();
+window.vkGameHost?.bannerWhen(() => game.mode === "demo" || game.mode === "menu" || !id("panel").hidden);
 requestAnimationFrame(frame);

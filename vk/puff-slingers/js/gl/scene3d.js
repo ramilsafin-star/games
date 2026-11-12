@@ -1,14 +1,14 @@
 // Трёхмерная отрисовка игры. Физика и правила остаются прежними: здесь только картинка.
 // Мир устроен как сцена: всё действие в плоскости z = 0, поэтому координаты совпадают с физикой.
-import * as T from '../../vendor/three/three.module.min.js?v=fdffe6b3';
-import { Post } from './post.js?v=fdffe6b3';
-import { Puffs } from './puffs.js?v=fdffe6b3';
-import { Bots } from './bots.js?v=fdffe6b3';
-import { Blocks, LevelProps, Sling } from './blocks.js?v=fdffe6b3';
-import { Shards } from './shards.js?v=fdffe6b3';
-import { Fireballs } from './fireballs.js?v=fdffe6b3';
-import { Particles } from './particles.js?v=fdffe6b3';
-import { buildWorld, lookOf, makeSky, setSkyFor, windowsTexture } from './worlds.js?v=fdffe6b3';
+import * as T from '../../vendor/three/three.module.min.js?v=d6bb936e';
+import { Post } from './post.js?v=d6bb936e';
+import { Puffs } from './puffs.js?v=d6bb936e';
+import { Bots } from './bots.js?v=d6bb936e';
+import { Blocks, LevelProps, Sling } from './blocks.js?v=d6bb936e';
+import { Shards } from './shards.js?v=d6bb936e';
+import { Fireballs } from './fireballs.js?v=d6bb936e';
+import { Particles } from './particles.js?v=d6bb936e';
+import { buildWorld, lookOf, makeSky, setSkyFor, windowsTexture } from './worlds.js?v=d6bb936e';
 
 const TEXTURES = ['wood', 'wood_n', 'stone', 'stone_n', 'steel', 'steel_n', 'ice', 'ice_n', 'crate', 'crate_n', 'cracks', 'turf', 'turf_n', 'sand', 'sand_n', 'snow', 'snow_n', 'crag', 'crag_n', 'strata', 'strata_n', 'leaves', 'clouds', 'sprites'];
 const LINEAR = /(_n|cracks|leaves|clouds|sprites)$/;

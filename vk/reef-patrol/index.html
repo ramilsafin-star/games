@@ -7,14 +7,19 @@
   <title>Патруль рифа</title>
   <meta name="description" content="Подводная 3D-аркада. Веди игрушечную субмарину через восемь глубин, собирай модули, победи Клешню-великана и Кракена.">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
-  <script src="./vendor/vk/vk-bridge.min.js?v=7eccd9cb"></script>
-    <script src="./js/vk-host.js?v=7eccd9cb" data-keys="reef-patrol-v1" data-ad-gap="120"></script>
-    <link rel="stylesheet" href="./style.css?v=7eccd9cb">
+  <script src="./vendor/vk/vk-bridge.min.js?v=151d9996"></script>
+    <script src="./js/vk-host.js?v=151d9996" data-keys="reef-patrol-v1" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=151d9996">
   <style>
     #load::before { content: ""; display: inline-block; width: 11px; height: 11px; margin-right: 8px; vertical-align: -1px;
       border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: vk-spin 0.8s linear infinite; }
     @keyframes vk-spin { to { transform: rotate(1turn); } }
   </style>
+<style>
+html.vk-banner #controls { visibility: hidden; }
+html.vk-banner .veil { padding-bottom: 28px; }
+html.vk-banner .sheet { max-height: 100%; }
+</style>
 </head>
 <body data-mode="menu">
   <canvas id="reef" aria-label="Подводная арена"></canvas>
@@ -59,6 +64,6 @@
   <section id="panel" class="veil" hidden aria-labelledby="panel-title">
     <div class="sheet" id="panel-body"></div>
   </section>
-  <script type="module" src="./js/boot.js?v=7eccd9cb"></script>
+  <script type="module" src="./js/boot.js?v=151d9996"></script>
 </body>
 </html>

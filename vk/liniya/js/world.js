@@ -1,6 +1,6 @@
 // Уровень «как есть» → готовый к игре: углы кусков земли, препятствия для пера, лимит чернил, звёзды.
 // И «перо» — правила рисования линии. Без DOM и без физики: работает и в Node.
-import { dist, polyLength, segDist, segPolyDist, pointInPoly, segSegDist, rdp, rectPoly, resample, clamp } from "./geom.js?v=dd96000c";
+import { dist, polyLength, segDist, segPolyDist, pointInPoly, segSegDist, rdp, rectPoly, resample, clamp } from "./geom.js?v=b97d5aa8";
 
 export const W = 1280,
   H = 720;
