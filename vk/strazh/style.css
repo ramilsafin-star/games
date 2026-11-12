@@ -1,0 +1,511 @@
+/* Страж орбиты: тёмный космический интерфейс поверх 3D-сцены */
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #03040b;
+  color: #dff6ff;
+  font-family: "Avenir Next Condensed", "Arial Narrow", "Trebuchet MS", system-ui, sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+}
+#stage {
+  touch-action: none;
+}
+#stage,
+#hud {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+#hud {
+  pointer-events: none;
+}
+.top {
+  position: fixed;
+  top: max(10px, env(safe-area-inset-top));
+  left: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: none;
+}
+.top > * {
+  pointer-events: auto;
+}
+.grow {
+  flex: 1;
+  pointer-events: none;
+}
+.home-slot a,
+.round {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  border: 1px solid rgba(120, 220, 255, 0.5);
+  background: rgba(8, 20, 40, 0.75);
+  color: #dff6ff;
+  font-size: 22px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.home-slot:empty {
+  display: none;
+}
+.stat {
+  min-width: 84px;
+  padding: 5px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(120, 220, 255, 0.35);
+  background: rgba(8, 20, 40, 0.7);
+  line-height: 1.05;
+}
+.stat span {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: #7fd6ff;
+}
+.stat b {
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+#bossbar {
+  position: relative;
+  flex: 0 1 360px;
+  height: 22px;
+  border-radius: 11px;
+  border: 1px solid #ff5fa8;
+  background: rgba(40, 6, 26, 0.8);
+  overflow: hidden;
+}
+#bossbar[hidden] {
+  display: none;
+}
+#bossbar i {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  background: linear-gradient(90deg, #ff2f7a, #ff9a5f);
+  transform-origin: left;
+}
+#bossbar span {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+}
+.bars {
+  position: fixed;
+  left: 12px;
+  bottom: max(14px, env(safe-area-inset-bottom));
+  width: min(300px, 46vw);
+  display: grid;
+  gap: 8px;
+  pointer-events: none;
+}
+.bar {
+  position: relative;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid rgba(120, 220, 255, 0.45);
+  background: rgba(8, 20, 40, 0.75);
+  overflow: hidden;
+}
+.bar i {
+  position: absolute;
+  inset: 0;
+  transform-origin: left;
+  transition: transform 0.15s;
+}
+.bar.shield i {
+  background: linear-gradient(90deg, #2f8fff, #7fe8ff);
+}
+.bar.hull i {
+  background: linear-gradient(90deg, #2fd67a, #b6ff7a);
+}
+.bar.hull.low i {
+  background: linear-gradient(90deg, #ff3b3b, #ff9a5f);
+  animation: blink 0.5s steps(2) infinite;
+}
+.bar span {
+  position: absolute;
+  left: 8px;
+  top: 3px;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-shadow: 0 1px 2px #000;
+}
+@keyframes blink {
+  50% {
+    opacity: 0.5;
+  }
+}
+#rocket {
+  position: fixed;
+  right: 16px;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  border: 2px solid #ffb35f;
+  background: rgba(40, 20, 6, 0.8);
+  font-size: 40px;
+  cursor: pointer;
+  overflow: hidden;
+}
+#rocket i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0%;
+  background: rgba(0, 0, 0, 0.65);
+  pointer-events: none;
+}
+#rocket.ready {
+  box-shadow: 0 0 18px #ffb35f;
+}
+#banner {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 24%;
+  text-align: center;
+  font-size: clamp(34px, 8vw, 72px);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #7fe8ff;
+  text-shadow: 0 0 24px #2f8fff;
+  pointer-events: none;
+  animation: banner 2.2s ease-out forwards;
+}
+#banner[hidden] {
+  display: none;
+}
+@keyframes banner {
+  0% {
+    opacity: 0;
+    transform: scale(1.4);
+  }
+  15% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.panel {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(620px, 92vw);
+  max-height: 92vh;
+  overflow: auto;
+  padding: 26px 28px;
+  border-radius: 18px;
+  border: 1px solid rgba(120, 220, 255, 0.5);
+  background: rgba(5, 12, 28, 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  text-align: center;
+  box-shadow: 0 0 60px rgba(47, 143, 255, 0.25);
+}
+.panel[hidden] {
+  display: none;
+}
+.panel h1 {
+  margin: 0 0 8px;
+  font-size: clamp(34px, 8vw, 58px);
+  letter-spacing: 0.1em;
+  color: #7fe8ff;
+  text-shadow: 0 0 22px #2f8fff;
+}
+.panel h2 {
+  margin: 0 0 14px;
+  font-size: clamp(22px, 5vw, 32px);
+  letter-spacing: 0.06em;
+}
+.panel p {
+  margin: 8px 0;
+  font-size: 18px;
+  color: #b9d8ea;
+}
+.panel ul {
+  list-style: none;
+  padding: 0;
+  margin: 14px auto;
+  display: grid;
+  gap: 8px;
+  text-align: left;
+  width: fit-content;
+  font-size: 17px;
+}
+.big {
+  margin-top: 12px;
+  padding: 16px 46px;
+  border-radius: 14px;
+  border: 0;
+  background: linear-gradient(#7fe8ff, #2f8fff);
+  color: #04122a;
+  font: inherit;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  box-shadow: 0 0 26px rgba(47, 143, 255, 0.7);
+}
+.best {
+  font-size: 15px !important;
+  opacity: 0.8;
+}
+#cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.card {
+  padding: 16px 8px;
+  border-radius: 14px;
+  border: 1px solid rgba(120, 220, 255, 0.5);
+  background: rgba(14, 32, 60, 0.9);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.card:hover,
+.card:active {
+  border-color: #7fe8ff;
+  box-shadow: 0 0 22px rgba(47, 143, 255, 0.6);
+}
+.card .ic {
+  display: block;
+  font-size: 42px;
+}
+.card b {
+  display: block;
+  margin: 6px 0 4px;
+  font-size: 18px;
+  letter-spacing: 0.04em;
+}
+.card small {
+  font-size: 14px;
+  color: #9fc4da;
+}
+@media (max-width: 560px) {
+  #cards {
+    grid-template-columns: 1fr;
+  }
+  .card {
+    display: grid;
+    grid-template-columns: 56px 1fr;
+    text-align: left;
+    align-items: center;
+    padding: 10px 12px;
+  }
+  .card .ic {
+    grid-row: span 2;
+  }
+  #rocket {
+    width: 74px;
+    height: 74px;
+    font-size: 32px;
+  }
+  .stat {
+    min-width: 64px;
+  }
+  .stat b {
+    font-size: 19px;
+  }
+}
+
+.round[hidden] {
+  display: none;
+}
+.round,
+.home-slot a {
+  flex-shrink: 0;
+}
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid #fff3aa;
+  outline-offset: 3px;
+}
+#rocket:disabled {
+  cursor: default;
+}
+#rocket-time {
+  position: absolute;
+  inset: auto 0 5px;
+  color: #fff1d4;
+  font: 800 14px system-ui, sans-serif;
+}
+.big:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+.panel {
+  max-height: min(82dvh, calc(100dvh - 72px));
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+}
+.panel .desktop-controls,
+#load-status {
+  font-size: 14px;
+}
+@media (pointer: coarse) {
+  .desktop-controls {
+    display: none;
+  }
+}
+@media (max-width: 560px) {
+  .top {
+    gap: 6px;
+    left: max(8px, env(safe-area-inset-left));
+    right: max(8px, env(safe-area-inset-right));
+  }
+  .stat {
+    padding-inline: 8px;
+  }
+  #bossbar {
+    position: absolute;
+    top: 56px;
+    left: 0;
+    right: 0;
+    pointer-events: none;
+  }
+  .panel {
+    padding: 16px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bar.hull.low i {
+    animation: none;
+  }
+}
+
+.panel .patch {
+  margin: -6px 0 14px;
+  font-size: 15px;
+  color: #9fe6b8;
+}
+.panel .patch:empty {
+  display: none;
+}
+/* Низкий экран (телефон на боку): всё меню должно помещаться без прокрутки */
+@media (max-height: 520px) {
+  .panel {
+    padding: 10px 20px 12px;
+    max-height: calc(100dvh - 12px);
+  }
+  #menu {
+    width: min(760px, 94vw);
+  }
+  .panel h1 {
+    margin-bottom: 2px;
+    font-size: 30px;
+  }
+  .panel h2 {
+    margin-bottom: 8px;
+    font-size: 20px;
+  }
+  .panel p {
+    margin: 4px 0;
+    font-size: 14px;
+  }
+  #menu > p:first-of-type {
+    display: none;
+  }
+  .panel ul {
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 18px;
+    margin: 8px auto;
+    font-size: 14px;
+  }
+  .big {
+    margin-top: 6px;
+    padding: 10px 40px;
+    font-size: 21px;
+  }
+  .card {
+    padding: 8px;
+  }
+  .card .ic {
+    font-size: 30px;
+  }
+  .panel .patch {
+    margin: -4px 0 8px;
+  }
+}
+/* Двойной залп из контейнера снабжения */
+#rocket.boost {
+  border-color: #ffe27a;
+  box-shadow: 0 0 26px #ffd25f;
+}
+
+/* Счётчики и полоса флагмана не перехватывают касания: под ними тоже можно выбрать врага */
+.top > .stat,
+.top > #bossbar {
+  pointer-events: none;
+}
+
+/* VK: кнопка «В меню» на паузе и на панелях между волнами */
+.ghost {
+  display: block;
+  margin: 12px auto 0;
+  padding: 10px 30px;
+  border-radius: 12px;
+  border: 1px solid rgba(120, 220, 255, 0.5);
+  background: rgba(14, 32, 60, 0.9);
+  color: #dff6ff;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+}
+@media (max-height: 520px) {
+  .ghost {
+    margin-top: 6px;
+    padding: 6px 24px;
+    font-size: 14px;
+  }
+}
+/* VK: крутилка у строки загрузки (правило 3.5.2) */
+#load-status::before {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 8px;
+  vertical-align: -2px;
+  border: 2px solid #7fe8ff;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: vk-spin 0.8s linear infinite;
+}
+#load-status.failed::before {
+  display: none;
+}
+@keyframes vk-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

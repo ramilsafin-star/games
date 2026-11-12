@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <clipPath id="r"><rect width="192" height="192" rx="44"/></clipPath>
+  <g clip-path="url(#r)">
+    <rect width="192" height="192" fill="#1f7fe0"/>
+    <path d="M0 118h192v74H0z" fill="#58c66d"/>
+    <path d="M-10 168C40 150 70 96 150 92l52-2v38l-44 2c-52 4-66 44-118 66z" fill="#4c535e"/>
+    <path d="M-6 180c50-20 70-62 124-70" fill="none" stroke="#fff" stroke-width="5" stroke-dasharray="14 12"/>
+    <g transform="rotate(-14 104 112)">
+      <rect x="56" y="94" width="100" height="34" rx="13" fill="#ff4733"/>
+      <rect x="78" y="74" width="52" height="30" rx="11" fill="#ff8a7c"/>
+      <rect x="86" y="80" width="36" height="16" rx="5" fill="#16233d"/>
+      <rect x="52" y="112" width="108" height="12" rx="6" fill="#262a33"/>
+      <circle cx="80" cy="128" r="15" fill="#23262e"/><circle cx="80" cy="128" r="6.5" fill="#e9edf2"/>
+      <circle cx="134" cy="128" r="15" fill="#23262e"/><circle cx="134" cy="128" r="6.5" fill="#e9edf2"/>
+      <rect x="148" y="100" width="10" height="9" rx="3" fill="#fff3b8"/>
+    </g>
+    <path d="M22 44h28M14 60h22M30 76h16" stroke="#fff" stroke-width="7" stroke-linecap="round" opacity=".85"/>
+  </g>
+</svg>

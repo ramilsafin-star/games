@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Пушистый залп</title>
+
+
+  <script src="./vendor/vk/vk-bridge.min.js?v=fdffe6b3"></script>
+    <script src="./js/vk-host.js?v=fdffe6b3" data-keys="puff_slingers_save" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=fdffe6b3">
+  <style>
+    /* Кнопки VK-версии в углах экранов */
+    .vk-corner { position: absolute; top: calc(12px + var(--safe-top)); z-index: 2; }
+    .vk-corner.left { left: calc(12px + var(--safe-left)); }
+    .vk-corner.right { right: calc(12px + var(--safe-right)); }
+    .vk-sound:not(.off) .off-i, .vk-sound.off .on-i { display: none; }
+    .vk-sound.off { background: linear-gradient(180deg, #b7b0c8 0%, #776f8c 100%); }
+    /* Телефон в альбомной ориентации: 18 уровней в два ряда по девять, «Назад» без прокрутки (правило 3.2.1) */
+    @media (max-height: 520px) and (min-width: 560px) {
+      #screen-levels .card { max-width: 760px; }
+      .levels-grid { grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 6px; }
+      .level-card { aspect-ratio: 4 / 5; min-height: 0; }
+      .level-card .num { font-size: 22px; -webkit-text-stroke-width: 3px; }
+      .mini-stars i { width: 13px; height: 13px; }
+    }
+    /* Самые низкие экраны (568×320): итог и финал без прокрутки */
+    @media (max-height: 340px) {
+      .card { gap: 5px; padding-top: 8px; padding-bottom: 10px; }
+      .stars { min-height: 40px; }
+      .star { width: 36px; height: 36px; }
+      .star.mid { width: 44px; height: 44px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="boot-loader" aria-hidden="true"><i></i><i></i><i></i></div>
+  <canvas id="gl" hidden></canvas>
+  <canvas id="game"></canvas>
+  <div id="vignette"></div>
+  <div id="flash"></div>
+
+  <!-- Игровой интерфейс -->
+  <div id="hud" class="hidden">
+    <div class="hud-left">
+      <div class="chip chip-level"><span data-i18n="level"></span> <b id="hud-level">1</b></div>
+      <div class="chip chip-score"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l3 6.6 7.2.8-5.4 4.8 1.5 7.1L12 17.7l-6.3 3.6 1.5-7.1L1.800 9.400 9 8.600z" fill="currentColor"/></svg><b id="hud-score">0</b></div>
+      <div id="hud-gems-wrap" class="chip chip-gems hidden"><i class="gem-ico"></i><b id="hud-gems">0/0</b></div>
+    </div>
+    <div class="hud-right">
+      <button id="vk-sound-hud" class="icon-btn vk-sound" type="button" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><g class="on-i"><path d="M3 9.5h4l5.5-4.5v14L7 14.5H3z" fill="currentColor"/><path d="M15.6 8.8a4.6 4.6 0 0 1 0 6.4M18.4 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></g><g class="off-i"><path d="M3 9.5h4l5.5-4.5v14L7 14.5H3z" fill="currentColor"/><path d="M16 9.5l5 5m0-5l-5 5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></g></svg></button>
+      <button id="btn-restart" class="icon-btn" type="button" aria-label="Restart">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V1.500L6.500 6.500 12 11.500V8a6 6 0 1 1-6 6H3a9 9 0 1 0 9-9z" fill="currentColor"/></svg>
+      </button>
+      <button id="btn-pause" class="icon-btn" type="button" aria-label="Pause">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5.500" y="4" width="4.500" height="16" rx="1.400" fill="currentColor"/><rect x="14" y="4" width="4.500" height="16" rx="1.400" fill="currentColor"/></svg>
+      </button>
+    </div>
+  </div>
+  <div id="hint" role="status"></div>
+  <div id="banner" aria-live="polite"></div>
+
+  <!-- Заставка -->
+  <section id="screen-title" class="screen screen-title">
+    <button id="vk-sound-title" class="icon-btn vk-sound vk-corner right" type="button" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><g class="on-i"><path d="M3 9.5h4l5.5-4.5v14L7 14.5H3z" fill="currentColor"/><path d="M15.6 8.8a4.6 4.6 0 0 1 0 6.4M18.4 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></g><g class="off-i"><path d="M3 9.5h4l5.5-4.5v14L7 14.5H3z" fill="currentColor"/><path d="M16 9.5l5 5m0-5l-5 5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></g></svg></button>
+    <div class="logo" aria-label="Пушистый залп">
+      <div class="logo-top" data-i18n="logo1"></div>
+      <div class="logo-bottom" data-i18n="logo2"></div>
+    </div>
+    <p class="tagline" data-i18n="tagline"></p>
+    <button id="btn-play" class="btn primary huge" type="button"></button>
+    <button id="btn-title-levels" class="btn secondary" type="button" data-i18n="levels"></button>
+    <div id="title-best-wrap" class="title-best hidden">
+      <span><i class="star-ico"></i> <b id="title-stars">0/18</b></span>
+      <span id="title-gems-wrap" class="hidden"><i class="gem-ico"></i> <b id="title-gems">0/0</b></span>
+      <span><span data-i18n="totalBest"></span>: <b id="title-best">0</b></span>
+    </div>
+  </section>
+
+  <!-- Пауза и настройки звука -->
+  <section id="screen-pause" class="screen">
+    <div class="card">
+      <h2 class="card-title" data-i18n="paused"></h2>
+      <button id="btn-resume" class="btn primary" type="button" data-i18n="resume"></button>
+      <div class="row">
+        <button id="btn-pause-restart" class="btn secondary" type="button" data-i18n="restart"></button>
+        <button id="btn-pause-levels" class="btn secondary" type="button" data-i18n="levels"></button>
+        <button id="vk-menu-pause" class="btn secondary" type="button" data-vk-menu></button>
+      </div>
+      <div class="settings">
+        <button id="tgl-music" class="toggle" type="button"><span data-i18n="music"></span><span class="state"></span></button>
+        <button id="tgl-sfx" class="toggle" type="button"><span data-i18n="sfx"></span><span class="state"></span></button>
+        <button id="tgl-shake" class="toggle" type="button"><span data-i18n="shake"></span><span class="state"></span></button>
+      </div>
+      <p class="keys" data-i18n="keys"></p>
+    </div>
+  </section>
+
+  <!-- Выбор уровня -->
+  <section id="screen-levels" class="screen"><button class="icon-btn vk-corner left" type="button" data-vk-menu aria-label="Главное меню"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.5 11h2.8v9.5h5.2v-6h3v6h5.2V11h2.8z" fill="currentColor"/></svg></button>
+    <div class="card card-wide">
+      <h2 class="card-title" data-i18n="selectLevel"></h2>
+      <div id="levels-grid" class="levels-grid"></div>
+      <p class="total-line"><span data-i18n="totalBest"></span>: <b id="levels-total">0</b></p>
+      <button id="btn-levels-back" class="btn secondary" type="button" data-i18n="back"></button>
+    </div>
+  </section>
+
+  <!-- Итог уровня -->
+  <section id="screen-result" class="screen"><button class="icon-btn vk-corner left" type="button" data-vk-menu aria-label="Главное меню"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.5 11h2.8v9.5h5.2v-6h3v6h5.2V11h2.8z" fill="currentColor"/></svg></button>
+    <div class="card" id="result-card">
+      <h2 class="card-title" id="result-title"></h2>
+      <div class="stars" id="result-stars">
+        <span class="star"></span><span class="star mid"></span><span class="star"></span>
+      </div>
+      <div id="result-score-wrap" class="score-box">
+        <div class="score-main"><span data-i18n="score"></span> <b id="result-score">0</b></div>
+        <div id="result-new" class="new-best hidden" data-i18n="newBest"></div>
+        <div class="score-sub"><span data-i18n="best"></span>: <b id="result-best">0</b></div>
+        <div id="result-bonus-wrap" class="score-sub hidden"><span data-i18n="bonus"></span>: <b id="result-bonus">0</b></div>
+        <div id="result-gems-wrap" class="score-sub hidden"><span data-i18n="gems"></span>: <b id="result-gems">0</b></div>
+      </div>
+      <p id="result-tip" class="tip hidden" data-i18n="loseTip"></p>
+      <button id="btn-next" class="btn primary" type="button"></button>
+      <div class="row">
+        <button id="btn-retry" class="btn secondary" type="button" data-i18n="retry"></button>
+        <button id="btn-result-levels" class="btn secondary" type="button" data-i18n="levels"></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Финал: игроку ясно, что контент закончился -->
+  <section id="screen-final" class="screen"><button class="icon-btn vk-corner left" type="button" data-vk-menu aria-label="Главное меню"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.5 11h2.8v9.5h5.2v-6h3v6h5.2V11h2.8z" fill="currentColor"/></svg></button>
+    <div class="card">
+      <h2 class="card-title gold" data-i18n="finalTitle"></h2>
+      <p class="final-text" data-i18n="finalText"></p>
+      <div class="score-box">
+        <div class="score-main"><span data-i18n="finalStars"></span> <b id="final-stars">0/18</b></div>
+        <div class="score-sub"><span data-i18n="totalBest"></span>: <b id="final-best">0</b></div>
+      </div>
+      <p id="final-note" class="tip"></p>
+      <button id="btn-final-replay" class="btn primary" type="button" data-i18n="playAgain"></button>
+      <button id="btn-final-levels" class="btn secondary" type="button" data-i18n="levels"></button>
+    </div>
+  </section>
+
+  <script src="./matter.min.js?v=fdffe6b3"></script>
+  <script src="./js/data.js?v=fdffe6b3"></script>
+  <script src="./js/i18n.js?v=fdffe6b3"></script>
+  <script src="./js/audio.js?v=fdffe6b3"></script>
+  <script src="./js/art.js?v=fdffe6b3"></script>
+  <script src="./js/background.js?v=fdffe6b3"></script>
+  <script src="./js/fx.js?v=fdffe6b3"></script>
+  <script src="./js/game.js?v=fdffe6b3"></script>
+  <script src="./js/ui.js?v=fdffe6b3"></script>
+</body>
+</html>
