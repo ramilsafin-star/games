@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#081a36">
+  <title>Маяк</title>
+  <meta name="description" content="Ночная бухта и один луч на всех: веди свет маяка пальцем, показывай лодкам дорогу в гавань и прогоняй морские тени. Десять ночей и шторм на рекорд.">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./style.css?v=b9a86e0e">
+</head>
+<body data-mode="menu">
+  <canvas id="sea" aria-label="Ночная бухта с маяком"></canvas>
+  <div id="vignette" aria-hidden="true"></div>
+  <div id="glare" aria-hidden="true"></div>
+  <header class="top">
+    <nav class="home-slot"><a class="round" href="../" aria-label="Все игры">🎮</a></nav>
+    <div id="hud" class="hud" hidden>
+      <span id="hearts" class="hearts" aria-label="Сердечки"></span>
+      <span class="count"><i aria-hidden="true">⛵</i><b id="saved">0/5</b></span>
+      <span class="count points"><i aria-hidden="true">✦</i><b id="score">0</b></span>
+    </div>
+    <div class="tools">
+      <button class="round" id="sound" aria-label="Звук" aria-pressed="true">♪</button>
+      <button class="round" id="pause" aria-label="Пауза" hidden>Ⅱ</button>
+    </div>
+  </header>
+  <div id="announcement" aria-live="polite"></div>
+  <div id="lesson" role="status" hidden></div>
+  <div id="floats" aria-hidden="true"></div>
+  <div id="controls" hidden>
+    <button id="flash" aria-label="Вспышка: осветить всю бухту">
+      <span class="ring" aria-hidden="true"></span>
+      <svg aria-hidden="true" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><circle cx="24" cy="24" r="7.5" fill="currentColor" stroke="none"/><path d="M24 5v7M24 36v7M5 24h7M36 24h7M10.6 10.6l5 5M32.4 32.4l5 5M37.4 10.6l-5 5M15.6 32.4l-5 5"/></svg>
+      <span id="flash-label">ВСПЫШКА</span>
+    </button>
+  </div>
+  <i id="probe" aria-hidden="true"></i>
+  <main id="intro" class="intro">
+    <div class="intro-card" id="intro-card">
+      <span class="eyebrow"><i></i> НОЧНАЯ ВАХТА</span>
+      <h1>Маяк</h1>
+      <p class="lead">Один луч на всю бухту. Свети лодкам — и они найдут дорогу домой.</p>
+      <div class="how">
+        <span><b>☝</b> Веди луч пальцем</span>
+        <span><b>⛵</b> Заряжай фонарики</span>
+        <span><b>◉</b> Тени тают на свету</span>
+      </div>
+      <button id="start" class="primary" disabled>Зажечь маяк</button>
+      <div id="nights" class="nights" hidden></div>
+      <button id="storm" class="second" hidden>Шторм до рассвета</button>
+      <p id="load" role="status">Зажигаем лампу…</p>
+      <small class="desktop">Мышь: луч идёт за курсором · пробел — вспышка · Esc — пауза</small>
+      <button id="reset" class="tiny" hidden>Начать сначала</button>
+    </div>
+  </main>
+  <section id="panel" class="veil" hidden aria-labelledby="panel-title">
+    <div class="sheet" id="panel-body" tabindex="-1"></div>
+  </section>
+  <script type="module" src="./js/boot.js?v=b9a86e0e"></script>
+</body>
+</html>

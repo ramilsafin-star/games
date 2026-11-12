@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0a1840"/><stop offset="1" stop-color="#1f4f7c"/></linearGradient>
+    <linearGradient id="beam" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ffe9a6"/><stop offset="1" stop-color="#ffe9a6" stop-opacity="0"/></linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="44" fill="url(#sky)"/>
+  <g fill="#fff6d0"><circle cx="38" cy="34" r="3"/><circle cx="150" cy="26" r="2.4"/><circle cx="122" cy="52" r="2"/><circle cx="64" cy="58" r="1.8"/><circle cx="168" cy="70" r="2"/></g>
+  <path d="M96 62 188 28v74Z" fill="url(#beam)" opacity=".85"/>
+  <path d="M0 140q24-12 48 0t48 0 48 0 48 0v52H0Z" fill="#0f3a63"/>
+  <path d="M52 166q20-22 46-22t44 22Z" fill="#2a3552"/>
+  <path d="M80 150 86 78h20l6 72Z" fill="#f6f3ea"/>
+  <path d="M83.200 112h25.600l1.400 17H81.800ZM85 90h22l-1-12H86Z" fill="#e2483e"/>
+  <rect x="78" y="70" width="36" height="8" rx="3" fill="#39435a"/>
+  <rect x="85" y="52" width="22" height="18" rx="3" fill="#ffe08a"/>
+  <path d="M80 54 96 38l16 16Z" fill="#d8443b"/>
+  <circle cx="96" cy="61" r="20" fill="#ffe9a6" opacity=".28"/>
+</svg>

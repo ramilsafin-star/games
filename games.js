@@ -175,4 +175,11 @@ const GAMES = [
     cover: "covers/virazh.jpg",
     color: "#e8443a",
   },
+  {
+    id: "mayak",
+    title: "Маяк",
+    url: "mayak/",
+    cover: "covers/mayak.jpg",
+    color: "#2f5fa8",
+  },
 ];
