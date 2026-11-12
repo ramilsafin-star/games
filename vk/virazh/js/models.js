@@ -1,7 +1,7 @@
 // Модели «Виража»: игрушечные машинки и декорации. Каждая деталь — простая фигура,
 // детали склеиваются в одну геометрию с цветами в вершинах, чтобы рисоваться одним вызовом.
-import * as T from "../vendor/three/three.module.min.js?v=b8d55922";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=b8d55922";
+import * as T from "../vendor/three/three.module.min.js?v=c71ae3b5";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=c71ae3b5";
 
 const M = new T.Matrix4(), Q = new T.Quaternion(), E = new T.Euler(), S = new T.Vector3(), P = new T.Vector3();
 const C = new T.Color();
@@ -256,6 +256,31 @@ export const PROPS = {
       [cyl(0.07, 0.07, 5.2, 5), "#7a5236", [0, 3.1, 0.2]],
       [cone(1.9, 4.4, 3), "#fff7e0", [0, 3.3, -0.75], [0, Math.PI / 2, 0], [1, 1, 0.06]],
       [cone(1.2, 3.2, 3), "#ff7b5a", [0, 2.8, 1.1], [0, -Math.PI / 2, 0], [1, 1, 0.06]],
+    ]);
+  },
+  // ёлка в снегу: белые шапки на ярусах
+  snowPine() {
+    return fuse([
+      [cyl(0.24, 0.32, 1.4, 6), "#7a5236", [0, 0.7, 0]],
+      [cone(1.9, 2.6, 7), "#2c6b4a", [0, 2.3, 0]],
+      [cone(1.35, 0.9, 7), "#f4f8ff", [0, 3.15, 0]],
+      [cone(1.5, 2.3, 7), "#357a55", [0, 3.7, 0]],
+      [cone(1.0, 0.8, 7), "#f4f8ff", [0, 4.5, 0]],
+      [cone(1.05, 2.1, 7), "#3f8a5f", [0, 5.0, 0]],
+      [cone(0.55, 0.9, 7), "#ffffff", [0, 5.75, 0]],
+    ]);
+  },
+  // снеговик с морковкой и ведром
+  snowman() {
+    return fuse([
+      [new T.SphereGeometry(1.25, 10, 8), "#f6f9ff", [0, 1.1, 0]],
+      [new T.SphereGeometry(0.9, 10, 8), "#ffffff", [0, 2.75, 0]],
+      [new T.SphereGeometry(0.62, 10, 8), "#ffffff", [0, 3.95, 0]],
+      [cone(0.13, 0.7, 6), "#ff8a2a", [0, 3.95, 0.82], [Math.PI / 2, 0, 0]],
+      [cyl(0.45, 0.55, 0.6, 8), "#3f7bd8", [0, 4.75, 0]],
+      [new T.SphereGeometry(0.09, 6, 4), "#1c2233", [0.22, 4.12, 0.55]],
+      [new T.SphereGeometry(0.09, 6, 4), "#1c2233", [-0.22, 4.12, 0.55]],
+      [box(1.9, 0.22, 0.22), "#e2574c", [0, 3.35, 0], [0, 0, 0.12]],
     ]);
   },
   hut() {

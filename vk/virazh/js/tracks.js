@@ -1,7 +1,7 @@
 // Трассы «Виража». Каждая — замкнутая ломаная со скруглёнными углами: [x, z, радиус поворота, высота].
 // Первая точка — стартовая линия (лежит на прямой). Ось x — вправо на карте, z — вниз.
 // Здесь только геометрия без графики, поэтому трассы строятся и в Node (tests/sim.mjs).
-import { clamp, wrapAngle } from "./kit.js?v=b8d55922";
+import { clamp, wrapAngle } from "./kit.js?v=c71ae3b5";
 
 export const TRACKS = [
   {
@@ -102,7 +102,41 @@ export const TRACKS = [
     pads: [[130, 0, 3], [215, -370, -3], [-60, -250, 0]],
     cans: [[260, -60, 0], [150, -185, 2], [225, -250, -2], [95, -370, 3], [-170, -195, 0], [-90, -70, 0]],
   },
+  {
+    id: "snow",
+    name: "Снежная вершина",
+    blurb: "Лёд и горный серпантин",
+    theme: "snow",
+    novice: 0.96, // на «Новичке» соперники здесь чуть спокойнее: лёд
+    half: 9,
+    shoulder: 5.5,
+    scale: 0.92,
+    pts: [
+      [0, 0, 0, 0],
+      [220, 0, 40, 2],
+      [290, -100, 36, 6],
+      [200, -180, 34, 11],
+      [290, -260, 40, 16],
+      [160, -360, 60, 22],
+      [-60, -330, 50, 20],
+      [-130, -230, 40, 14],
+      [-40, -150, 34, 9],
+      [-170, -80, 40, 4],
+      [-170, 0, 40, 1],
+    ],
+    // лёд: [x, z, длина] — на этих участках машину держит слабее
+    ice: [[60, -345, 46], [-170, -42, 34]],
+    pads: [[120, 0, -3], [-110, -345, 0], [-170, -20, 3]],
+    cans: [[250, -40, 0], [245, -220, 0], [40, -342, -3], [-85, -190, 0], [-105, -115, 0]],
+  },
 ];
+
+// Та же трасса в обратную сторону: старт на месте, точки по кругу наоборот, «лево» и «право» меняются
+export function reverseDef(def) {
+  const [first, ...rest] = def.pts;
+  const flip = (list) => (list || []).map(([x, z, d = 0]) => [x, z, -d]);
+  return { ...def, id: def.id + "-r", reverse: true, pts: [first, ...rest.reverse()], pads: flip(def.pads), cans: flip(def.cans) };
+}
 
 const A_LAT = 34; // боковое ускорение, на которое рассчитан «идеальный» проход поворота
 const DECEL = 20; // торможение, заложенное в профиль скорости
@@ -271,6 +305,15 @@ export function buildTrack(def) {
   };
   track.pads = (def.pads || []).map(place);
   track.cans = (def.cans || []).map(place);
+  // лёд — отрезки пути [s0, s1]
+  track.ice = (def.ice || []).map(([x, z, len]) => {
+    const i = nearest(track, x * sc, z * sc);
+    return [i * ds - len / 2, i * ds + len / 2];
+  });
+  // заезд на время: «идеальный» круг по профилю скорости без нитро и ускорителей, с (par)
+  let lap = 0;
+  for (let i = 0; i < n; i++) lap += ds / Math.min(vp[i], 40);
+  track.par = lap;
   track.jump = null;
   if (def.jump) {
     const end = place(def.jump);
@@ -303,6 +346,16 @@ export function trackPoint(track, s, d = 0, out = {}) {
   out.yaw = track.yaw[i] + wrapAngle(track.yaw[j] - track.yaw[i]) * t;
   out.i = i;
   return out;
+}
+
+// На льду ли точка s
+export function iceAt(track, s) {
+  for (const [s0, s1] of track.ice || []) {
+    let u = s - s0;
+    if (u < 0) u += track.length;
+    if (u < s1 - s0) return true;
+  }
+  return false;
 }
 
 // Высота трамплина над дорогой в точке s

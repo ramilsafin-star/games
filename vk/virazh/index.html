@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
   <meta name="theme-color" content="#10173a">
   <title>Вираж</title>
-  <meta name="description" content="3D-гонка на игрушечных машинках: четыре трассы, пять соперников, заносы, нитро и Кубок Виража.">
+  <meta name="description" content="3D-гонка на игрушечных машинках: пять трасс в обе стороны, пять соперников, заносы с мини-турбо, тяга, нитро, заезд на время с призраком, гонка дня, гараж и Кубок Виража.">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
-  <script src="./vendor/vk/vk-bridge.min.js?v=b8d55922"></script>
-    <script src="./js/vk-host.js?v=b8d55922" data-keys="virazh-v1,virazh-mute" data-ad-gap="120"></script>
-    <link rel="stylesheet" href="./style.css?v=b8d55922">
+  <script src="./vendor/vk/vk-bridge.min.js?v=c71ae3b5"></script>
+    <script src="./js/vk-host.js?v=c71ae3b5" data-keys="virazh-v1,virazh-mute" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=c71ae3b5">
 <style>
 html.vk-banner #hud { visibility: hidden; }
+html.vk-banner .menu { padding-bottom: 14px; }
 </style>
 </head>
 <body data-screen="menu">
@@ -36,6 +37,8 @@ html.vk-banner #hud { visibility: hidden; }
     <div class="zone left" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M15 4l-8 8 8 8" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <div class="zone right" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 4l8 8-8 8" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <p id="lesson">Держи палец слева или справа — машина повернёт</p>
+    <div id="delta" hidden></div>
+    <div id="chip" hidden></div>
     <div id="gauge" aria-hidden="true">
       <div class="pips"><i></i><i></i><i></i></div>
       <div class="speed"><b id="speed">0</b><span>км/ч</span></div>
@@ -45,7 +48,10 @@ html.vk-banner #hud { visibility: hidden; }
   </div>
   <main id="menu" class="menu">
     <div class="card">
-      <div class="title"><h1>Вираж</h1><p>Гонки игрушечных машинок</p></div>
+      <div class="title"><h1>Вираж</h1><p>Гонки игрушечных машинок</p>
+        <button id="dir" class="chip" aria-pressed="false" aria-label="Направление трассы"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12a7 7 0 0 1 12-4.9M19 12a7 7 0 0 1-12 4.9" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M17.5 3.5v4h-4M6.5 20.5v-4h4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span id="dir-label">Прямо</span></button>
+        <button id="quality" class="chip" aria-label="Графика"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18v11H3z M8 18v3M16 18v3M7 10.5l3 3 3-4 4 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg><span id="quality-label">Авто</span></button>
+      </div>
       <div id="tracks" class="tracks" role="radiogroup" aria-label="Трасса"></div>
       <div class="options">
         <div id="diffs" class="seg" role="radiogroup" aria-label="Сложность"></div>
@@ -55,6 +61,12 @@ html.vk-banner #hud { visibility: hidden; }
         <button id="race" class="primary" disabled>Заезд</button>
         <button id="cup" class="primary alt" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10v2h3v3a4 4 0 0 1-4 4h-.6A5 5 0 0 1 13 14.9V18h3v3H8v-3h3v-3.1A5 5 0 0 1 8.600 12H8a4 4 0 0 1-4-4V5h3zm0 4H6v1a2 2 0 0 0 1 1.700zm10 0v2.700A2 2 0 0 0 18 8V7z" fill="currentColor"/></svg><span id="cup-label">Кубок</span></button>
       </div>
+      <div class="more">
+        <button id="trial" class="mini" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13.5" r="7.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12 9.5v4l2.6 1.6M9.5 3h5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>На время</button>
+        <button id="daily" class="mini" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.6l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8z" fill="currentColor"/></svg><span id="daily-label">Гонка дня</span></button>
+        <button id="garage" class="mini" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 3.5a5 5 0 0 0-6 6.3L3 15.3 5.7 18l5.5-5.5a5 5 0 0 0 6.3-6l-3 3-2.4-.6-.6-2.4z" fill="currentColor"/></svg>Гараж <em><i class="coin"></i><span id="coins">0</span></em></button>
+        <button id="awards" class="mini" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="5.5" fill="currentColor"/><path d="M8.5 13.5L7 21l5-2.5 5 2.5-1.5-7.5" fill="currentColor"/></svg>Награды <em id="ach-n">0/12</em></button>
+      </div>
       <p id="load" role="status">Строим трассу…</p>
       <small class="keys">Клавиши: ← → рулить · ↓ тормоз · пробел — нитро · Esc — пауза</small>
     </div>
@@ -62,6 +74,6 @@ html.vk-banner #hud { visibility: hidden; }
   <section id="panel" class="veil" hidden>
     <div class="sheet" id="panel-body"></div>
   </section>
-  <script type="module" src="./js/boot.js?v=b8d55922"></script>
+  <script type="module" src="./js/boot.js?v=c71ae3b5"></script>
 </body>
 </html>

@@ -1,10 +1,14 @@
-import * as T from "../vendor/three/three.module.min.js?v=253dead7";
-import { GEO, enamel, glow, mesh, submarine, enemyModels, pearl, fishGeometry } from "./models.js?v=253dead7";
-import { PULSE_RADIUS } from "./rules.js?v=253dead7";
+import * as T from "../vendor/three/three.module.min.js?v=f98bc4f8";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=f98bc4f8";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=f98bc4f8";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=f98bc4f8";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=f98bc4f8";
+import { GEO, enamel, glow, mesh, submarine, enemyModels, pearl, fishGeometry, capsule, torpedo, POWER_COLOR } from "./models.js?v=f98bc4f8";
+import { PULSE_RADIUS } from "./rules.js?v=f98bc4f8";
 
 const TAU = Math.PI * 2;
 const PLANE = new T.Plane(new T.Vector3(0, 1, 0), -1.4);
-// Оформление глубин: вода, туман, свет, дно, планктон и стайки рыб. Номер темы = номер глубины − 1.
+// Оформление глубин: вода, туман, свет, дно, планктон и стайки рыб. Номер темы — depth.theme в rules.js.
 const THEMES = [
   { bg: "#5eb7c3", fog: "#6fbccf", floor: "#8eced1", sky: "#ccf7ed", ground: "#286591", hemi: 1.78, key: "#fff0cc", keyPower: 3.0, rim: "#80dfff", rimPower: 2.15, motes: "#d4fbef", fish: "#ffb37a" },
   { bg: "#6d7fc4", fog: "#7f8fd0", floor: "#a9a6e0", sky: "#dcd6ff", ground: "#3a3f8f", hemi: 1.7, key: "#ffe1f0", keyPower: 2.7, rim: "#9fb4ff", rimPower: 2.2, motes: "#e6dcff", fish: "#ffd36b" },
@@ -13,8 +17,18 @@ const THEMES = [
   { bg: "#3f8f7a", fog: "#4f9d86", floor: "#86c7a2", sky: "#d2f5c8", ground: "#1f5a4c", hemi: 1.6, key: "#f4f6c0", keyPower: 2.5, rim: "#7fe0b8", rimPower: 2.0, motes: "#e2f7b8", fish: "#c0f08a" },
   { bg: "#14365f", fog: "#1b4470", floor: "#3f6fae", sky: "#8fb8ff", ground: "#0b1f44", hemi: 1.35, key: "#b8d4ff", keyPower: 1.9, rim: "#58b6ff", rimPower: 2.5, motes: "#8fd0ff", fish: "#7fd7ff" },
   { bg: "#a765b8", fog: "#b377c4", floor: "#e3a6dc", sky: "#ffdcf6", ground: "#5b2f7f", hemi: 1.65, key: "#fff0f8", keyPower: 2.6, rim: "#ff9be0", rimPower: 2.1, motes: "#ffd4f4", fish: "#ffe17f" },
+  // 8. Черепаха-крепость: замшелые нефритовые руины
+  { bg: "#3d7f6a", fog: "#4a8e78", floor: "#9cc9a0", sky: "#d9f5d0", ground: "#24513f", hemi: 1.6, key: "#fff3d0", keyPower: 2.7, rim: "#9fe8b0", rimPower: 2.0, motes: "#e8ffd0", fish: "#ffd28a" },
+  // 9. Ледяной грот: светлая голубая вода, лёд и иней
+  { bg: "#5f9cc4", fog: "#74aed2", floor: "#b4d6ea", sky: "#e2f4ff", ground: "#2f5f8a", hemi: 1.45, key: "#f4fbff", keyPower: 2.1, rim: "#a8e4ff", rimPower: 2.2, motes: "#ffffff", fish: "#9fd8ff" },
+  // 10. Вулканические трубы: тёплая вода, тёмный камень, рыжие огоньки
+  { bg: "#6e3a3a", fog: "#80463f", floor: "#b07a62", sky: "#ffd0a8", ground: "#3a1414", hemi: 1.4, key: "#ffc890", keyPower: 2.6, rim: "#ff8a5a", rimPower: 2.6, motes: "#ffb080", fish: "#ffe07a" },
+  // 11. Жемчужный город: колонны, арки и золотые купола
+  { bg: "#4f8fb0", fog: "#5f9ebd", floor: "#e6d6b0", sky: "#fff3d8", ground: "#2c5a7a", hemi: 1.7, key: "#fff2c8", keyPower: 2.9, rim: "#ffe0a0", rimPower: 2.1, motes: "#fff4c8", fish: "#ff9ec0" },
+  // 12. Логово Кракена
   { bg: "#2a1d55", fog: "#35266a", floor: "#6a55b0", sky: "#b9a3ff", ground: "#150c33", hemi: 1.3, key: "#e0c8ff", keyPower: 1.9, rim: "#ff7fd0", rimPower: 2.4, motes: "#e0a8ff", fish: "#ff9ecf" },
 ];
+const ICE = new T.Color("#cfefff");
 for (const theme of THEMES) {
   for (const key of ["bg", "fog", "floor", "sky", "ground", "key", "rim", "motes", "fish"]) theme[key] = new T.Color(theme[key]);
 }
@@ -60,6 +74,22 @@ function makeReef(scene) {
   const sand = makeSand();
   const floorMat = enamel("#8eced1", 0.91);
   floorMat.map = sand;
+  // Блики от волн на дне (каустика): узор считается в шейдере, без текстур
+  const caustic = { uTime: { value: 0 }, uCaustic: { value: 0.24 }, uTint: { value: new T.Color("#e9fff6") } };
+  floorMat.onBeforeCompile = shader => {
+    Object.assign(shader.uniforms, caustic);
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nuniform float uTime;\nuniform float uCaustic;\nuniform vec3 uTint;")
+      .replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
+      {
+        vec2 p = vMapUv * 20.0;
+        float t = uTime * 0.6;
+        vec2 q = p + vec2(sin(p.y * 0.9 + t), cos(p.x * 0.8 - t * 0.8)) * 0.8;
+        float a = sin(q.x * 1.7 + t) + sin(q.y * 1.9 - t * 0.7) + 0.5 * sin((q.x + q.y) * 1.3 + t * 0.4);
+        float c = pow(max(0.0, 1.0 - abs(a) * 0.75), 4.0);
+        totalEmissiveRadiance += uTint * c * uCaustic;
+      }`);
+  };
   const floor = new T.Mesh(new T.PlaneGeometry(140, 140), floorMat);
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -0.37;
@@ -164,11 +194,37 @@ function makeReef(scene) {
     map: light, color: "#d4fbef", size: 0.17, opacity: 0.65, transparent: true, depthWrite: false,
   }));
   scene.add(plankton);
-  return { banks, sand, floorMat, plankton, light };
+  // Лучи света сверху: наклонные полупрозрачные полосы, медленно покачиваются
+  const shaftMap = texture(64, (ctx, n) => {
+    const g = ctx.createLinearGradient(0, 0, n, 0);
+    g.addColorStop(0, "#ffffff00");
+    g.addColorStop(0.5, "#ffffffff");
+    g.addColorStop(1, "#ffffff00");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, n, n);
+    const fade = ctx.createLinearGradient(0, 0, 0, n);
+    fade.addColorStop(0, "#000000ff");
+    fade.addColorStop(0.75, "#00000000");
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.fillStyle = fade;
+    ctx.fillRect(0, 0, n, n);
+  });
+  const shaftMat = new T.MeshBasicMaterial({ map: shaftMap, color: "#fff6dc", transparent: true, opacity: 0.11, blending: T.AdditiveBlending, depthWrite: false, side: T.DoubleSide, toneMapped: false });
+  const shafts = new T.Group();
+  for (let i = 0; i < 6; i++) {
+    const shaft = new T.Mesh(new T.PlaneGeometry(1, 1), shaftMat);
+    shaft.scale.set(1.6 + random() * 2.2, 26, 1);
+    shaft.position.set(-9 + i * 3.6 + random() * 1.5, 7, -6 + random() * 8);
+    shaft.rotation.set(0, 0.6, -0.55);
+    shaft.userData.phase = random() * TAU;
+    shafts.add(shaft);
+  }
+  scene.add(shafts);
+  return { banks, sand, floorMat, plankton, light, caustic, shafts, shaftMat };
 }
 
 // Декорации дна: у каждой глубины свой набор невысоких предметов прямо на арене.
-// Они ниже субмарины и роботов и ничего не заслоняют. Возвращает восемь групп по порядку глубин.
+// Они ниже субмарины и роботов и ничего не заслоняют. Возвращает двенадцать групп по порядку глубин.
 function makeSets(scene) {
   let seed = 4127;
   const random = () => {
@@ -307,7 +363,92 @@ function makeSets(scene) {
     }
   }
 
-  // 8. Логово Кракена: кости, тёмные шипы и светящиеся икринки
+  // 8. Черепаха-крепость: замшелые глыбы, обломки стен и водоросли
+  g = begin();
+  const moss = ["#4f8f6a", "#3f7a5c", "#6aa47a"].map(c => enamel(c, 0.85));
+  const wall = enamel("#a9b9a0", 0.8);
+  const weed = enamel("#7fd08a", 0.6);
+  for (let i = 0; i < 14; i++) {
+    const [x, z] = spot();
+    g.add(lean(mesh(GEO.low, moss[i % 3], x, -0.15, z, 0.6 + random() * 0.6, 0.4 + random() * 0.3, 0.6 + random() * 0.4), 0.15, 0.1));
+  }
+  for (let i = 0; i < 6; i++) {
+    const [x, z] = spot(7, 9);
+    const block = mesh(GEO.box, wall, x, -0.1, z, 1.2, 0.45, 0.5);
+    block.rotation.y = random() * TAU;
+    g.add(block);
+  }
+  for (let i = 0; i < 14; i++) {
+    const [x, z] = spot();
+    for (let j = 0; j < 3; j++) {
+      const blade = mesh(GEO.sphere, weed, x + (j - 1) * 0.15, 0.1, z, 0.07, 0.55 + random() * 0.3, 0.12);
+      blade.rotation.z = (j - 1) * 0.3;
+      g.add(blade);
+    }
+  }
+
+  // 9. Ледяной грот: ледяные кристаллы, льдины и сугробы инея
+  g = begin();
+  const ice = enamel("#e8f8ff", 0.18, 0.1);
+  const iceGlow = glow("#bff0ff");
+  const floe = enamel("#cfe9f7", 0.35);
+  for (let i = 0; i < 16; i++) {
+    const [x, z] = spot();
+    for (let j = 0; j < 3; j++) {
+      const shard = mesh(GEO.cone, j === 1 ? iceGlow : ice, x + (j - 1) * 0.28, 0.1, z + (random() - 0.5) * 0.3, 0.16, 0.6 + random() * 0.6, 0.16);
+      shard.rotation.set((random() - 0.5) * 0.5, 0, (j - 1) * 0.4);
+      g.add(shard);
+    }
+  }
+  for (let i = 0; i < 10; i++) {
+    const [x, z] = spot();
+    g.add(lean(mesh(GEO.low, floe, x, -0.25, z, 0.8 + random() * 0.7, 0.18, 0.6 + random() * 0.5), 0.05, 0.05));
+  }
+
+  // 10. Вулканические трубы: тёмные трубы с огоньками и застывшая лава
+  g = begin();
+  const basalt = enamel("#4a2f2c", 0.9);
+  const ember = glow("#ffad5a");
+  const lava = glow("#ff7a3a");
+  for (let i = 0; i < 9; i++) {
+    const [x, z] = spot(7.5, 10);
+    const h = 0.6 + random() * 0.9;
+    g.add(mesh(GEO.tube, basalt, x, h / 2 - 0.3, z, 0.36, h, 0.36), mesh(GEO.tube, ember, x, h - 0.28, z, 0.24, 0.05, 0.24));
+  }
+  for (let i = 0; i < 10; i++) {
+    const [x, z] = spot();
+    const angle = random() * TAU;
+    for (let j = 0; j < 3; j++) {
+      const piece = mesh(GEO.box, lava, x + Math.cos(angle) * j * 0.5, -0.34, z + Math.sin(angle) * j * 0.5, 0.55, 0.03, 0.08);
+      piece.rotation.y = -angle + (random() - 0.5) * 0.6;
+      g.add(piece);
+    }
+    g.add(lean(mesh(GEO.low, basalt, x + 0.8, -0.18, z, 0.5 + random() * 0.4, 0.35, 0.5), 0.2, 0.1));
+  }
+
+  // 11. Жемчужный город: колонны, обломки арок и золотые купола
+  g = begin();
+  const marble = enamel("#f2e6cf", 0.55);
+  const domeGold = enamel("#eadcbc", 0.45, 0.2);
+  const pearlGlow = glow("#fff6e0");
+  for (let i = 0; i < 10; i++) {
+    const [x, z] = spot(7.5, 10);
+    const h = 0.4 + random() * 0.9;
+    g.add(mesh(GEO.tube, marble, x, h / 2 - 0.3, z, 0.22, h, 0.22), mesh(GEO.box, marble, x, h - 0.27, z, 0.55, 0.1, 0.55));
+    if (i % 3 === 0) g.add(mesh(GEO.sphere, pearlGlow, x, h - 0.12, z, 0.15));
+  }
+  for (let i = 0; i < 5; i++) {
+    const [x, z] = spot(7, 9);
+    g.add(mesh(GEO.sphere, domeGold, x, -0.32, z, 0.75, 0.3, 0.75), mesh(GEO.cone, enamel("#ffd36a", 0.3, 0.5), x, 0.05, z, 0.08, 0.3, 0.08));
+  }
+  for (let i = 0; i < 8; i++) {
+    const [x, z] = spot();
+    const block = mesh(GEO.box, marble, x, -0.25, z, 0.9, 0.2, 0.45);
+    block.rotation.y = random() * TAU;
+    g.add(block);
+  }
+
+  // 12. Логово Кракена: кости, тёмные шипы и светящиеся икринки
   g = begin();
   const bone = enamel("#d9cfee", 0.6);
   const spike = enamel("#3b2a7a", 0.7);
@@ -339,8 +480,19 @@ function makeSets(scene) {
 const enemyColor = {
   crab: "#ffba8a", mine: "#ffa887", jelly: "#dca3ff", boss: "#ffb5ee",
   puffer: "#ffd66b", eel: "#8cf0cf", titan: "#ff8f7a",
+  ray: "#8fb4ff", bubble: "#bff6ff", star: "#ff9fd0", chest: "#ffd35a", turtle: "#7fe0a8",
 };
-const LARGE = { boss: true, titan: true };
+const LARGE = { boss: true, titan: true, turtle: true };
+// Уровни качества: разрешение, свечение (bloom), лучи и каустика, сколько частиц
+export const QUALITY = {
+  high: { ratio: 2, bloom: true, shafts: true, caustic: true, particles: 620 },
+  medium: { ratio: 1.35, bloom: false, shafts: true, caustic: true, particles: 380 },
+  low: { ratio: 1, bloom: false, shafts: false, caustic: false, particles: 200 },
+};
+const GUARD = new T.MeshBasicMaterial({ color: "#9ffcff", transparent: true, opacity: 0.28, blending: T.AdditiveBlending, depthWrite: false, toneMapped: false });
+const SHELL = new T.MeshBasicMaterial({ color: "#ffd38a", transparent: true, opacity: 0.32, blending: T.AdditiveBlending, depthWrite: false, toneMapped: false });
+const LINK = new T.MeshBasicMaterial({ color: "#9ffcff", transparent: true, opacity: 0.55, blending: T.AdditiveBlending, depthWrite: false, toneMapped: false });
+const SHIELD_SKIN = new T.MeshBasicMaterial({ color: "#8ff4ff", transparent: true, opacity: 0.22, blending: T.AdditiveBlending, depthWrite: false, toneMapped: false });
 const FRIENDLY = glow("#d6ffff");
 const HOSTILE = glow("#ffa75e");
 const HEAVY = glow("#ff78b1");
@@ -406,7 +558,7 @@ export class ReefView {
     this.bolts = new Map();
     this.ripples = [];
     this.particles = [];
-    this.particleMesh = new T.InstancedMesh(GEO.spark, new T.MeshBasicMaterial({ toneMapped: false }), 420);
+    this.particleMesh = new T.InstancedMesh(GEO.spark, new T.MeshBasicMaterial({ toneMapped: false }), 620);
     this.particleMesh.count = 0;
     this.particleMesh.frustumCulled = false;
     this.scene.add(this.particleMesh);
@@ -445,6 +597,42 @@ export class ReefView {
       this.fish.push({ x: (i % 4 - 1.5) * 0.7 + Math.sin(i * 7.3) * 0.3, z: (Math.floor(i / 4) - 1.5) * 0.6 + Math.cos(i * 4.1) * 0.3, phase: i * 1.7 });
     }
     this.schoolPath = { from: -1, z: 2, start: -99 };
+    // вспышки взрывов: пул светящихся пятен
+    this.flashes = [];
+    for (let i = 0; i < 18; i++) {
+      const flash = sprite("#ffffff", this.reef.light);
+      flash.visible = false;
+      this.scene.add(flash);
+      this.flashes.push({ sprite: flash, age: 1, ttl: 1, size: 1 });
+    }
+    // обломки роботов: кубики летят, падают на дно и гаснут
+    this.chunks = [];
+    this.chunkMesh = new T.InstancedMesh(GEO.box, new T.MeshStandardMaterial({ roughness: 0.5, metalness: 0.15 }), 160);
+    this.chunkMesh.count = 0;
+    this.chunkMesh.frustumCulled = false;
+    this.scene.add(this.chunkMesh);
+    // лучи щита морской звезды
+    this.linkBeams = [];
+    for (let i = 0; i < 9; i++) {
+      const beam = new T.Mesh(SHADOW_GEO, LINK);
+      beam.rotation.x = -Math.PI / 2;
+      beam.visible = false;
+      this.scene.add(beam);
+      this.linkBeams.push(beam);
+    }
+    // пузырь-щит вокруг лодки и кольцо «тройного залпа»
+    this.playerShield = new T.Mesh(GEO.sphere, SHIELD_SKIN);
+    this.playerShield.visible = false;
+    this.scene.add(this.playerShield);
+    this.spreadRing = new T.Mesh(RING_GEO, new T.MeshBasicMaterial({ color: "#ffe066", transparent: true, opacity: 0.6, blending: T.AdditiveBlending, depthWrite: false, toneMapped: false }));
+    this.spreadRing.rotation.x = -Math.PI / 2;
+    this.spreadRing.visible = false;
+    this.scene.add(this.spreadRing);
+    this.capsules = new Map();
+    this.freezeLook = 0;
+    this.hitStop = 0;
+    this.quality = "high";
+    this.preset = QUALITY.high;
     this.shake = 0;
     this.trail = 0;
     this.cameraBase = this.camera.position.clone();
@@ -465,11 +653,73 @@ export class ReefView {
     this.camera.top = height / 2;
     this.camera.bottom = -height / 2;
     this.camera.updateProjectionMatrix();
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.65));
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, this.preset?.ratio ?? 1.65));
     this.renderer.setSize(w, h, false);
+    if (this.composer) {
+      this.composer.setPixelRatio(this.renderer.getPixelRatio());
+      this.composer.setSize(w, h);
+      this.bloom.resolution.set(w / 2, h / 2);
+    }
     this.bounds.x = Math.max(2.8, Math.min(9.6, width * 0.5 - 1.04));
     this.reef.banks.forEach((bank, i) => { bank.position.x = (i ? 1 : -1) * (this.bounds.x + 0.45); });
     return this.bounds;
+  }
+
+  // Качество картинки: high | medium | low. Свечение (bloom) — только на «Высоком».
+  // Сглаживание MSAA в цели композера не включаем: на «Высоком» края сглаживает двойное разрешение.
+  setQuality(level) {
+    if (!QUALITY[level]) return;
+    this.quality = level;
+    this.preset = QUALITY[level];
+    if (this.preset.bloom && !this.composer) {
+      this.composer = new EffectComposer(this.renderer);
+      this.composer.addPass(new RenderPass(this.scene, this.camera));
+      this.bloom = new UnrealBloomPass(new T.Vector2(256, 256), 0.42, 0.5, 1.0);
+      this.composer.addPass(this.bloom);
+      this.composer.addPass(new OutputPass());
+    }
+    this.reef.shafts.visible = this.preset.shafts;
+    this.reef.caustic.uCaustic.value = this.preset.caustic ? 0.24 : 0;
+    this.resize();
+  }
+
+  // Экранные координаты точки сцены (для всплывающих очков)
+  screen(x, y, z) {
+    const v = this.tmp || (this.tmp = new T.Vector3());
+    v.set(x, y, z).project(this.camera);
+    const r = this.canvas.getBoundingClientRect();
+    return { x: r.left + (v.x + 1) / 2 * r.width, y: r.top + (1 - v.y) / 2 * r.height };
+  }
+
+  flash(x, y, z, color, size, ttl = 0.32) {
+    const slot = this.flashes.find(f => f.age >= f.ttl) || this.flashes[0];
+    slot.age = 0;
+    slot.ttl = ttl;
+    slot.size = size;
+    slot.sprite.material.color.copy(radiance(color));
+    slot.sprite.position.set(x, y, z);
+    slot.sprite.visible = true;
+  }
+
+  debris(x, z, color, count, speed = 4) {
+    const tint = new T.Color(color);
+    const room = (this.preset.particles >> 2) - this.chunks.length;
+    for (let i = 0; i < Math.min(count, room); i++) {
+      const a = Math.random() * TAU;
+      const s = speed * (0.4 + Math.random() * 0.6);
+      this.chunks.push({ x, y: 1.3, z, vx: Math.sin(a) * s, vz: Math.cos(a) * s, vy: 2 + Math.random() * 4, rx: Math.random() * TAU, ry: Math.random() * TAU,
+        spin: (Math.random() - 0.5) * 14, life: 1.2 + Math.random() * 0.6, size: 0.09 + Math.random() * 0.12, tint });
+    }
+  }
+
+  // пузырьки поднимаются к поверхности, покачиваясь
+  bubbles(x, z, count, spread = 0.8) {
+    const room = this.preset.particles - this.particles.length;
+    for (let i = 0; i < Math.min(count, room); i++) {
+      this.particles.push({ x: x + (Math.random() - 0.5) * spread, y: 1 + Math.random() * 0.6, z: z + (Math.random() - 0.5) * spread,
+        vx: (Math.random() - 0.5) * 0.6, vz: (Math.random() - 0.5) * 0.6, vy: 1.6 + Math.random() * 1.8, life: 0.7 + Math.random() * 0.7,
+        size: 0.05 + Math.random() * 0.08, tint: BUBBLE, wobble: Math.random() * TAU });
+    }
   }
 
   pointAt(x, y) {
@@ -501,7 +751,7 @@ export class ReefView {
 
   spray(x, z, color, count, speed) {
     const tint = radiance(color);
-    const remaining = 420 - this.particles.length;
+    const remaining = this.preset.particles - this.particles.length;
     for (let i = 0; i < Math.min(count, remaining); i++) {
       const a = Math.random() * TAU;
       const s = speed * (0.38 + Math.random() * 0.62);
@@ -514,13 +764,65 @@ export class ReefView {
 
   event(e) {
     if (e.type === "shot") this.shotGlow = 1;
-    else if (e.type === "impact") this.spray(e.x, e.z, enemyColor[e.kind], 5, 3.3);
-    else if (e.type === "burst") {
+    else if (e.type === "impact") {
+      this.spray(e.x, e.z, enemyColor[e.kind], 5, 3.3);
+      this.flash(e.x, 1.4, e.z, "#ffffff", 1.1, 0.12);
+    } else if (e.type === "burst") {
       const big = !!LARGE[e.kind];
+      const color = enemyColor[e.kind] || "#ffffff";
       if (big) this.shake = 0.7;
-      this.spray(e.x, e.z, enemyColor[e.kind], big ? 75 : 23, big ? 8 : 5.1);
+      this.spray(e.x, e.z, color, big ? 75 : 23, big ? 8 : 5.1);
       this.spray(e.x, e.z, "#c9fbff", big ? 35 : 8, big ? 7 : 4.4);
-      this.ripple(e.x, e.z, enemyColor[e.kind], big ? 5.1 : 2.5, big ? 0.92 : 0.46);
+      this.ripple(e.x, e.z, color, big ? 5.1 : 2.5, big ? 0.92 : 0.46);
+      this.flash(e.x, 1.5, e.z, "#fff6d8", big ? 7 : 3.2, big ? 0.5 : 0.28);
+      this.flash(e.x, 1.4, e.z, color, big ? 10 : 4.6, big ? 0.7 : 0.4);
+      if (e.kind !== "bubble") this.debris(e.x, e.z, color, big ? 26 : 7, big ? 6 : 4);
+      this.bubbles(e.x, e.z, big ? 26 : 6, big ? 3 : 0.8);
+    } else if (e.type === "boss-down") {
+      // босс повержен: три волны, вспышка во весь экран и град обломков
+      this.shake = 1.3;
+      this.hitStop = 0.9;
+      for (let i = 0; i < 3; i++) this.ripple(e.x, e.z, i ? "#fff6c8" : enemyColor[e.kind], 7 + i * 3, 0.8 + i * 0.35);
+      this.flash(e.x, 2, e.z, "#ffffff", 18, 0.9);
+      this.spray(e.x, e.z, "#fff3a8", 90, 10);
+      this.debris(e.x, e.z, "#ffd38a", 30, 8);
+    } else if (e.type === "deflect") {
+      this.spray(e.x, e.z, e.kind === "turtle" ? "#ffd38a" : "#9ffcff", 4, 2.6);
+    } else if (e.type === "drop") {
+      this.bubbles(e.x, e.z, 3, 0.4);
+    } else if (e.type === "fizz") {
+      this.ripple(e.x, e.z, "#bff6ff", 1.2, 0.3);
+      this.bubbles(e.x, e.z, 6, 0.5);
+    } else if (e.type === "shell-warning") {
+      this.ripple(e.x, e.z, "#ffd38a", 3.6, 0.5);
+    } else if (e.type === "shell" || e.type === "unshell") {
+      this.ripple(e.x, e.z, e.type === "shell" ? "#ffb36b" : "#9df5d7", 4.6, 0.55);
+      this.bubbles(e.x, e.z, 14, 3);
+      if (e.type === "shell") this.shake = Math.max(this.shake, 0.3);
+    } else if (e.type === "capsule-drop") {
+      this.ripple(e.x, e.z, POWER_COLOR[e.kind], 2.2, 0.5);
+      this.flash(e.x, 1.5, e.z, POWER_COLOR[e.kind], 3.5, 0.4);
+    } else if (e.type === "power") {
+      this.ripple(e.x, e.z, POWER_COLOR[e.kind], 3.4, 0.55);
+      this.spray(e.x, e.z, POWER_COLOR[e.kind], 26, 5.5);
+      this.flash(e.x, 1.5, e.z, POWER_COLOR[e.kind], 4.5, 0.45);
+    } else if (e.type === "bubble-pop") {
+      this.shake = Math.max(this.shake, 0.25);
+      this.ripple(e.x, e.z, "#8ff4ff", 3, 0.45);
+      this.spray(e.x, e.z, "#c8faff", 22, 5);
+    } else if (e.type === "bubble-up") {
+      this.ripple(e.x, e.z, "#8ff4ff", 2.2, 0.4);
+    } else if (e.type === "torpedo") {
+      this.bubbles(e.x, e.z, 6, 0.6);
+    } else if (e.type === "blast") {
+      this.ripple(e.x, e.z, "#ffb36b", 2.2, 0.35);
+      this.flash(e.x, 1.4, e.z, "#ffc27a", 3.2, 0.3);
+      this.spray(e.x, e.z, "#ffd3a0", 12, 5);
+    } else if (e.type === "drip") {
+      this.ripple(e.x, e.z, "#fff59a", 1.4, 0.4);
+      this.flash(e.x, 1.6, e.z, "#fff6c8", 2.2, 0.35);
+    } else if (e.type === "clear" && e.clean) {
+      this.ripple(this.player.position.x, this.player.position.z, "#fff59a", 6, 0.8);
     } else if (e.type === "pulse") {
       this.ripple(e.x, e.z, "#71fff0", PULSE_RADIUS, 0.62);
       this.ripple(e.x, e.z, "#eefff6", PULSE_RADIUS * 0.82, 0.45);
@@ -565,7 +867,7 @@ export class ReefView {
       p.life -= dt;
       if (p.life <= 0) this.particles.splice(i, 1);
       else {
-        p.x += p.vx * dt;
+        p.x += p.vx * dt + (p.wobble !== undefined ? Math.sin(p.life * 9 + p.wobble) * 0.6 * dt : 0);
         p.y += p.vy * dt;
         p.z += p.vz * dt;
       }
@@ -581,6 +883,47 @@ export class ReefView {
     });
     this.particleMesh.instanceMatrix.needsUpdate = true;
     if (this.particleMesh.instanceColor) this.particleMesh.instanceColor.needsUpdate = true;
+    for (const f of this.flashes) {
+      if (f.age >= f.ttl) continue;
+      f.age += dt;
+      const k = f.age / f.ttl;
+      f.sprite.visible = k < 1;
+      f.sprite.scale.setScalar(f.size * (0.45 + 0.55 * Math.sqrt(Math.min(1, k * 2.2))));
+      f.sprite.material.opacity = (1 - k) ** 1.5;
+    }
+    for (let i = this.chunks.length - 1; i >= 0; i--) {
+      const c = this.chunks[i];
+      c.life -= dt;
+      if (c.life <= 0) {
+        this.chunks.splice(i, 1);
+        continue;
+      }
+      c.vy -= 9 * dt;
+      c.x += c.vx * dt;
+      c.y += c.vy * dt;
+      c.z += c.vz * dt;
+      if (c.y < -0.2) {
+        // упал на дно: подпрыгнул и затих
+        c.y = -0.2;
+        c.vy = Math.abs(c.vy) * 0.3;
+        c.vx *= 0.5;
+        c.vz *= 0.5;
+        c.spin *= 0.5;
+      }
+      c.rx += c.spin * dt;
+      c.ry += c.spin * 0.7 * dt;
+    }
+    this.chunkMesh.count = this.chunks.length;
+    this.chunks.forEach((c, i) => {
+      this.dummy.position.set(c.x, c.y, c.z);
+      this.dummy.rotation.set(c.rx, c.ry, 0);
+      this.dummy.scale.setScalar(c.size * Math.min(1, c.life * 2.5));
+      this.dummy.updateMatrix();
+      this.chunkMesh.setMatrixAt(i, this.dummy.matrix);
+      this.chunkMesh.setColorAt(i, c.tint);
+    });
+    this.chunkMesh.instanceMatrix.needsUpdate = true;
+    if (this.chunkMesh.instanceColor) this.chunkMesh.instanceColor.needsUpdate = true;
   }
 
   updateActors(game, time) {
@@ -590,8 +933,9 @@ export class ReefView {
       let record = this.actors.get(e.id);
       if (!record) {
         const model = enemyModels[e.kind]();
-        const shadow = this.shadow(e.kind === "boss" ? 6.2 : e.kind === "titan" ? 5.4 : e.kind === "eel" ? 3.3 : 2.65);
-        const warning = sprite(e.kind === "boss" ? "#ff9ad1" : e.kind === "eel" ? "#9dfff0" : "#ffbc81", this.reef.light);
+        if (e.kind === "chest") model.scale.setScalar(1.35);
+        const shadow = this.shadow({ boss: 6.2, titan: 5.4, turtle: 6, eel: 3.3, ray: 3.6, bubble: 1.3 }[e.kind] || 2.65);
+        const warning = sprite(e.kind === "boss" ? "#ff9ad1" : e.kind === "eel" ? "#9dfff0" : e.kind === "chest" ? "#ffe07a" : "#ffbc81", this.reef.light);
         warning.position.set(0, 0.38, -0.54);
         model.add(warning);
         const bar = new T.Group();
@@ -603,16 +947,21 @@ export class ReefView {
         anchor.add(barFill);
         bar.add(barBack, anchor);
         this.scene.add(model, bar);
-        record = { model, shadow, warning, bar, anchor };
+        // щит морской звезды (у черепахи — сияние панциря)
+        const guard = new T.Mesh(GEO.sphere, e.kind === "turtle" ? SHELL : GUARD);
+        guard.visible = false;
+        model.add(guard);
+        guard.scale.setScalar(e.kind === "turtle" ? 2.6 : e.radius * 1.25);
+        record = { model, shadow, warning, bar, anchor, guard };
         this.actors.set(e.id, record);
       }
-      const { model, shadow, warning, bar, anchor } = record;
+      const { model, shadow, warning, bar, anchor, guard } = record;
       const isBoss = !!LARGE[e.kind];
       const bob = Math.sin(time * (isBoss ? 2.2 : 4.3) + e.phase);
-      const y = e.kind === "crab" ? 1.03 + bob * 0.07 : e.kind === "titan" ? 1.2 + bob * 0.05 : 1.55 + bob * 0.15;
+      const y = e.kind === "crab" ? 1.03 + bob * 0.07 : e.kind === "titan" ? 1.2 + bob * 0.05 : e.kind === "turtle" ? 1.0 + bob * 0.05 : e.kind === "chest" ? 1.25 + bob * 0.2 : 1.55 + bob * 0.15;
       model.position.set(e.x, y, e.z);
-      model.rotation.y = e.kind === "mine" ? time * 2.8 : e.yaw;
-      model.scale.setScalar(1 + e.flash * (isBoss ? 0.25 : 0.63));
+      model.rotation.y = e.kind === "mine" ? time * 2.8 : e.kind === "bubble" ? 0 : e.yaw;
+      model.scale.setScalar((e.kind === "chest" ? 1.35 : 1) + e.flash * (isBoss ? 0.25 : 0.63));
       shadow.position.x = e.x;
       shadow.position.z = e.z + 0.23;
       // огонёк-предупреждение: вспышка от попадания либо «сейчас выстрелю / лопну / брошусь»
@@ -621,6 +970,10 @@ export class ReefView {
       else if (e.kind === "titan") alarm = e.state === "stalk" ? (0.4 - e.fire) * 1.5 : e.state === "warn" ? 0.7 : 0;
       else if (e.kind === "puffer") alarm = e.swell > 0 ? 0.35 + 0.45 * Math.abs(Math.sin(e.swell * e.swell * 22)) : 0;
       else if (e.kind === "eel") alarm = e.state === "warn" ? 0.75 : e.state === "dash" ? 0.5 : 0;
+      else if (e.kind === "turtle") alarm = e.state === "warn" ? 0.8 : e.state === "stalk" ? (0.4 - e.fire) * 1.5 : 0;
+      else if (e.kind === "chest") alarm = 0.45 + 0.25 * Math.sin(time * 6); // сундучок мерцает золотом
+      guard.visible = e.shield > 0 || (e.kind === "turtle" && e.hidden);
+      if (guard.visible) guard.material.opacity = 0.22 + 0.1 * Math.sin(time * 9);
       warning.visible = e.flash > 0 || alarm > 0;
       warning.material.opacity = e.flash > 0 ? e.flash * 5.0 : alarm;
       warning.scale.setScalar(isBoss ? 3.7 : e.kind === "puffer" ? 2.3 + e.swell * 1.6 : 2.3);
@@ -637,6 +990,30 @@ export class ReefView {
         if (e.state === "warn") model.position.x += Math.sin(time * 60) * 0.05; // дрожит перед рывком
       } else if (e.kind === "titan" && e.state === "warn") {
         model.position.z -= 0.5 * e.lane?.heat || 0; // приседает перед броском
+      } else if (e.kind === "ray") {
+        model.userData.wings.forEach((wing, i) => { wing.rotation.z = (i ? -1 : 1) * Math.sin(time * 5 + e.phase) * 0.45; });
+        model.position.y = 1.7 + bob * 0.2;
+      } else if (e.kind === "bubble") {
+        model.scale.setScalar(1 + Math.sin(time * 6 + e.phase) * 0.08 + e.flash * 0.6);
+        model.position.y = 1.35 + bob * 0.25;
+      } else if (e.kind === "star") {
+        model.userData.halo.rotation.z = time * 2;
+        model.userData.halo.scale.setScalar(1.25 + Math.sin(time * 4) * 0.08);
+      } else if (e.kind === "chest") {
+        model.userData.float.position.y = 1.15 + Math.sin(time * 3 + e.phase) * 0.06;
+        model.rotation.z = Math.sin(time * 2 + e.phase) * 0.15;
+      } else if (e.kind === "turtle") {
+        // прячет голову и ласты в панцирь
+        const tuck = e.hidden ? 1 : e.state === "warn" ? 0.5 : 0;
+        const ud = model.userData;
+        ud.tuck = (ud.tuck || 0) + (tuck - (ud.tuck || 0)) * 0.2;
+        ud.head.scale.setScalar(1 - ud.tuck * 0.8);
+        ud.head.position.z = -2.0 + ud.tuck * 1.3;
+        ud.flippers.forEach((f, i) => {
+          f.scale.setScalar(1 - ud.tuck * 0.85);
+          f.rotation.y = Math.sin(time * 3 + i) * 0.3 * (1 - ud.tuck);
+        });
+        ud.turrets.forEach(t => (t.visible = ud.tuck < 0.6));
       }
       model.userData.limbs?.forEach((limb, i) => {
         if (e.kind === "titan") {
@@ -650,11 +1027,22 @@ export class ReefView {
           segment.position.y = Math.sin(time * 5 + i * 0.4 + j * 0.7) * (j * 0.12);
         });
       });
-      bar.visible = e.health < e.maxHealth && !isBoss;
+      bar.visible = e.health < e.maxHealth && !isBoss && e.kind !== "bubble";
       bar.position.set(model.position.x, y + 0.55, e.z - 1.15);
       bar.quaternion.copy(this.camera.quaternion);
       anchor.scale.x = Math.max(0, e.health / e.maxHealth);
     }
+    // лучи щита от морских звёзд к соседям
+    const links = game.links || [];
+    this.linkBeams.forEach((beam, i) => {
+      const link = links[i];
+      beam.visible = !!link;
+      if (!link) return;
+      const dx = link.x2 - link.x1, dz = link.z2 - link.z1;
+      beam.position.set((link.x1 + link.x2) / 2, 1.45, (link.z1 + link.z2) / 2);
+      beam.rotation.set(-Math.PI / 2, 0, Math.atan2(dx, dz));
+      beam.scale.set(0.16 + 0.05 * Math.sin(time * 14 + i), Math.hypot(dx, dz), 1);
+    });
     for (const [id, record] of this.actors) {
       if (active.has(id)) continue;
       record.warning.material.dispose();
@@ -670,6 +1058,12 @@ export class ReefView {
       let gem = this.drops.get(data.id);
       if (!gem) {
         gem = pearl(data.rare);
+        // жемчуг «течения» и дождя крупнее и светится, чтобы его было видно на бликах дна
+        const halo = sprite(data.rare ? "#ffd77f" : "#e8fbff", this.reef.light);
+        halo.scale.setScalar(data.rare ? 2.2 : 1.5);
+        halo.material.opacity = 0.75;
+        gem.add(halo);
+        if (data.flow) gem.scale.setScalar(1.35);
         this.drops.set(data.id, gem);
         this.scene.add(gem);
       }
@@ -678,8 +1072,31 @@ export class ReefView {
     }
     for (const [id, gem] of this.drops) {
       if (!pearlIds.has(id)) {
+        gem.children[2]?.material.dispose();
         this.scene.remove(gem);
         this.drops.delete(id);
+      }
+    }
+
+    const capsuleIds = new Set();
+    for (const data of game.capsules || []) {
+      capsuleIds.add(data.id);
+      let model = this.capsules.get(data.id);
+      if (!model) {
+        model = capsule(data.kind);
+        this.capsules.set(data.id, model);
+        this.scene.add(model);
+      }
+      model.position.set(data.x, 1.5 + Math.sin(time * 5 + data.id) * 0.15, data.z);
+      model.userData.inner.rotation.set(time * 2, time * 3, 0);
+      model.children[2].rotation.set(Math.PI / 2, 0, time * 2);
+      // перед тем как исчезнуть, капсула мигает
+      model.visible = data.life > 2.5 || Math.sin(time * 20) > 0;
+    }
+    for (const [id, model] of this.capsules) {
+      if (!capsuleIds.has(id)) {
+        this.scene.remove(model);
+        this.capsules.delete(id);
       }
     }
 
@@ -687,6 +1104,11 @@ export class ReefView {
     for (const b of game.shots) {
       shotIds.add(b.id);
       let bolt = this.bolts.get(b.id);
+      if (!bolt && b.torpedo) {
+        bolt = torpedo();
+        this.scene.add(bolt);
+        this.bolts.set(b.id, bolt);
+      }
       if (!bolt) {
         const material = b.friendly ? FRIENDLY : b.heavy ? HEAVY : HOSTILE;
         bolt = mesh(GEO.sphere, material, 0, 0, 0, b.friendly ? 0.113 : b.heavy ? 0.24 : 0.18, 0.13, b.friendly ? 0.84 : 0.51);
@@ -701,11 +1123,12 @@ export class ReefView {
         this.bolts.set(b.id, bolt);
       }
       bolt.position.set(b.x, b.friendly ? 1.42 : 1.22, b.z);
-      bolt.rotation.y = Math.atan2(b.vx, b.vz);
+      bolt.rotation.y = Math.atan2(b.vx, b.vz) + (b.torpedo ? Math.PI : 0);
+      if (b.torpedo && Math.random() < 0.35) this.bubbles(b.x - b.vx * 0.03, b.z - b.vz * 0.03, 1, 0.1);
     }
     for (const [id, bolt] of this.bolts) {
       if (!shotIds.has(id)) {
-        bolt.children[1].material.dispose();
+        if (bolt.children[1].isSprite) bolt.children[1].material.dispose();
         this.scene.remove(bolt);
         this.bolts.delete(id);
       }
@@ -718,8 +1141,8 @@ export class ReefView {
       fx.ring.material.dispose();
       this.scene.remove(fx.ring);
     }
-    this.ripples.length = this.particles.length = 0;
-    this.updateActors({ enemies: [], shots: [], pearls: [] }, this.visualTime);
+    this.ripples.length = this.particles.length = this.chunks.length = 0;
+    this.updateActors({ enemies: [], shots: [], pearls: [], capsules: [] }, this.visualTime);
   }
 
   draw(game, dt) {
@@ -787,6 +1210,20 @@ export class ReefView {
       this.beamCore.scale.set(0.76, length, 1);
       this.beamCore.material.opacity = beam.flash * 2.15;
     }
+    // пузырь-щит и кольцо «тройного залпа»
+    const shielded = !idle && p.bubble > 0 && p.health > 0;
+    this.playerShield.visible = shielded;
+    if (shielded) {
+      this.playerShield.position.copy(this.player.position);
+      this.playerShield.scale.setScalar(1.55 + Math.sin(t * 5) * 0.05 + (p.bubble > 1 ? 0.15 : 0));
+      SHIELD_SKIN.opacity = 0.18 + 0.06 * Math.sin(t * 7);
+    }
+    this.spreadRing.visible = !idle && p.spread > 0;
+    if (this.spreadRing.visible) {
+      this.spreadRing.position.set(this.player.position.x, 0.4, this.player.position.z);
+      this.spreadRing.scale.setScalar(1.6 + Math.sin(t * 10) * 0.1);
+      this.spreadRing.material.opacity = Math.min(0.7, p.spread / 2);
+    }
     this.playerShadow.position.x = this.player.position.x;
     this.playerShadow.position.z = this.player.position.z;
     this.playerShadow.scale.set(heroScale * 3.35, heroScale * 2.82, 1);
@@ -797,15 +1234,22 @@ export class ReefView {
     if (!this.reduced) {
       this.reef.sand.offset.set(t * 0.012, Math.sin(t * 0.24) * 0.08);
       this.reef.plankton.position.set(Math.sin(t * 0.33) * 1.5, Math.sin(t * 0.18) * 0.7, Math.cos(t * 0.26) * 0.5);
+      this.reef.caustic.uTime.value = t;
+      this.reef.shafts.children.forEach(shaft => {
+        shaft.rotation.z = -0.55 + Math.sin(t * 0.3 + shaft.userData.phase) * 0.06;
+        shaft.material.opacity = 0.11;
+      });
     }
-    this.paintDepth(Math.max(0, game.wave - 1), dt);
+    this.freezeLook += ((game.freeze > 0 ? 1 : 0) - this.freezeLook) * Math.min(1, dt * 4);
+    this.paintDepth(idle ? 0 : game.theme ?? Math.max(0, game.wave - 1), dt);
     this.swim(t, dt);
     this.updateActors(game, t);
     this.effects(dt);
     this.shake = Math.max(0, this.shake - dt * 1.6);
     const jolt = this.reduced ? 0 : this.shake * this.shake;
     this.camera.position.set(this.cameraBase.x + Math.sin(t * 71) * jolt * 0.5, this.cameraBase.y, this.cameraBase.z + Math.cos(t * 57) * jolt * 0.5);
-    this.renderer.render(this.scene, this.camera);
+    if (this.composer && this.preset.bloom) this.composer.render();
+    else this.renderer.render(this.scene, this.camera);
   }
 
   // вода, свет и дно плавно перетекают в оформление текущей глубины
@@ -813,8 +1257,12 @@ export class ReefView {
     const theme = THEMES[Math.min(index, THEMES.length - 1)];
     const k = Math.min(1, dt * 1.6);
     const { key, rim, hemi } = this.lights;
-    this.scene.background.lerp(theme.bg, k);
-    this.scene.fog.color.lerp(theme.fog, k);
+    // бонус «заморозка»: вода светлеет и голубеет
+    const ice = this.freezeLook;
+    this.scene.background.lerp(ice > 0.01 ? this.mix(theme.bg, ice) : theme.bg, k);
+    this.scene.fog.color.lerp(ice > 0.01 ? this.mix(theme.fog, ice) : theme.fog, k);
+    this.reef.shaftMat.color.lerp(theme.key, k);
+    this.reef.caustic.uTint.value.lerp(theme.sky, k);
     this.reef.floorMat.color.lerp(theme.floor, k);
     hemi.color.lerp(theme.sky, k);
     hemi.groundColor.lerp(theme.ground, k);
@@ -833,6 +1281,10 @@ export class ReefView {
       set.visible = set.userData.show > 0.01;
       set.scale.y = Math.max(0.01, set.userData.show);
     });
+  }
+
+  mix(color, amount) {
+    return (this.mixed || (this.mixed = new T.Color())).copy(color).lerp(ICE, amount * 0.45);
   }
 
   // стайка проплывает арену наискосок у самого дна и появляется снова с другой стороны

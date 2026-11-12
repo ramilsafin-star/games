@@ -3,16 +3,19 @@
 // Лазеры греются, ракеты наводятся сами. Дроны идут волнами: разведчики, осы звеном, тараны,
 // канонерки, копья с заряжаемым лучом; на каждой пятой волне — флагман с узлами щита.
 // Щит восстанавливается, корпус — нет. Между волнами — выбор улучшения.
-import { T, TAU, rand, pick, clamp, V, hot, metal, lit, GEO, part, at, flare, removeModel, readStorage, writeStorage } from "./kit.js?v=98456336";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=98456336";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=98456336";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=98456336";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=98456336";
-import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=98456336";
-import { buildSpace, SUN_DIR } from "./space.js?v=98456336";
-import { createFx, tone, GLOW, SMOKE, RING, STAR } from "./fx.js?v=98456336";
-import { MODEL, buildGuns } from "./models.js?v=98456336";
-import { Sound } from "./sound.js?v=98456336";
+// На 3-й, 8-й, 13-й… волне — бонусный «Метеорный поток»; на каждой десятой вместо флагмана — Улей.
+// Позже приходят минёры (сбрасывают мины) и щитоносцы (закрывают соседей щитом).
+// Между боями: ангар (постоянные улучшения за кристаллы), задания, «Бой дня» с серией дней.
+import { T, TAU, rand, pick, clamp, V, hot, metal, lit, GEO, part, at, flare, removeModel, readStorage, writeStorage } from "./kit.js?v=c710c864";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=c710c864";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=c710c864";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=c710c864";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=c710c864";
+import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=c710c864";
+import { buildSpace, SUN_DIR } from "./space.js?v=c710c864";
+import { createFx, tone, GLOW, SMOKE, RING, STAR } from "./fx.js?v=c710c864";
+import { MODEL, buildGuns, buildDrone } from "./models.js?v=c710c864";
+import { Sound } from "./sound.js?v=c710c864";
 
 const el = (id) => document.getElementById(id);
 const SAVE = "strazh_save";
@@ -22,7 +25,7 @@ const LASER_SPEED = 360;
 // ---------- Сцена ----------
 const canvas = el("stage");
 const renderer = new T.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.6));
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.6)); // уточняется в applyQuality
 renderer.toneMapping = T.NeutralToneMapping;
 const scene = new T.Scene();
 scene.background = new T.Color("#03040b");
@@ -70,7 +73,14 @@ const bloom = new UnrealBloomPass(new T.Vector2(256, 256), 0.72, 0.5, 1.0);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 composer.addPass(grade);
-const perf = { glow: true, low: false, slow: 0, seen: 0 };
+// Качество графики: «Высокое» — двойное разрешение и свечение (bloom), «Среднее» — меньше разрешение,
+// «Низкое» — без свечения. «Авто»: на слабом устройстве сразу среднее; если в бою меньше ~45 кадров
+// в секунду, качество само снижается на ступень. MSAA в цели композера не включаем (правило репозитория).
+const QUALITY = { high: { ratio: 2, glow: true }, medium: { ratio: 1.35, glow: true }, low: { ratio: 1, glow: false } };
+const QUALITY_NAME = { auto: "авто", high: "высокое", medium: "среднее", low: "низкое" };
+const weak = (navigator.deviceMemory && navigator.deviceMemory < 4) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
+const perf = { glow: true, set: QUALITY_NAME[readStorage("strazh_quality")] ? readStorage("strazh_quality") : "auto", auto: weak ? "medium" : "high", time: 0, frames: 0 };
+perf.level = () => (perf.set === "auto" ? perf.auto : perf.set);
 
 const space = buildSpace(renderer, scene);
 const fx = createFx(scene, camera);
@@ -105,10 +115,10 @@ const laserGlow = pool(
   LASERS,
 );
 const boltMesh = pool(GEO.ball, new T.MeshBasicMaterial({ color: hot("#ff3f5f", 4), toneMapped: false }), BOLTS);
-const lasers = Array.from({ length: LASERS }, () => ({ p: V(), from: V(), d: V(), life: 0 }));
+const lasers = Array.from({ length: LASERS }, () => ({ p: V(), from: V(), d: V(), life: 0, dmg: 0, w: 1 }));
 const bolts = Array.from({ length: BOLTS }, () => ({ p: V(), v: V(), live: false, dmg: 0, size: 1, trail: 0 }));
 let laserNext = 0;
-const LASER_COLOR = { cool: [tone("#bcf7ff", 2.6), tone("#27a8ff", 2)], over: [tone("#fff0b0", 3), tone("#ff9a2a", 2.4)] };
+const LASER_COLOR = { cool: [tone("#bcf7ff", 2.6), tone("#27a8ff", 2)], over: [tone("#fff0b0", 3), tone("#ff9a2a", 2.4)], drone: [tone("#d8ffe0", 2.6), tone("#3fdc7a", 2)] };
 
 // ---------- Враги ----------
 // r — радиус попадания: он заметно шире корпуса, чтобы в цель было легко попасть с телефона.
@@ -119,8 +129,16 @@ const KINDS = {
   gunship: { hp: 120, r: 12, speed: 15, score: 40, color: "#bc94ff", size: 2.5 },
   lancer: { hp: 85, r: 10.5, speed: 13, score: 50, color: "#5ff2e0", size: 2.6 },
   node: { hp: 64, r: 7.5, speed: 0, score: 30, color: "#ff9ad8", size: 1 },
-  boss: { hp: 900, r: 16, speed: 8, score: 500, color: "#ff75cb", size: 2.4 },
+  boss: { hp: 900, r: 16, speed: 8, score: 500, color: "#ff75cb", size: 2.4, boss: true },
   pod: { hp: 26, r: 7.5, speed: 9, score: 0, color: "#6dffb0", size: 1.7 },
+  // минёр подходит и сбрасывает мины; мина медленно плывёт к станции и взрывается об неё
+  miner: { hp: 70, r: 10, speed: 16, score: 35, color: "#ffb347", size: 2.2 },
+  mine: { hp: 14, r: 6, speed: 9, score: 5, color: "#ff6a3a", size: 1.8 },
+  // щитоносец держится позади и накрывает щитом двоих соседей: пока он цел, урон по ним вдвое меньше
+  warden: { hp: 90, r: 11, speed: 12, score: 60, color: "#7fe0ff", size: 2.3 },
+  // метеор бонусного «Метеорного потока»: не стреляет, пролетает мимо
+  meteor: { hp: 8, r: 7, speed: 0, score: 25, color: "#7ff6ff", size: 2.2 },
+  hive: { hp: 650, r: 17, speed: 7, score: 600, color: "#ffc94a", size: 2.4, boss: true },
 };
 const hostile = (e) => e.kind !== "pod";
 // С каждой волной враги бьют больнее и стреляют чаще.
@@ -159,7 +177,7 @@ function make(kind, pos) {
   halo.material.opacity = 0.2;
   g.add(halo);
   scene.add(g);
-  const hp = K.hp * (kind === "pod" ? 1 : 1 + 0.1 * (wave - 1)) * (kind === "boss" ? 1 + (wave / 5 - 1) * 0.5 : 1);
+  const hp = K.hp * (kind === "pod" || kind === "meteor" ? 1 : 1 + 0.1 * (wave - 1)) * (K.boss ? 1 + (wave / 5 - 1) * 0.5 : 1) * (rule === "swarm" && !K.boss ? 0.7 : 1);
   const e = { id: ++uid, kind, K, g, pos: pos.clone(), vel: V(), hp, max: hp, goal: null, fireIn: rand(1.5, 3.5), burst: 0, t: 0, flashT: 0, lit: false, mats: glowing(g), trail: 0, smoke: 0, sx: 0, sy: 0, ss: 30, on: false };
   enemies.push(e);
   return e;
@@ -188,7 +206,8 @@ function aimBeam(beam, from, width, opacity) {
 function spawn(kind) {
   if (kind === "squad") return spawnSquad();
   if (kind === "pod") return spawnPod();
-  const boss = kind === "boss";
+  if (kind === "meteor" || kind === "gold") return spawnMeteor(kind === "gold");
+  const boss = !!KINDS[kind].boss;
   const first = wave === 1 && waveT < 2;
   const spread = wave === 1 ? 0.24 : wave < 4 ? 0.73 : 1.25;
   const yaw = boss ? 0 : first ? rand(-0.075, 0.075) : rand(-spread, spread);
@@ -196,11 +215,28 @@ function spawn(kind) {
   const distance = boss ? 228 : wave < 4 ? rand(137, 162) : rand(162, 209);
   const e = make(kind, place(yaw, pitch).multiplyScalar(distance));
   if (kind === "lancer") (e.phase = "move"), (e.beam = makeBeam());
-  if (boss) armBoss(e);
+  if (kind === "miner") (e.drops = 0), (e.dropIn = 0);
+  if (kind === "boss") armBoss(e);
+  if (kind === "hive") armHive(e);
   return e;
 }
-function spawnSquad() {
-  const squad = { pos: place(rand(-1.1, 1.1), rand(0.2, 0.55)).multiplyScalar(rand(170, 200)), vel: V(), goal: null, alive: 5 };
+// Метеоры летят ручьями поперёк неба: сторона и высота ручья — у каждой четвёрки своя
+function spawnMeteor(gold) {
+  const n = meteors.total++;
+  const side = Math.floor(n / 4) % 2 ? 1 : -1;
+  const pitch = 0.18 + ((Math.floor(n / 4) * 0.37) % 0.4);
+  const from = place(side * 1.25, pitch + rand(-0.04, 0.04)).multiplyScalar(rand(110, 130));
+  const to = place(-side * 1.25, pitch + rand(0.02, 0.12)).multiplyScalar(rand(110, 130));
+  const e = make("meteor", from);
+  e.vel.copy(to).sub(from).divideScalar(rand(7.5, 9));
+  e.spin = V(rand(-2, 2), rand(-2, 2), rand(-2, 2));
+  if (gold) {
+    e.gold = true;
+    e.g.userData.vein.color.copy(tone("#ffd25f", 2.6));
+  }
+}
+function spawnSquad(from = null) {
+  const squad = { pos: from ? from.clone() : place(rand(-1.1, 1.1), rand(0.2, 0.55)).multiplyScalar(rand(170, 200)), vel: V(), goal: null, alive: 5 };
   squads.push(squad);
   for (let i = 0; i < 5; i++) {
     const row = Math.ceil(i / 2),
@@ -219,6 +255,19 @@ function spawnPod() {
   e.vel.copy(place(-side * 1.2, pitch).multiplyScalar(92)).sub(e.pos).normalize().multiplyScalar(KINDS.pod.speed);
   floater("КОНТЕЙНЕР СНАБЖЕНИЯ", null, "#6dffb0", 2.2);
 }
+// Улей: четыре люка — отдельные цели. Открытый люк уязвим, закрытый почти нет; пока цел хоть один люк,
+// сам улей под щитом. Люки открываются парами и выпускают ос.
+function armHive(e) {
+  Object.assign(e, { nodes: [], shielded: true, hatchT: 2.5, open: false, fanIn: 3, spawnIn: 7, beam: makeBeam() });
+  const K = KINDS.node;
+  for (const anchor of e.g.userData.anchors) {
+    const hp = K.hp * 1.4 * (1 + 0.1 * (wave - 1));
+    const node = { id: ++uid, kind: "node", hatch: true, open: false, K, g: anchor, pos: V(), vel: V(), hp, max: hp, parent: e, t: 0, flashT: 0, lit: false, mats: glowing(anchor), sx: 0, sy: 0, ss: 20, on: false };
+    anchor.getWorldPosition(node.pos);
+    enemies.push(node);
+    e.nodes.push(node);
+  }
+}
 function armBoss(e) {
   Object.assign(e, { nodes: [], shielded: true, nodeFire: 2.5, fanIn: 3, megaIn: 7, spawnIn: 6, beam: makeBeam() });
   const K = KINDS.node;
@@ -235,7 +284,9 @@ function newGoal(e) {
     const spread = wave === 1 ? 0.34 : wave < 4 ? 0.78 : 1.25;
     e.goal = place(rand(-spread, spread), rand(0.08, wave < 4 ? 0.44 : 0.65)).multiplyScalar(rand(56, 96));
   } else if (e.kind === "gunship") e.goal = place(rand(-1.2, 1.2), rand(0.1, 0.5)).multiplyScalar(rand(70, 95));
-  else if (e.kind === "boss") e.goal = place(rand(-0.7, 0.7), rand(0.2, 0.45)).multiplyScalar(112);
+  else if (e.kind === "boss" || e.kind === "hive") e.goal = place(rand(-0.7, 0.7), rand(0.2, 0.45)).multiplyScalar(e.kind === "hive" ? 120 : 112);
+  else if (e.kind === "miner") e.goal = place(rand(-1, 1), rand(0.15, 0.5)).multiplyScalar(rand(95, 120));
+  else if (e.kind === "warden") e.goal = place(rand(-0.8, 0.8), rand(0.25, 0.55)).multiplyScalar(rand(95, 118));
 }
 function shootBolt(from, dmg, spread) {
   const b = bolts.find((x) => !x.live);
@@ -256,7 +307,7 @@ function kill(e, quiet) {
   if (track === e) track = null;
   if (e.beam) removeModel(e.beam);
   if (e.squad) e.squad.alive--;
-  const level = e.kind === "boss" ? 3 : e.kind === "gunship" || e.kind === "lancer" ? 2 : e.kind === "wasp" ? 0 : 1;
+  const level = e.K.boss ? 3 : e.kind === "gunship" || e.kind === "lancer" || e.kind === "warden" ? 2 : e.kind === "wasp" || e.kind === "mine" ? 0 : 1;
   fx.explode(e.pos, e.K.r * (level === 3 ? 1.5 : level === 0 ? 0.7 : 0.82), e.K.color, level);
   removeModel(e.g);
   Sound.boom(level >= 2 ? 2 : level);
@@ -266,7 +317,7 @@ function kill(e, quiet) {
     boss.nodes.splice(boss.nodes.indexOf(e), 1);
     if (!boss.nodes.length && !boss.gone && boss.dying === undefined) dropBossShield(boss);
   }
-  if (e.kind === "boss") {
+  if (e.K.boss) {
     for (const node of e.nodes) {
       node.gone = true;
       enemies.splice(enemies.indexOf(node), 1);
@@ -276,13 +327,28 @@ function kill(e, quiet) {
     whiteout = 1;
   }
   if (quiet) return;
-  if (e.kind === "pod") return grantBonus(e.pos);
+  marks.push({ pos: e.pos.clone(), t: 0 });
+  if (e.kind === "pod") {
+    bump("pod");
+    return grantBonus(e.pos);
+  }
   combo = Math.min(8, combo + 1);
   comboT = 3;
-  const gain = Math.round(e.K.score * (1 + (combo - 1) * 0.25));
+  comboPop = 1;
+  const gain = Math.round((e.gold ? 100 : e.K.score) * (1 + (combo - 1) * 0.25) * (rule === "glass" ? 1.5 : 1));
   score += gain;
   kills++;
+  if (e.kind === "meteor") meteors.got++;
   floater("+" + gain, e.pos, combo > 2 ? "#ffd25f" : "#dff6ff", 0.9);
+  // задания
+  bump("kill");
+  if (e.kind === "wasp") bump("wasp");
+  else if (e.kind === "mine") bump("mine");
+  else if (e.kind === "warden") bump("warden");
+  else if (e.kind === "meteor") bump("meteor");
+  else if (e.K.boss) bump("boss");
+  if (e.byRocket) bump("rocket");
+  bump("combo", combo);
 }
 function dropBossShield(boss) {
   boss.shielded = false;
@@ -290,7 +356,7 @@ function dropBossShield(boss) {
   fx.puff(RING, boss.pos, null, 10, 70, 0.7, tone("#ff75cb", 3), 1);
   fx.burst(boss.pos, ["#ff75cb", "#ffffff"], 60, 60, 0.8);
   Sound.shieldDown();
-  banner("ЩИТ ФЛАГМАНА СНЯТ");
+  banner(boss.kind === "hive" ? "ЯДРО УЛЬЯ ОТКРЫТО" : "ЩИТ ФЛАГМАНА СНЯТ");
 }
 function startBossDeath(e) {
   e.dying = 1.9;
@@ -304,9 +370,14 @@ function startBossDeath(e) {
 function damage(e, amount, at2) {
   if (S.state !== "play" || e.gone || e.dying !== undefined) return;
   let dealt = amount;
-  if (e.kind === "boss" && e.shielded) {
-    dealt *= 0.25;
+  if (e.K.boss && e.shielded) {
+    dealt *= e.kind === "hive" ? 0.1 : 0.25;
     e.g.userData.bubble.material.uniforms.power.value = 1;
+  }
+  // закрытый люк улья и корабль под щитом щитоносца держат удар
+  if ((e.hatch && !e.open) || e.guard > 0) {
+    dealt *= e.hatch ? 0.1 : 0.5;
+    if (Math.random() < 0.3) fx.burst(at2 || e.pos, ["#bff4ff", "#ffffff"], 3, 14, 0.25);
   }
   e.hp -= dealt;
   if (e.charge) e.charge.taken += dealt;
@@ -317,7 +388,7 @@ function damage(e, amount, at2) {
   fx.burst(where, [e.K.color, "#72dcff", "#ffffff"], 6, 22, 0.32);
   fx.puff(GLOW, where, null, 2.4, 6, 0.14, tone("#dff8ff", 3));
   if (e.hp > 0) return;
-  if (e.kind === "boss") startBossDeath(e);
+  if (e.K.boss) startBossDeath(e);
   else kill(e);
 }
 
@@ -338,6 +409,7 @@ function updateCharge(e, dt, from) {
     fx.puff(STAR, from, null, 6, 18, 0.35, tone("#ffffff", 4));
     Sound.stagger();
     score += 15;
+    bump("stagger");
     floater("ЗАЛП СОРВАН", e.pos, "#aaffcb", 1.3);
     return false;
   }
@@ -379,7 +451,13 @@ const S = {
   rocketDmg: 70,
   overdrive: 0,
   boost: false,
+  drones: 0, // особые улучшения: дроны-напарники, цепная молния, кассетные ракеты
+  chain: 0,
+  cluster: 0,
+  heatK: 1,
 };
+// Начальные числа турели: новый бой (из меню или «Бой дня») начинается с них
+const START = { ...S };
 let wave = 1,
   score = 0,
   kills = 0,
@@ -399,7 +477,16 @@ let wave = 1,
   waveT = 0,
   alarmIn = 0,
   track = null, // враг, за которым турель ведёт прицел сама
-  lockPulse = 0;
+  lockPulse = 0,
+  comboPop = 0,
+  mode = "battle", // battle — обычный бой без конца, daily — «Бой дня»
+  rule = null, // правило «Боя дня»
+  meteorStage = false,
+  meteors = { total: 0, got: 0 },
+  paid = 0; // сколько кристаллов за этот бой уже начислено
+const marks = []; // крестики над сбитыми врагами
+const arcs = []; // разряды цепной молнии
+const blasts = []; // осколки кассетных ракет
 const rocketsLive = [];
 const floaters = [];
 
@@ -448,6 +535,103 @@ function grantBonus(pos) {
   floater(text, null, "#6dffb0", 1.8);
 }
 
+// ---------- Сохранение, кристаллы, ангар, задания, «Бой дня» ----------
+// strazh_save — тот же ключ: старое {best} читается, остальное получает значения по умолчанию.
+// cr — кристаллы, hg — уровни ангара, ms — задания {n, a}, dl — «Бой дня» {d, s, b, bd}
+const whole = (v, max = 1e9) => (Number.isSafeInteger(v) && v > 0 ? Math.min(v, max) : 0);
+let save = {};
+try {
+  save = JSON.parse(readStorage(SAVE)) || {};
+} catch {}
+let credits = whole(save.cr);
+const HANGAR = ["armor", "shield", "caliber", "rockets", "repair"];
+const hangar = Object.fromEntries(HANGAR.map((k, i) => [k, Math.min(5, whole(Array.isArray(save.hg) ? save.hg[i] : 0))]));
+const daily = { d: whole(save.dl?.d), s: whole(save.dl?.s, 999), b: whole(save.dl?.b), bd: whole(save.dl?.bd) };
+const HANGAR_INFO = {
+  armor: ["🛡️", "Броня", "+10 к корпусу"],
+  shield: ["🔷", "Щит", "+10 к щиту"],
+  caliber: ["💥", "Калибр", "+6% к урону лазеров"],
+  rockets: ["🚀", "Ракеты", "Быстрее перезарядка, на 2-м и 4-м уровне +1 ракета"],
+  repair: ["🔧", "Ремонт", "+4 к ремонту между волнами"],
+};
+const PRICE = [50, 100, 170, 260, 380];
+const MISSIONS = [
+  { key: "kill", text: (n) => `Сбей ${n} врагов`, goal: 60, reward: 30 },
+  { key: "wave", text: (n) => `Дойди до волны ${n}`, goal: 6, reward: 40, max: true },
+  { key: "pod", text: (n) => `Сбей ${n} контейнера снабжения`, goal: 3, reward: 30 },
+  { key: "wasp", text: (n) => `Сбей ${n} ос`, goal: 30, reward: 30 },
+  { key: "meteor", text: (n) => `Разбей ${n} метеоров`, goal: 25, reward: 35 },
+  { key: "stagger", text: (n) => `Сорви ${n} залпа копий`, goal: 3, reward: 40 },
+  { key: "combo", text: (n) => `Набери комбо ×${n}`, goal: 6, reward: 35, max: true },
+  { key: "rocket", text: (n) => `Сбей ракетами ${n} врагов`, goal: 15, reward: 30 },
+  { key: "boss", text: (n) => `Уничтожь ${n} босса`, goal: 1, reward: 60 },
+  { key: "mine", text: (n) => `Сбей ${n} мин`, goal: 12, reward: 35 },
+  { key: "perfect", text: (n) => `Разбей все метеоры потока ${n} раз`, goal: 1, reward: 50 },
+  { key: "warden", text: (n) => `Сбей ${n} щитоносца`, goal: 3, reward: 45 },
+  { key: "daily", text: (n) => `Пройди «Бой дня» ${n} раз`, goal: 1, reward: 50 },
+];
+function freshTask(n) {
+  const round = Math.floor(n / MISSIONS.length);
+  const m = MISSIONS[n % MISSIONS.length];
+  return { k: n % MISSIONS.length, g: Math.round(m.goal * (1 + round)), r: Math.round(m.reward * (1 + round * 0.5)), p: 0 };
+}
+const tasks = { n: whole(save.ms?.n, 1e6), a: [] };
+for (const t of Array.isArray(save.ms?.a) ? save.ms.a.slice(0, 3) : []) {
+  if (MISSIONS[t?.k] && whole(t.g)) tasks.a.push({ k: t.k, g: t.g, r: whole(t.r) || MISSIONS[t.k].reward, p: Math.min(whole(t.p), t.g) });
+}
+while (tasks.a.length < 3) {
+  let t = freshTask(tasks.n++);
+  while (tasks.a.some((o) => o.k === t.k)) t = freshTask(tasks.n++);
+  tasks.a.push(t);
+}
+function store() {
+  writeStorage(SAVE, JSON.stringify({ best, cr: credits, hg: HANGAR.map((k) => hangar[k]), ms: tasks, dl: daily }));
+}
+function bump(key, amount = 1) {
+  if (!amount) return;
+  tasks.a.forEach((t, i) => {
+    const m = MISSIONS[t.k];
+    if (m.key !== key || t.p >= t.g) return;
+    t.p = m.max ? Math.max(t.p, amount) : t.p + amount;
+    if (t.p < t.g) return;
+    credits += t.r;
+    floater(`ЗАДАНИЕ ВЫПОЛНЕНО +◆${t.r}`, null, "#9dffb0", 2.4);
+    Sound.bonus();
+    let next = freshTask(tasks.n++);
+    while (tasks.a.some((o, j) => j !== i && o.k === next.k)) next = freshTask(tasks.n++);
+    tasks.a[i] = next;
+    store();
+  });
+}
+// Кристаллы за бой: один за каждые 40 очков; после «Ещё раз» счёт меньше, уже начисленное не забирается
+function payout() {
+  const earned = Math.max(0, Math.floor(score / 40) - paid);
+  paid += earned;
+  credits += earned;
+  store();
+  return earned;
+}
+const dayCode = (d = new Date()) => d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+function yesterday() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return dayCode(d);
+}
+const RULES = {
+  wasps: "Осиный день: звеньев ос вдвое больше",
+  heavy: "Тяжёлые лазеры: урон +40%, нагрев +30%",
+  rockets: "Ракетный день: ракеты перезаряжаются вдвое быстрее",
+  glass: "Без щита: щита нет, корпус +60, очки ×1.5",
+  swarm: "Рой: врагов больше, но они слабее",
+};
+// «Бой дня» одинаков у всех в этот день: правило и волна, с которой он начинается
+function dailyPlan(code = dayCode()) {
+  let seed = (code * 2654435761) >>> 0;
+  const next = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
+  const keys = Object.keys(RULES);
+  return { rule: keys[Math.floor(next() * keys.length)], start: 4 + Math.floor(next() * 4) };
+}
+
 const UPGRADES = [
   { ic: "💥", name: "Мощность", text: "Урон лазеров +25%", apply: () => (S.dmg *= 1.25) },
   { ic: "⚡", name: "Скорострельность", text: "Лазеры стреляют на 15% чаще", apply: () => (S.rate *= 1.15) },
@@ -456,6 +640,12 @@ const UPGRADES = [
   { ic: "🔧", name: "Ремонт", text: "Корпус чинится полностью, запас +20", apply: () => ((S.hullMax += 20), (S.hull = S.hullMax)) },
   { ic: "🚀", name: "Ракетный блок", text: "В залпе на 2 ракеты больше", apply: () => (S.rockets += 2) },
   { ic: "⏱️", name: "Перезарядка", text: "Ракеты готовы на 25% быстрее", apply: () => (S.rocketCd *= 0.75) },
+];
+// Особые улучшения: появляются с 4-й волны золотой карточкой
+const SPECIALS = [
+  { id: "drones", max: 2, ic: "🛰️", name: "Дрон-напарник", text: "Летает рядом с турелью и сам стреляет по врагам", apply: () => S.drones++ },
+  { id: "chain", max: 2, ic: "🌩️", name: "Цепная молния", text: "Попадание иногда перескакивает на соседние цели", apply: () => S.chain++ },
+  { id: "cluster", max: 1, ic: "🎆", name: "Кассетные ракеты", text: "Каждая ракета рвётся ещё на четыре осколка", apply: () => S.cluster++ },
 ];
 
 // Панель может появиться прямо под пальцем, которым игрок ещё стреляет. Если он его отпустит,
@@ -470,6 +660,12 @@ function onPress(button, action) {
     action();
   });
 }
+// Перед новой волной и новой попыткой: в VK-версии здесь реклама (games-portal/vk/games/strazh.mjs).
+// На портале — сразу дальше.
+let gating = false;
+async function gate() {}
+function ungate() {}
+
 function banner(text) {
   const b = el("banner");
   b.hidden = true;
@@ -486,24 +682,41 @@ function startWave() {
   const add = (kind, n, from, gap) => {
     for (let i = 0; i < n; i++) queue.push({ kind, at: from + i * gap + rand(0, 0.6) });
   };
+  meteorStage = false;
+  bump("wave", wave);
+  const more = rule === "swarm" ? 1.4 : 1;
   if (wave % 5 === 0) {
-    add("boss", 1, 1.5, 0);
+    // каждая пятая — босс: флагман, а на каждой десятой — Улей
+    const hive = (wave / 5) % 2 === 0;
+    add(hive ? "hive" : "boss", 1, 1.5, 0);
     add("scout", 2 + Math.floor(wave / 5), 8, 6);
+    if (wave >= 15) add("miner", 1, 14, 0);
     el("bossfill").style.transform = "scaleX(1)";
+    el("bossbar").querySelector("span").textContent = hive ? "УЛЕЙ" : "ФЛАГМАН";
     el("bossbar").hidden = false;
     Sound.boss();
-    banner("ФЛАГМАН");
+    banner(hive ? "УЛЕЙ" : "ФЛАГМАН");
+  } else if (wave % 5 === 3) {
+    // бонус «Метеорный поток»: метеоры не стреляют, пять ручьёв по четыре, каждый шестой — золотой
+    meteorStage = true;
+    meteors = { total: 0, got: 0 };
+    for (let i = 0; i < 20; i++) queue.push({ kind: i % 6 === 5 ? "gold" : "meteor", at: 1.4 + Math.floor(i / 4) * 3.4 + (i % 4) * 0.42 });
+    Sound.wave();
+    banner("МЕТЕОРНЫЙ ПОТОК");
+    floater("РАЗБЕЙ ВСЕ МЕТЕОРЫ — БУДЕТ БОНУС", null, "#7ff6ff", 2.8);
   } else {
     // Состав растёт плавно: новый тип врага приходит по одному, а не толпой.
-    add("scout", 4 + Math.floor(wave / 2), 1, Math.max(1.2, 2.6 - wave * 0.1));
-    if (wave >= 2) add("bomber", 2 + Math.floor((wave - 2) / 3), 5, Math.max(3, 4.5 - wave * 0.1));
-    if (wave >= 3) add("squad", 1 + Math.floor((wave - 3) / 4), 7, 11);
+    add("scout", Math.round((4 + Math.floor(wave / 2)) * more), 1, Math.max(1.2, 2.6 - wave * 0.1));
+    if (wave >= 2) add("bomber", Math.round((2 + Math.floor((wave - 2) / 3)) * more), 5, Math.max(3, 4.5 - wave * 0.1));
+    if (wave >= 4) add("squad", (1 + Math.floor((wave - 4) / 4)) * (rule === "wasps" ? 2 : 1), 7, 11);
     if (wave >= 4) add("gunship", 1 + Math.floor((wave - 4) / 4), 9, 9);
     if (wave >= 6) add("lancer", 1 + Math.floor((wave - 6) / 3), 6, 10);
+    if (wave >= 7) add("miner", 1 + Math.floor((wave - 7) / 4), 8, 12);
+    if (wave >= 11) add("warden", 1 + Math.floor((wave - 11) / 6), 10, 14);
     Sound.wave();
     banner("ВОЛНА " + wave);
   }
-  if (wave >= 2) queue.push({ kind: "pod", at: rand(7, 13) });
+  if (wave >= 2 && !meteorStage) queue.push({ kind: "pod", at: rand(7, 13) });
   queue.sort((a, b) => a.at - b.at);
   el("wave").textContent = wave;
   Sound.mood(wave % 5 === 0 ? 2 : 1);
@@ -523,6 +736,7 @@ function clearField() {
   bolts.forEach((b) => (b.live = false));
   for (const r of rocketsLive) removeModel(r.m);
   rocketsLive.length = 0;
+  marks.length = arcs.length = blasts.length = 0;
   el("bossbar").hidden = true;
 }
 function waveCleared() {
@@ -531,31 +745,54 @@ function waveCleared() {
   clearInput();
   el("pause-button").hidden = true;
   score += 50 * wave;
+  let note = "";
+  if (meteorStage) {
+    // итог метеорного потока: разбил все — ремонт, полный щит и 1000 очков
+    const all = meteors.got >= meteors.total && meteors.total > 0;
+    if (all) {
+      score += 1000;
+      S.hull = Math.min(S.hullMax, S.hull + 30);
+      S.shield = S.shieldMax;
+      bump("perfect");
+      celebrate();
+    }
+    note = all ? "Метеорный поток: ИДЕАЛЬНО! +1000 очков, корпус +30, щит заряжен. " : `Метеорный поток: разбито ${meteors.got} из ${meteors.total}. `;
+  }
   // Между волнами ремонтные дроны немного латают корпус.
-  const patched = Math.round(Math.min(S.hullMax, S.hull + 12) - S.hull);
+  const patched = Math.round(Math.min(S.hullMax, S.hull + 12 + hangar.repair * 4) - S.hull);
   S.hull += patched;
-  el("patch").textContent = patched > 0 ? `Ремонтные дроны подлатали корпус: +${patched}` : "";
-  best = Math.max(best, wave);
+  el("patch").textContent = note + (patched > 0 ? `Ремонтные дроны подлатали корпус: +${patched}` : "");
+  if (mode === "battle") best = Math.max(best, wave);
   wave++;
-  writeStorage(SAVE, JSON.stringify({ best }));
+  store();
   el("best").textContent = best;
   Sound.clear();
   Sound.mood(0);
-  const cards = [...UPGRADES].sort(() => Math.random() - 0.5).slice(0, 3);
+  if (mode === "daily" && wave > dailyEnd) return dailyDone();
+  // с 4-й волны одна из карточек может быть особой (золотой)
+  const regular = [...UPGRADES].sort(() => Math.random() - 0.5);
+  const special = SPECIALS.filter((u) => S[u.id] < u.max);
+  const cards = wave >= 5 && special.length && Math.random() < 0.5 ? [...regular.slice(0, 2), pick(special)] : regular.slice(0, 3);
   el("cards").innerHTML = "";
-  for (const u of cards) {
+  cards.forEach((u, i) => {
     const b = document.createElement("button");
-    b.className = "card";
-    b.innerHTML = `<span class="ic">${u.ic}</span><b>${u.name}</b><small>${u.text}</small>`;
-    onPress(b, () => {
-      if (S.state !== "upgrade") return;
-      u.apply();
+    b.className = "card" + (u.id ? " special" : "");
+    b.style.setProperty("--i", i);
+    b.innerHTML = `${u.id ? '<em class="tag">ОСОБОЕ</em>' : ""}<span class="ic">${u.ic}</span><b>${u.name}</b><small>${u.text}</small>`;
+    onPress(b, async () => {
+      if (S.state !== "upgrade" || gating) return;
       Sound.unlock();
       Sound.pick();
+      gating = true;
+      await gate();
+      gating = false;
+      if (S.state !== "upgrade") return;
+      u.apply();
       startWave();
+      ungate();
     });
     el("cards").appendChild(b);
-  }
+  });
   setTimeout(() => {
     if (S.state !== "upgrade") return;
     el("upgrade").hidden = false;
@@ -566,7 +803,10 @@ function die() {
   S.state = "dead";
   clearInput();
   el("pause-button").hidden = true;
+  const earned = payout();
+  const record = mode === "daily" && finishDaily(false);
   el("result").textContent = `Волна ${wave} · Счёт ${score}`;
+  showResult(earned, mode === "daily" ? "Бой дня окончен" : "Корпус пробит", mode === "daily" ? (record ? "Новый лучший счёт дня! Попробуй ещё — правило дня то же." : "Попробуй ещё раз — правило дня то же, начнёшь с той же волны.") : "Щит и корпус восстановятся. Улучшения останутся, счёт уменьшится на 20%.");
   // Попадание может быть внутри обхода врагов или снарядов.
   queueMicrotask(clearField);
   Sound.boom(2);
@@ -574,9 +814,89 @@ function die() {
   shake = 2;
   whiteout = 0.6;
   setTimeout(() => {
+    if (S.state !== "dead") return;
     el("dead").hidden = false;
     el("retry").focus({ preventScroll: true });
   }, 750);
+}
+// Панель итога: заголовок, пояснение, заработанные кристаллы (числа «подпрыгивают»), ролик за награду в VK
+function showResult(earned, title, text) {
+  el("dead-title").textContent = title;
+  el("dead-text").textContent = text;
+  el("earned").innerHTML = `Кристаллы за бой: <b>+◆ ${earned}</b> · всего ◆ ${credits}`;
+  countUp(el("earned").querySelector("b"), earned, "+◆ ");
+  const reward = el("reward");
+  reward.hidden = !(window.vkGameHost?.inVk && earned > 0);
+  reward.disabled = false;
+  reward.dataset.n = earned;
+  reward.textContent = `▶ Ролик: ещё +◆ ${earned}`;
+}
+function countUp(node, value, prefix) {
+  const t0 = performance.now();
+  const step = (now) => {
+    const k = Math.min(1, (now - t0) / 900);
+    node.textContent = prefix + Math.round(value * (1 - (1 - k) ** 3));
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+// Ролик за награду (только в VK, только по кнопке): ещё столько же кристаллов
+let rewarding = false;
+onPress(el("reward"), async () => {
+  const button = el("reward");
+  if (rewarding || button.disabled || !window.vkGameHost?.inVk) return;
+  rewarding = true;
+  const shown = await window.vkGameHost.rewarded().catch(() => false);
+  rewarding = false;
+  if (!shown) return floater("РОЛИК СЕЙЧАС НЕДОСТУПЕН", null, "#ffb35f", 1.8);
+  const n = Number(button.dataset.n) || 0;
+  credits += n;
+  store();
+  button.disabled = true;
+  button.textContent = `✓ Получено +◆ ${n}`;
+  el("earned").innerHTML = `Кристаллы за бой: <b>+◆ ${n * 2}</b> · всего ◆ ${credits}`;
+});
+// ---------- «Бой дня» ----------
+let dailyEnd = 0;
+// Итог «Боя дня»: лучший счёт дня; при победе — серия дней и награда
+function finishDaily(win) {
+  const today = dayCode();
+  if (daily.bd !== today) (daily.b = 0), (daily.bd = today);
+  const record = score > daily.b;
+  daily.b = Math.max(daily.b, score);
+  let bonus = 0;
+  if (win && daily.d !== today) {
+    daily.s = daily.d === yesterday() ? daily.s + 1 : 1;
+    daily.d = today;
+    bonus = 40 + 10 * Math.min(7, daily.s);
+    credits += bonus;
+  }
+  if (win) bump("daily");
+  store();
+  return win ? bonus : record;
+}
+function dailyDone() {
+  S.state = "dead";
+  el("pause-button").hidden = true;
+  const earned = payout();
+  const bonus = finishDaily(true);
+  el("result").textContent = `Пять волн отбито · Счёт ${score}`;
+  showResult(earned + bonus, "Бой дня пройден!", bonus ? `Серия: ${daily.s} ${daily.s === 1 ? "день" : "дн."} подряд, награда ◆ ${bonus}. Завтра будет новое правило.` : "Сегодня ты его уже проходил — награда за день получена. Завтра будет новое правило.");
+  celebrate();
+  setTimeout(() => {
+    el("dead").hidden = false;
+    el("retry").focus({ preventScroll: true });
+  }, 600);
+}
+// Праздничные искры поверх экрана: победа в «Бою дня», идеальный метеорный поток, сбитый босс
+const sparks = [];
+function celebrate() {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  for (let i = 0; i < 120; i++) {
+    const a = rand(0, TAU);
+    const v = rand(160, 520);
+    sparks.push({ x: innerWidth / 2, y: innerHeight * 0.38, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 160, life: rand(0.9, 1.8), c: pick(["#ffd25f", "#7fe8ff", "#ff9ad8", "#9dffb0", "#ffffff"]) });
+  }
 }
 
 function togglePause() {
@@ -623,15 +943,10 @@ function laserTarget() {
   return assistTarget();
 }
 
-function fireLaser() {
-  const b = barrels[side];
-  side = 1 - side;
-  b.userData.kick = 1;
-  const from = b.userData.tip.getWorldPosition(tmp3);
-  const target = laserTarget();
-  const point = target ? tmp2.copy(target.pos).addScaledVector(target.vel, target.pos.length() / LASER_SPEED) : tmp2.copy(fwd).multiplyScalar(500);
+// Луч из точки from в точку point: у каждого свой урон и цвет
+function shoot(from, point, dmg, colors, w = 1) {
   const l = lasers[laserNext];
-  const colors = S.overdrive > 0 ? LASER_COLOR.over : LASER_COLOR.cool;
+  l.w = w;
   laserMesh.setColorAt(laserNext, colors[0]);
   laserGlow.setColorAt(laserNext, colors[1]);
   laserMesh.instanceColor.needsUpdate = laserGlow.instanceColor.needsUpdate = true;
@@ -640,8 +955,18 @@ function fireLaser() {
   l.from.copy(from);
   l.d.copy(point).sub(from).normalize();
   l.life = RANGE / LASER_SPEED;
+  l.dmg = dmg;
+}
+function fireLaser() {
+  const b = barrels[side];
+  side = 1 - side;
+  b.userData.kick = 1;
+  const from = b.userData.tip.getWorldPosition(tmp3);
+  const target = laserTarget();
+  const point = target ? tmp2.copy(target.pos).addScaledVector(target.vel, target.pos.length() / LASER_SPEED) : tmp2.copy(fwd).multiplyScalar(500);
+  shoot(from, point, S.dmg, S.overdrive > 0 ? LASER_COLOR.over : LASER_COLOR.cool);
   if (S.overdrive <= 0) {
-    S.heat = Math.min(100, S.heat + 3.9);
+    S.heat = Math.min(100, S.heat + 3.9 * S.heatK);
     if (S.heat >= 100) {
       S.overheated = true;
       Sound.overheat();
@@ -675,6 +1000,58 @@ function fireRockets() {
     const v = fwd.clone().add(V(rand(-0.5, 0.5), rand(0.1, 0.6), rand(-0.5, 0.5))).normalize().multiplyScalar(40);
     rocketsLive.push({ m, p, v, target: targets[i % targets.length], life: 6, trail: 0, delay: i * 0.07 });
   }
+}
+
+// ---------- Дроны-напарники ----------
+// Висят по бокам от турели и сами бьют по ближайшей к прицелу цели (зелёные лучи).
+const drones = [-1, 1].map((side) => {
+  const d = buildDrone();
+  d.visible = false;
+  d.userData.side = side;
+  d.userData.fireIn = rand(0.2, 0.5);
+  camera.add(d);
+  return d;
+});
+function updateDrones(dt, t, playing) {
+  drones.forEach((d, i) => {
+    d.visible = S.drones > i && S.state !== "menu";
+    if (!d.visible) return;
+    const u = d.userData;
+    d.position.set(u.side * (camera.aspect < 1 ? 0.55 : 1.15), 0.62 + Math.sin(t * 2.2 + i * 2) * 0.04, -2.6);
+    u.eye.scale.setScalar(0.09 * (1 + Math.max(0, u.flash || 0) * 1.5)); // 0.09 — исходный размер глаза
+    u.flash = Math.max(0, (u.flash || 0) - dt * 5);
+    if (!playing || (u.fireIn -= dt) > 0) return;
+    u.fireIn = 0.42;
+    let target = null;
+    let bestAngle = 0.9;
+    for (const e of enemies) {
+      if (!hostile(e) || e.pos.length() > RANGE) continue;
+      const angle = tmp.copy(e.pos).normalize().angleTo(fwd);
+      if (angle < bestAngle) (bestAngle = angle), (target = e);
+    }
+    if (!target) return;
+    // луч дрона тоньше и рождается чуть впереди: у самой камеры его свечение закрыло бы пол-экрана
+    const from = d.getWorldPosition(tmp3);
+    const aim = tmp2.copy(target.pos).addScaledVector(target.vel, target.pos.length() / LASER_SPEED);
+    from.addScaledVector(tmp.copy(aim).sub(from).normalize(), 6);
+    shoot(from, aim, S.dmg * 0.55, LASER_COLOR.drone, 0.5);
+    u.flash = 1;
+    Sound.drone();
+  });
+}
+// Цепная молния: разряд перескакивает с цели на ближайших соседей
+function chainFrom(from, dmg) {
+  const near = enemies
+    .filter((e) => e !== from && hostile(e) && !e.gone && e.pos.distanceTo(from.pos) < 60)
+    .sort((a, b) => a.pos.distanceTo(from.pos) - b.pos.distanceTo(from.pos))
+    .slice(0, 1 + S.chain);
+  let prev = from.pos;
+  for (const e of near) {
+    arcs.push({ a: prev.clone(), b: e.pos.clone(), t: 0 });
+    prev = e.pos;
+    damage(e, dmg, e.pos);
+  }
+  if (near.length) Sound.zap();
 }
 
 // ---------- Управление ----------
@@ -769,18 +1146,88 @@ function updateSoundButton() {
 }
 updateSoundButton();
 el("sound").addEventListener("click", () => {
+  if (gating || rewarding) return; // во время ролика кнопка звука молчит
   Sound.toggle();
   updateSoundButton();
 });
-el("start").addEventListener("click", () => {
-  if (S.state !== "menu") return;
-  Sound.unlock();
+// Новый бой: начальные числа турели, улучшения ангара, правило дня
+function newRun(kind) {
+  clearInput();
+  clearField();
+  Object.assign(S, START);
+  S.hullMax = S.hull = 100 + hangar.armor * 10;
+  S.shieldMax = S.shield = 100 + hangar.shield * 10;
+  S.dmg *= 1 + hangar.caliber * 0.06;
+  S.rockets += (hangar.rockets >= 2 ? 1 : 0) + (hangar.rockets >= 4 ? 1 : 0);
+  S.rocketCd *= 1 - hangar.rockets * 0.06;
+  mode = kind;
+  rule = null;
+  wave = 1;
+  score = kills = paid = 0;
+  combo = comboT = hurtFlash = hitMarker = shake = whiteout = fireIn = waveT = 0;
+  timeScale = 1;
+  if (kind === "daily") {
+    const plan = dailyPlan();
+    rule = plan.rule;
+    wave = plan.start;
+    dailyEnd = plan.start + 4;
+    // пропущенные волны — случайные улучшения, чтобы не начинать с голой турелью
+    for (let i = 1; i < plan.start; i++) pick(UPGRADES).apply();
+    if (rule === "heavy") (S.dmg *= 1.4), (S.heatK = 1.3);
+    if (rule === "rockets") S.rocketCd *= 0.5;
+    if (rule === "glass") (S.shieldMax = S.shield = 0), (S.hullMax = S.hull = S.hullMax + 60);
+  }
   S.yaw = 0;
+  S.pitch = 0.25;
+  el("score").textContent = 0;
+  Sound.unlock();
   Sound.pick();
   startWave();
+}
+el("start").addEventListener("click", () => {
+  if (S.state !== "menu") return;
+  newRun("battle");
 });
-onPress(el("retry"), () => {
+// Главное меню из боя: кристаллы за набранный счёт начисляются, бой начнётся заново с первой волны
+function toMenu() {
+  if (gating || rewarding || S.state === "menu") return;
+  if (S.state === "play" || S.state === "paused" || S.state === "upgrade") payout();
+  clearInput();
+  clearField();
+  Object.assign(S, START);
+  wave = 1;
+  score = kills = paid = 0;
+  mode = "battle";
+  rule = null;
+  combo = comboT = hurtFlash = hitMarker = shake = whiteout = fireIn = waveT = 0;
+  timeScale = 1;
+  queue = [];
+  el("wave").textContent = wave;
+  el("score").textContent = score;
+  for (const id of ["paused", "upgrade", "dead", "banner", "sheet"]) el(id).hidden = true;
+  el("pause-button").hidden = true;
+  paintMenu();
+  el("menu").hidden = false;
+  el("start").focus({ preventScroll: true });
+  Sound.mood(0);
+  Sound.unlock();
+  Sound.pick();
+}
+for (const id of ["pause-menu", "upgrade-menu", "dead-menu"]) onPress(el(id), toMenu);
+onPress(el("retry"), async () => {
+  if (S.state !== "dead" || gating) return;
+  Sound.unlock();
+  gating = true;
+  await gate();
+  gating = false;
   if (S.state !== "dead") return;
+  // «Бой дня» после поражения или победы начинается заново, обычный бой — с той же волны
+  if (mode === "daily") {
+    el("dead").hidden = true;
+    newRun("daily");
+    ungate();
+    return;
+  }
   clearField();
   S.hull = S.hullMax;
   S.shield = S.shieldMax;
@@ -797,6 +1244,7 @@ onPress(el("retry"), () => {
   Sound.unlock();
   Sound.pick();
   startWave();
+  ungate();
 });
 
 // ---------- Экранные приборы (2D поверх сцены) ----------
@@ -822,7 +1270,7 @@ function resize() {
 }
 addEventListener("resize", resize);
 const proj = V();
-const LABEL = { pod: "БОНУС", lancer: "КОПЬЁ" };
+const LABEL = { pod: "БОНУС", lancer: "КОПЬЁ", miner: "МИНЁР", warden: "ЩИТОНОСЕЦ", mine: "МИНА" };
 function drawTarget(enemy, x, y, height, locked, t) {
   const worldToPixels = height / (2 * Math.tan(T.MathUtils.degToRad(camera.fov) / 2));
   const radius = (worldToPixels * enemy.K.r) / enemy.pos.length();
@@ -840,7 +1288,9 @@ function drawTarget(enemy, x, y, height, locked, t) {
     hx.arc(x, y, ring, 0, TAU);
     hx.stroke();
     hx.lineWidth = locked || tracked ? 3 : 2;
-    hx.strokeStyle = enemy.flashT > 0 ? "#ffffff" : locked || tracked ? "#aaffcb" : enemy.K.color;
+    // люк улья: закрытый — тусклый, открытый — яркий
+    const hatchColor = enemy.hatch ? (enemy.open ? "#ffe08a" : "#7a6a4a") : enemy.K.color;
+    hx.strokeStyle = enemy.flashT > 0 ? "#ffffff" : locked || tracked ? "#aaffcb" : hatchColor;
     hx.beginPath();
     hx.arc(x, y, ring, -Math.PI / 2, -Math.PI / 2 + TAU * clamp(enemy.hp / enemy.max, 0, 1));
     hx.stroke();
@@ -858,7 +1308,8 @@ function drawTarget(enemy, x, y, height, locked, t) {
   hx.strokeStyle = "rgba(4,11,26,.84)";
   hx.lineWidth = locked || danger ? 6 : 5;
   hx.stroke();
-  const color = enemy.flashT > 0 ? "#ffffff" : danger ? (Math.sin(t * 22) > 0 ? "#ff5a4a" : "#ffd0c8") : locked ? "#aaffcb" : enemy.K.color;
+  const guarded = enemy.guard > 0;
+  const color = enemy.flashT > 0 ? "#ffffff" : danger ? (Math.sin(t * 22) > 0 ? "#ff5a4a" : "#ffd0c8") : locked ? "#aaffcb" : guarded ? "#7fe0ff" : enemy.gold ? "#ffd25f" : enemy.K.color;
   hx.strokeStyle = color;
   hx.lineWidth = locked || danger ? 3 : 2;
   hx.stroke();
@@ -873,14 +1324,26 @@ function drawTarget(enemy, x, y, height, locked, t) {
     hx.fillStyle = "#aaffcb";
     hx.fill();
   }
-  if (enemy.kind !== "boss") {
+  if (guarded) {
+    // под щитом щитоносца: шестиугольник вокруг рамки
+    hx.beginPath();
+    for (let k = 0; k <= 6; k++) {
+      const a = (k / 6) * TAU + t * 0.8;
+      const r = size + 7;
+      k ? hx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r) : hx.moveTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+    }
+    hx.strokeStyle = "rgba(127,224,255,.7)";
+    hx.lineWidth = 2;
+    hx.stroke();
+  }
+  if (!enemy.K.boss && enemy.kind !== "meteor") {
     const width = Math.max(26, size * 1.5);
     hx.fillStyle = "rgba(4,11,26,.92)";
     hx.fillRect(x - width / 2 - 2, y - size - 10 - (tracked ? 12 : 0), width + 4, 7);
     hx.fillStyle = color;
     hx.fillRect(x - width / 2, y - size - 8 - (tracked ? 12 : 0), width * clamp(enemy.hp / enemy.max, 0, 1), 3);
   }
-  const label = danger ? "⚠ СБЕЙ ЗАЛП" : LABEL[enemy.kind];
+  const label = danger ? "⚠ СБЕЙ ЗАЛП" : guarded ? "ПОД ЩИТОМ" : LABEL[enemy.kind];
   if (label) {
     hx.font = "800 12px system-ui, sans-serif";
     hx.textAlign = "center";
@@ -999,6 +1462,76 @@ function drawHud(t, dt) {
     }
   }
 
+  // лучи щитоносцев к тем, кого они закрывают
+  hx.setLineDash([6, 6]);
+  hx.lineDashOffset = -t * 30;
+  for (const e of enemies) {
+    if (e.kind !== "warden" || !e.on || !e.links) continue;
+    for (const x of e.links) {
+      if (!x.on || x.gone) continue;
+      hx.strokeStyle = "rgba(127,224,255,.55)";
+      hx.lineWidth = 2;
+      hx.beginPath();
+      hx.moveTo(e.sx, e.sy);
+      hx.lineTo(x.sx, x.sy);
+      hx.stroke();
+    }
+  }
+  hx.setLineDash([]);
+  // разряды цепной молнии: ломаная линия между целями
+  for (let i = arcs.length - 1; i >= 0; i--) {
+    const arc = arcs[i];
+    arc.t += dt;
+    if (arc.t > 0.18) {
+      arcs.splice(i, 1);
+      continue;
+    }
+    const a = proj.copy(arc.a).project(camera);
+    if (a.z > 1) continue;
+    const ax = ((a.x + 1) * w) / 2,
+      ay = ((1 - a.y) * h) / 2;
+    const b = proj.copy(arc.b).project(camera);
+    if (b.z > 1) continue;
+    const bx = ((b.x + 1) * w) / 2,
+      by = ((1 - b.y) * h) / 2;
+    for (const [width, style] of [[6, "rgba(120,200,255,.35)"], [2, "#e8fbff"]]) {
+      hx.strokeStyle = style;
+      hx.lineWidth = width;
+      hx.beginPath();
+      hx.moveTo(ax, ay);
+      for (let k = 1; k < 7; k++) {
+        const f = k / 7;
+        hx.lineTo(ax + (bx - ax) * f + rand(-9, 9), ay + (by - ay) * f + rand(-9, 9));
+      }
+      hx.lineTo(bx, by);
+      hx.stroke();
+    }
+  }
+  // крестик над только что сбитым врагом
+  for (let i = marks.length - 1; i >= 0; i--) {
+    const m = marks[i];
+    m.t += dt;
+    if (m.t > 0.32) {
+      marks.splice(i, 1);
+      continue;
+    }
+    const p = proj.copy(m.pos).project(camera);
+    if (p.z > 1) continue;
+    const mx = ((p.x + 1) * w) / 2,
+      my = ((1 - p.y) * h) / 2,
+      r = 8 + m.t * 40;
+    hx.globalAlpha = 1 - m.t / 0.32;
+    hx.strokeStyle = "#ffd25f";
+    hx.lineWidth = 3;
+    hx.beginPath();
+    for (const [dx, dy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+      hx.moveTo(mx + dx * r * 0.45, my + dy * r * 0.45);
+      hx.lineTo(mx + dx * r, my + dy * r);
+    }
+    hx.stroke();
+    hx.globalAlpha = 1;
+  }
+
   // прицел и нагрев
   hx.lineWidth = 2;
   hx.strokeStyle = hitMarker > 0 ? "#ffffff" : S.overheated ? "#ff7853" : target ? "#aaffcb" : "#7fe8ff";
@@ -1045,11 +1578,13 @@ function drawHud(t, dt) {
     hx.fillText(label, cx, cy + 71);
   }
   if (combo > 1) {
+    // комбо «подпрыгивает» на каждом новом сбитом
     hx.fillStyle = "#ffd25f";
-    hx.font = "800 22px sans-serif";
+    hx.font = `800 ${Math.round(22 * (1 + comboPop * 0.6))}px sans-serif`;
     hx.textAlign = "center";
     hx.fillText("×" + combo, cx, cy - 56);
   }
+  comboPop = Math.max(0, comboPop - dt * 4);
 
   // Всплывающие надписи: очки над сбитым врагом, сообщения по центру.
   hx.textAlign = "center";
@@ -1225,6 +1760,7 @@ function frame(ms) {
   muzzleLight.intensity *= Math.pow(0.0003, real);
   muzzleLight.color.set(heatColor);
 
+  updateDrones(dt, t, playing);
   S.rocketIn = Math.max(0, S.rocketIn - dt);
   el("rocket-cd").style.height = (S.rocketIn / S.rocketCd) * 100 + "%";
   const rocketReady = playing && S.rocketIn <= 0 && enemies.some(hostile);
@@ -1282,12 +1818,18 @@ function frame(ms) {
       }
       e.lit = flashK > 0;
     }
+    if (e.guard > 0) e.guard -= dt;
     if (e.kind === "node") {
-      // узел едет вместе с кольцом флагмана
+      // узел едет вместе с кольцом флагмана (люк — вместе с кольцом улья)
       tmp.copy(e.pos);
       e.g.getWorldPosition(e.pos);
       if (dt > 1e-4) e.vel.copy(e.pos).sub(tmp).divideScalar(dt);
       e.g.scale.setScalar(e.flashT > 0 ? 1.15 : 1);
+      if (e.hatch) {
+        const { lid, glow } = e.g.userData;
+        lid.rotation.x += ((e.open ? 0.1 : Math.PI / 2) - lid.rotation.x) * Math.min(1, dt * 8);
+        glow.visible = e.open;
+      }
       continue;
     }
     const dist = e.pos.length();
@@ -1311,6 +1853,32 @@ function frame(ms) {
       if (dist < 9) {
         hurt(34 * threat(), e.pos, "ram");
         kill(e, true);
+        continue;
+      }
+    } else if (e.kind === "mine") {
+      // мина плывёт к станции, мигает всё чаще и взрывается об неё
+      e.vel.copy(e.pos).normalize().multiplyScalar(-(K.speed + wave * 0.3));
+      e.g.rotation.x += dt * 1.5;
+      e.g.rotation.y += dt;
+      e.g.userData.core.material.color.copy(tone("#ff5a3a", 1)).multiplyScalar(1.6 + 1.2 * Math.max(0, Math.sin(t * (5 + 300 / dist))));
+      if (dist < 9) {
+        hurt(12 * threat(), e.pos, "ram");
+        kill(e, true);
+        continue;
+      }
+    } else if (e.kind === "meteor") {
+      // метеор пролетает поперёк неба и исчезает вдали, если его не разбили
+      e.g.rotation.x += e.spin.x * dt;
+      e.g.rotation.y += e.spin.y * dt;
+      if ((e.trail -= dt) <= 0) {
+        e.trail = 0.05;
+        fx.puff(GLOW, e.pos, null, 3.2, 0.4, 0.45, tone(e.gold ? "#ffd25f" : "#7ff6ff", 2), 0.7);
+      }
+      if (e.t > 10.5) {
+        enemies.splice(i, 1);
+        e.gone = true;
+        if (track === e) track = null;
+        removeModel(e.g);
         continue;
       }
     } else if (e.kind === "pod") {
@@ -1349,7 +1917,55 @@ function frame(ms) {
       steer(e, e.goal, speed * approach, e.kind === "scout" ? 1.6 : 0.8, dt);
       // стреляют, только когда подошли
       e.fireIn -= dt;
-      if (playing && dist < 150 && e.fireIn <= 0 && e.kind !== "boss") {
+      if (e.kind === "miner") {
+        // минёр сбрасывает мины по одной, пока не подойдёт слишком близко
+        if (playing && dist < 150 && (e.dropIn -= dt) <= 0 && enemies.filter((x) => x.kind === "mine").length < 6) {
+          e.dropIn = rand(3, 4) * pace();
+          const m = make("mine", tmp.copy(e.pos).add(V(0, -3.5, 0)));
+          m.fireIn = 99;
+          Sound.drop();
+        }
+      } else if (e.kind === "warden") {
+        // щитоносец накрывает щитом двоих ближайших соседей (кроме боссов и других щитоносцев)
+        e.g.userData.ring.rotation.z += dt * 1.6;
+        e.links = enemies
+          .filter((x) => x !== e && hostile(x) && !x.K.boss && x.kind !== "node" && x.kind !== "warden" && x.kind !== "mine" && x.pos.distanceTo(e.pos) < 80)
+          .sort((a, b) => a.pos.distanceTo(e.pos) - b.pos.distanceTo(e.pos))
+          .slice(0, 2);
+        for (const x of e.links) x.guard = 0.2;
+      } else if (e.kind === "hive") {
+        const u = e.g.userData;
+        u.spin.rotation.z += dt * 0.35;
+        u.bubble.visible = e.shielded;
+        u.bubble.material.uniforms.power.value *= Math.pow(0.02, dt);
+        el("bossfill").style.transform = `scaleX(${Math.max(0, e.hp / e.max)})`;
+        if (playing && dist < 175) {
+          // люки открываются парами и выпускают ос; открытый люк можно разбить
+          if ((e.hatchT -= dt) <= 0) {
+            e.open = !e.open && e.nodes.length > 0;
+            e.hatchT = e.open ? 3.6 : 2.4;
+            for (const n of e.nodes) n.open = false;
+            if (e.open) {
+              const two = [...e.nodes].sort(() => Math.random() - 0.5).slice(0, 2);
+              for (const n of two) n.open = true;
+              if (squads.length < 2) spawnSquad(two[0].pos);
+              if (!e.told) (e.told = true), floater("ЛЮКИ ОТКРЫТЫ — БЕЙ ПО НИМ!", null, "#ffe08a", 2);
+            }
+          }
+          if (e.shielded) {
+            const open = e.nodes.filter((n) => n.open);
+            if ((e.nodeFire = (e.nodeFire ?? 1.2) - dt) <= 0 && open.length) (e.nodeFire = 1.1), shootBolt(pick(open).pos, 9, 0.012);
+          } else {
+            // ядро открыто: веер спор и новые звенья ос
+            if ((e.fanIn -= dt) <= 0) {
+              e.fanIn = 1.8;
+              for (const k of [-2, -1, 0, 1, 2]) shootBolt(tmp.copy(e.pos).add(tmp2.set(k * 5, 0, 0)), 9, 0.016);
+            }
+            if ((e.spawnIn -= dt) <= 0 && squads.length < 2) (e.spawnIn = 8), spawnSquad(e.pos);
+          }
+        }
+      }
+      if (playing && dist < 150 && e.fireIn <= 0 && (e.kind === "scout" || e.kind === "gunship")) {
         if (e.kind === "scout") (e.fireIn = rand(1.9, 3.3) * pace()), shootBolt(e.pos, 8, 0.012);
         else {
           shootBolt(e.pos, 9, 0.01);
@@ -1391,10 +2007,10 @@ function frame(ms) {
     }
     e.pos.addScaledVector(e.vel, dt);
     e.g.position.copy(e.pos);
-    if (e.kind === "boss" || (e.kind === "lancer" && e.phase !== "move")) {
+    if (e.K.boss || e.kind === "warden" || (e.kind === "lancer" && e.phase !== "move")) {
       look.lookAt(e.pos, tmp.set(0, 0, 0), up);
       e.g.quaternion.slerp(q.setFromRotationMatrix(look), Math.min(1, dt * 4));
-    } else if (e.kind !== "pod" && e.vel.lengthSq() > 0.01) {
+    } else if (e.kind !== "pod" && e.kind !== "meteor" && e.kind !== "mine" && e.vel.lengthSq() > 0.01) {
       look.lookAt(e.pos, tmp.copy(e.pos).add(e.vel), up);
       e.g.quaternion.slerp(q.setFromRotationMatrix(look), Math.min(1, dt * 6));
     }
@@ -1407,7 +2023,7 @@ function frame(ms) {
         fx.puff(GLOW, enginePos.copy(point).applyMatrix4(e.g.matrixWorld), null, K.size * 0.55, 0.05, 0.3, tone(K.color, 1.5), 0.8);
       }
     }
-    if (e.hp < e.max * 0.45 && e.kind !== "wasp" && (e.smoke -= dt) <= 0) {
+    if (e.hp < e.max * 0.45 && e.kind !== "wasp" && e.kind !== "meteor" && e.kind !== "mine" && (e.smoke -= dt) <= 0) {
       e.smoke = 0.09;
       tmp.set(rand(-1, 1), rand(-1, 1), rand(-1, 1)).multiplyScalar(K.r * 0.25).add(e.pos);
       fx.puff(SMOKE, tmp, null, K.r * 0.22, K.r * 0.7, 0.9, tone("#4a4048", 1), 0.4, tone("#17151c", 1), 0.5, rand(-1, 1));
@@ -1416,6 +2032,8 @@ function frame(ms) {
   }
   // Флагман взрывается и уносит с собой свою свиту.
   for (const boss of doomed) {
+    banner(boss.kind === "hive" ? "УЛЕЙ УНИЧТОЖЕН" : "ФЛАГМАН УНИЧТОЖЕН");
+    celebrate();
     kill(boss);
     for (const other of enemies.filter(hostile)) kill(other, true);
     queue = []; // подкрепление, которое ещё не прилетело, остаётся без флагмана и уходит
@@ -1449,7 +2067,8 @@ function frame(ms) {
     laser.from.copy(laser.p);
     laser.p.addScaledVector(laser.d, nearest);
     if (hit) {
-      damage(hit, S.dmg, laser.p);
+      damage(hit, laser.dmg, laser.p);
+      if (S.chain && Math.random() < 0.18 + 0.12 * S.chain) chainFrom(hit, laser.dmg * 0.6);
       laser.life = 0;
       hide(laserMesh, i);
       hide(laserGlow, i);
@@ -1458,7 +2077,7 @@ function frame(ms) {
     laser.life -= dt;
     dummy.position.copy(laser.p);
     dummy.lookAt(tmp.copy(laser.p).add(laser.d));
-    dummy.scale.setScalar(1);
+    dummy.scale.set(laser.w, laser.w, 1);
     dummy.updateMatrix();
     laserMesh.setMatrixAt(i, dummy.matrix);
     laserGlow.setMatrixAt(i, dummy.matrix);
@@ -1529,9 +2148,30 @@ function frame(ms) {
     if (near || r.life <= 0) {
       fx.explode(r.p, 5.5, "#ffb35f", 1);
       Sound.boom(1);
-      for (const e of [...enemies]) if (e.pos.distanceTo(r.p) < e.K.r + 9) damage(e, S.rocketDmg * (e === r.target ? 1 : 0.5));
+      shake = Math.max(shake, 0.25);
+      for (const e of [...enemies]) {
+        if (e.pos.distanceTo(r.p) >= e.K.r + 9) continue;
+        e.byRocket = true;
+        damage(e, S.rocketDmg * (e === r.target ? 1 : 0.5));
+        e.byRocket = false;
+      }
+      // кассетные ракеты: четыре осколка разлетаются и рвутся рядом
+      if (S.cluster) for (let k = 0; k < 4; k++) blasts.push({ p: r.p.clone().add(V(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize().multiplyScalar(rand(8, 14))), t: 0.12 + k * 0.07 });
       removeModel(r.m);
       rocketsLive.splice(i, 1);
+    }
+  }
+  for (let i = blasts.length - 1; i >= 0; i--) {
+    const b = blasts[i];
+    if ((b.t -= dt) > 0) continue;
+    blasts.splice(i, 1);
+    fx.explode(b.p, 4, "#ffd27a", 1);
+    Sound.boom(0);
+    for (const e of [...enemies]) {
+      if (e.pos.distanceTo(b.p) >= e.K.r + 8) continue;
+      e.byRocket = true;
+      damage(e, S.rocketDmg * 0.35);
+      e.byRocket = false;
     }
   }
 
@@ -1539,8 +2179,9 @@ function frame(ms) {
   space.update(t, dt);
   if (warmFrames > 0 && --warmFrames === 0) warm.forEach(removeModel);
 
+  drawParty(real);
   // приборы
-  el("shield").style.transform = `scaleX(${S.shield / S.shieldMax})`;
+  el("shield").style.transform = `scaleX(${Math.max(0, S.shield) / Math.max(1, S.shieldMax)})`;
   el("hull").style.transform = `scaleX(${S.hull / S.hullMax})`;
   el("hull").parentElement.classList.toggle("low", S.hull < S.hullMax * 0.3);
   el("score").textContent = score;
@@ -1551,36 +2192,146 @@ function frame(ms) {
     grade.uniforms.hurt.value = shieldImpact ? hurtFlash * 0.4 : hurtFlash;
     grade.uniforms.time.value = t % 10;
     composer.render();
-    // слабое устройство: свечение выключается само
-    perf.seen += raw;
-    if (raw > 1 / 34) perf.slow += raw;
-    if (perf.seen > 6) {
-      if (perf.slow > 2.4) perf.glow = false;
-      perf.seen = perf.slow = 0;
-    }
-  } else {
-    renderer.render(scene, camera);
-    // Всё ещё медленно и без свечения: рисуем в меньшем разрешении.
-    perf.seen += raw;
-    if (raw > 1 / 34) perf.slow += raw;
-    if (perf.seen > 6) {
-      if (perf.slow > 2.4 && !perf.low) {
-        perf.low = true;
-        renderer.setPixelRatio(1);
-        resize();
+  } else renderer.render(scene, camera);
+  // «Авто»: если в бою стабильно меньше ~45 кадров в секунду — на ступень ниже
+  if (playing && perf.set === "auto" && raw > 0 && raw < 0.25) {
+    perf.time += raw;
+    perf.frames++;
+    if (perf.time >= 4) {
+      if (perf.frames / perf.time < 45 && perf.auto !== "low") {
+        perf.auto = perf.auto === "high" ? "medium" : "low";
+        applyQuality();
       }
-      perf.seen = perf.slow = 0;
+      perf.time = perf.frames = 0;
     }
   }
   requestAnimationFrame(frame);
 }
 
-try {
-  const saved = JSON.parse(readStorage(SAVE))?.best;
-  if (Number.isSafeInteger(saved) && saved > 0) best = saved;
-} catch {}
-el("best").textContent = best;
-resize();
+const party = el("party"),
+  px = party.getContext("2d");
+let partyOn = false;
+function drawParty(dt) {
+  if (!sparks.length && !partyOn) return;
+  const k = Math.min(devicePixelRatio, 2);
+  if (party.width !== Math.round(innerWidth * k)) (party.width = Math.round(innerWidth * k)), (party.height = Math.round(innerHeight * k));
+  px.setTransform(k, 0, 0, k, 0, 0);
+  px.clearRect(0, 0, innerWidth, innerHeight);
+  partyOn = sparks.length > 0;
+  for (let i = sparks.length - 1; i >= 0; i--) {
+    const p = sparks[i];
+    if ((p.life -= dt) <= 0) {
+      sparks.splice(i, 1);
+      continue;
+    }
+    p.vy += 520 * dt;
+    p.vx *= 1 - dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    px.globalAlpha = Math.min(1, p.life * 2);
+    px.fillStyle = p.c;
+    px.fillRect(p.x - 3, p.y - 1.5, 6, 3);
+  }
+  px.globalAlpha = 1;
+}
+function applyQuality() {
+  const q = QUALITY[perf.level()];
+  perf.glow = q.glow;
+  renderer.setPixelRatio(Math.min(devicePixelRatio, q.ratio));
+  resize();
+  const label = "Графика: " + QUALITY_NAME[perf.set] + (perf.set === "auto" ? ` (${QUALITY_NAME[perf.auto]})` : "");
+  el("quality").textContent = label;
+  el("pause-quality").textContent = label.toUpperCase();
+}
+function cycleQuality() {
+  const order = ["auto", "high", "medium", "low"];
+  perf.set = order[(order.indexOf(perf.set) + 1) % order.length];
+  writeStorage("strazh_quality", perf.set);
+  applyQuality();
+}
+el("quality").addEventListener("click", cycleQuality);
+onPress(el("pause-quality"), cycleQuality);
+
+// ---------- Меню: ангар, задания, «Бой дня» ----------
+function paintMenu() {
+  el("best").textContent = best;
+  el("credits-note").textContent = "◆ " + credits;
+  el("tasks-note").textContent = tasks.a.map((t) => Math.min(t.p, t.g) + "/" + t.g).join(" · ");
+  const today = dayCode();
+  el("daily-note").textContent = daily.d === today ? "✓ сегодня пройден" : daily.d === yesterday() && daily.s ? "🔥 серия " + daily.s : "новый каждый день";
+}
+let sheetKind = "";
+let sheetPressed = false;
+function openSheet(kind) {
+  sheetKind = kind;
+  const body = el("sheet-body");
+  if (kind === "hangar") {
+    const rows = HANGAR.map((key) => {
+      const [ic, name, about] = HANGAR_INFO[key];
+      const level = hangar[key];
+      const price = PRICE[level];
+      const buy = level >= 5 ? '<button class="buy" disabled>МАКС</button>' : `<button class="buy" data-buy="${key}"${credits < price ? " disabled" : ""}>◆ ${price}</button>`;
+      return `<div class="row-item" data-row="${key}"><i>${ic}</i><span><b>${name}</b> <em>${"●".repeat(level)}${"○".repeat(5 - level)}</em><small>${about}</small></span>${buy}</div>`;
+    }).join("");
+    body.innerHTML = `<h2 id="sheet-title">🛠️ Ангар</h2><p class="lead">Кристаллы дают бои и задания. Улучшения ангара действуют в каждом бою.</p><p><b>◆ ${credits}</b></p><div class="rows">${rows}</div>`;
+  } else if (kind === "tasks") {
+    const rows = tasks.a.map((t) => {
+      const m = MISSIONS[t.k];
+      return `<div class="row-item"><i>🎯</i><span><b>${m.text(t.g)}</b><small>${Math.min(t.p, t.g)} из ${t.g}</small></span><em>◆ ${t.r}</em><div class="meter"><i style="transform:scaleX(${Math.min(1, t.p / t.g).toFixed(3)})"></i></div></div>`;
+    }).join("");
+    body.innerHTML = `<h2 id="sheet-title">🎯 Задания</h2><p class="lead">Выполняй в любом бою — награда сразу, на месте выполненного появится новое задание.</p><div class="rows">${rows}</div>`;
+  } else {
+    const plan = dailyPlan();
+    const today = dayCode();
+    const done = daily.d === today;
+    const streak = daily.d === today || daily.d === yesterday() ? daily.s : 0;
+    body.innerHTML = `<h2 id="sheet-title">📅 Бой дня</h2><p class="rule">${RULES[plan.rule]}</p>
+      <p class="lead">Один для всех в этот день: начни с волны ${plan.start} и отбей пять волн подряд без повторов. Награда: ◆ ${40 + 10 * Math.min(7, streak + (done ? 0 : 1))} и серия дней.</p>
+      <p>Серия: <b>${streak}</b> · лучший счёт сегодня: <b>${daily.bd === today ? daily.b : 0}</b>${done ? " · ✓ пройден" : ""}</p>
+      <button class="big" data-go="daily">${done ? "ЕЩЁ РАЗ" : "В БОЙ"}</button>`;
+  }
+  el("menu").hidden = true;
+  el("sheet").hidden = false;
+  sheetPressed = false;
+  el("sheet-back").focus({ preventScroll: true });
+}
+function closeSheet() {
+  el("sheet").hidden = true;
+  if (S.state === "menu") {
+    paintMenu();
+    el("menu").hidden = false;
+  }
+}
+el("sheet").addEventListener("pointerdown", () => (sheetPressed = true));
+el("sheet-body").addEventListener("click", (event) => {
+  if (event.detail !== 0 && !sheetPressed) return;
+  const buy = event.target.closest("[data-buy]");
+  const go = event.target.closest("[data-go]");
+  if (buy) {
+    const key = buy.dataset.buy;
+    const price = PRICE[hangar[key]];
+    if (hangar[key] >= 5 || credits < price) return;
+    credits -= price;
+    hangar[key]++;
+    store();
+    Sound.unlock();
+    Sound.bonus();
+    openSheet("hangar");
+    el("sheet-body").querySelector(`[data-row="${key}"]`)?.classList.add("bought");
+  } else if (go && S.state === "menu") {
+    el("sheet").hidden = true;
+    newRun("daily");
+  }
+});
+onPress(el("sheet-back"), closeSheet);
+onPress(el("open-hangar"), () => openSheet("hangar"));
+onPress(el("open-tasks"), () => openSheet("tasks"));
+onPress(el("open-daily"), () => openSheet("daily"));
+
+best = whole(save.best, 9999);
+paintMenu();
+el("menu-row").hidden = false;
+applyQuality();
 requestAnimationFrame(frame);
 el("start").disabled = false;
 el("load-status").hidden = true;
@@ -1591,6 +2342,15 @@ window.strazh = {
   speed: (k) => (debugSpeed = k),
   tally: () => ({ ...tally }),
   glow: (value) => (perf.glow = value),
+  quality: (level) => ((perf.set = level), applyQuality(), perf.level()),
+  give: (n) => ((credits += n), store(), paintMenu(), credits),
+  special: (id) => SPECIALS.find((u) => u.id === id)?.apply(),
+  score: (n) => (score += n),
+  turret: () => ({ ...S }),
+  extra: () => ({ arcs: arcs.length, marks: marks.length, meteors: { ...meteors }, meteorStage, drones: drones.filter((d) => d.visible).length }),
+  enemies: () => enemies.map((e) => ({ id: e.id, kind: e.kind, hp: e.hp, max: e.max, guard: e.guard > 0, open: !!e.open, hatch: !!e.hatch, shielded: !!e.shielded, dist: e.pos.length() })),
+  hitId: (id, amount) => enemies.filter((e) => e.id === id).forEach((e) => damage(e, amount)),
+  meta: () => ({ credits, hangar: { ...hangar }, tasks: tasks.a.map((t) => ({ ...t, key: MISSIONS[t.k].key })), daily: { ...daily }, mode, rule, quality: perf.level() }),
   hit: (kind, amount) => enemies.filter((e) => e.kind === kind).forEach((e) => damage(e, amount)),
   audio: () => Sound.level(),
   face(id, dYaw = 0, dPitch = 0) {

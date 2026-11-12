@@ -1,5 +1,5 @@
 // Общие мелочи для сцены: материалы, заготовки геометрии, мягкое пятно света.
-import * as T from "../vendor/three/three.module.min.js?v=7aee9fb1";
+import * as T from "../vendor/three/three.module.min.js?v=a9e9d095";
 
 export { T };
 export const TAU = Math.PI * 2;

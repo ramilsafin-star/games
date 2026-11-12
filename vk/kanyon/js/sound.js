@@ -1,6 +1,6 @@
 // Звук «Грозового каньона»: всё синтезируется на лету, файлов нет.
 // Эффекты и тихая музыка идут через общий компрессор, чтобы взрывы не перегружали динамик.
-import { readStorage, writeStorage } from "./kit.js?v=7aee9fb1";
+import { readStorage, writeStorage } from "./kit.js?v=a9e9d095";
 
 const Audio = window.AudioContext || window.webkitAudioContext;
 let ctx = null,
@@ -197,4 +197,11 @@ export const Sound = {
   won: () => [392, 523, 659, 784, 1047].forEach((f, i) => tone(f, 0.4, "triangle", 0.14, 1, i * 0.13)),
   lost: () => tone(220, 0.8, "triangle", 0.16, 0.3),
   tick: () => tone(660, 0.07, "sine", 0.08),
+  // капсула с оружием, молния, щит, задание зоны, прицел снайпера
+  capsule: () => [660, 880, 1320].forEach((f, i) => tone(f, 0.16, "square", 0.05, 1.02, i * 0.05)),
+  zap: () => (noise(0.12, 0.12, 7000, 2500, 0, "highpass"), tone(1800, 0.08, "sawtooth", 0.03, 0.4)),
+  shield: () => (tone(520, 0.25, "sine", 0.14, 1.6), tone(1040, 0.2, "triangle", 0.06, 1.3)),
+  block: () => tone(2100, 0.05, "triangle", 0.035, 0.8),
+  task: () => [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.22, "triangle", 0.13, 1, i * 0.08)),
+  lock: () => tone(880, 0.9, "sine", 0.05, 1.5),
 };

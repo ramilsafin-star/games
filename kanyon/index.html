@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#1a1420">
   <title>Грозовой каньон</title>
-  <meta name="description" content="3D-шутер: истребитель «Стриж» летит через пять зон каньона. Уворачивайся от скал и молний, сбивай роботов-стражей, собирай модули и победи хозяев зон.">
+  <meta name="description" content="3D-шутер: истребитель «Стриж» летит через семь зон каньона. Уворачивайся от скал, молний и сосулек, сбивай роботов-стражей и крейсеры, лови капсулы с оружием, улучшай истребитель в мастерской и побей рекорд бесконечного полёта.">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./style.css?v=4a3b319e">
+  <link rel="stylesheet" href="./style.css?v=9a05a695">
 </head>
 <body data-mode="menu">
   <canvas id="stage" aria-label="Каньон"></canvas>
@@ -25,7 +25,8 @@
   <div id="boss" class="boss" hidden><span id="boss-name">СТОРОЖ УЩЕЛЬЯ</span><div class="track"><i id="boss-fill"></i></div></div>
   <div id="announcement" aria-live="polite"></div>
   <div id="controls" hidden>
-    <div class="hull"><div id="combo" hidden>серия ×1.1</div><div class="row"><b>КОРПУС</b><span id="hp">100</span></div><div class="track"><i id="hull-fill"></i></div><div id="mods" aria-label="Модули" hidden></div></div>
+    <div class="hull"><div id="combo" hidden>серия ×1.1</div><div id="task" hidden><b aria-hidden="true">★</b> <span id="task-label">Задание</span> <em id="task-n">0/0</em></div><div class="row"><b>КОРПУС</b><span id="hp">100</span></div><div class="track"><i id="hull-fill"></i></div><div id="mods" aria-label="Модули" hidden></div></div>
+    <div id="power" hidden><b id="power-name">ПЛАЗМА</b><div class="track"><i id="power-fill"></i></div></div>
     <button id="rocket" aria-label="Пустить ракеты">
       <svg aria-hidden="true" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"><path d="M24 5c6 5 8 12 8 20l-3 8H19l-3-8c0-8 2-15 8-20z"/><path d="M16 26l-6 7 7 1M32 26l6 7-7 1M21 38l3 6 3-6"/><circle cx="24" cy="19" r="3.2"/></svg>
       <span id="rocket-label">РАКЕТЫ</span>
@@ -36,7 +37,7 @@
     <div class="intro-card">
       <span class="eyebrow"><i></i> РЕЙД «СТРИЖА»</span>
       <h1>Грозовой<br> <em>каньон</em></h1>
-      <p>Пять зон, пять хозяев. Долети до Небесной цитадели!</p>
+      <p>Семь зон, семь хозяев. Долети до Небесной цитадели!</p>
       <div class="how">
         <span><b>✥</b> Веди истребитель пальцем</span>
         <span><b>◆</b> Лазеры стреляют сами</span>
@@ -44,14 +45,19 @@
       </div>
       <div id="levels" class="seg" role="radiogroup" aria-label="Сложность"></div>
       <button id="start" class="primary" disabled>На взлёт <span aria-hidden="true">↑</span></button>
+      <div class="modes">
+        <button id="endless" class="ghost" type="button"><b aria-hidden="true">∞</b> Бесконечный полёт</button>
+        <button id="shop" class="ghost" type="button"><b aria-hidden="true">⚙</b> Мастерская <em id="parts">0</em></button>
+      </div>
       <p id="load" role="status">Прогреваем двигатели…</p>
       <small class="desktop">Клавиши WASD или стрелки · пробел — ракеты</small>
       <small id="best" hidden></small>
+      <button id="quality" class="link" type="button">Графика: авто</button>
     </div>
   </main>
   <section id="panel" class="veil" hidden aria-labelledby="panel-title">
     <div class="sheet" id="panel-body"></div>
   </section>
-  <script type="module" src="./js/boot.js?v=4a3b319e"></script>
+  <script type="module" src="./js/boot.js?v=9a05a695"></script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 // Звук «Виража»: мотор, шины, нитро, сигналы светофора и лёгкая музыка. Всё синтезируется, файлов нет.
-import { readStorage, writeStorage } from "./kit.js?v=b8d55922";
+import { readStorage, writeStorage } from "./kit.js?v=c71ae3b5";
 
 const Audio = window.AudioContext || window.webkitAudioContext;
 await window.vkGameHost?.ready; // облачное сохранение VK уже в localStorage
@@ -110,6 +110,7 @@ const SONGS = {
   pine: { bpm: 122, bars: [[5, 9, 12], [0, 4, 7], [2, 5, 9], [10, 14, 17]] },
   canyon: { bpm: 128, bars: [[7, 10, 14], [3, 7, 10], [10, 14, 17], [5, 9, 12]] },
   city: { bpm: 132, bars: [[0, 3, 7], [8, 12, 15], [3, 7, 10], [10, 14, 17]] },
+  snow: { bpm: 124, bars: [[2, 5, 9], [10, 14, 17], [7, 10, 14], [5, 9, 12]] },
 };
 let song = null, step = 0, nextAt = 0, timer = 0;
 function voice(type, f, t, d, v, cutoff = 0) {
@@ -236,6 +237,12 @@ export const Sound = {
   last: () => [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.22, "square", 0.07, 1, i * 0.09)),
   reset: () => tone(500, 0.3, "sine", 0.1, 0.5),
   wrong: () => (tone(330, 0.16, "square", 0.07), tone(247, 0.25, "square", 0.07, 1, 0.17)),
+  // мини-турбо (1 — короткое, 2 — длинное), тяга, монеты, награда
+  turbo: (k) => (noise(0.35, 0.18 + k * 0.06, 1200, 5200), tone(240, 0.35, "sawtooth", 0.05 + k * 0.02, 2.6)),
+  draft: () => noise(0.6, 0.08, 300, 1600, 0, "bandpass"),
+  coin: () => [988, 1319].forEach((f, i) => tone(f, 0.12, "square", 0.05, 1, i * 0.07)),
+  award: () => [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.24, "triangle", 0.12, 1, i * 0.08)),
+  buy: () => [392, 523, 784].forEach((f, i) => tone(f, 0.18, "triangle", 0.12, 1, i * 0.07)),
   finish(place) {
     const win = place <= 3;
     (win ? [523, 659, 784, 1047, 784, 1047, 1319] : [523, 494, 440, 523]).forEach((f, i) => tone(f, win && i > 3 ? 0.36 : 0.2, "triangle", 0.14, 1, i * 0.13));

@@ -1,7 +1,7 @@
 // Эффекты «Грозового каньона»: мягкие частицы (огонь, дым, вспышки, ударные кольца), искры,
 // обломки и свет от взрывов. Мир летит навстречу, поэтому всё, что повисло в воздухе,
 // сносит назад со скоростью flow (её задаёт сцена).
-import { T, TAU, rand, pick, V, hot, GEO } from "./kit.js?v=4a3b319e";
+import { T, TAU, rand, pick, V, hot, GEO } from "./kit.js?v=9a05a695";
 
 export const GLOW = 0,
   SMOKE = 1,
@@ -90,6 +90,8 @@ export function createFx(scene, camera) {
   }));
   let alive = 0;
   function puff(kind, p, v, s0, s1, life, c0, alpha = 1, c1 = c0, drag = 0, spin = 0) {
+    // на средней и низкой графике часть мелких частиц пропускаем (ударные кольца — никогда)
+    if (api.thin < 1 && kind !== RING && Math.random() > api.thin) return;
     const q = alive < MAX ? cells[alive++] : cells[Math.floor(Math.random() * MAX)];
     v ||= ZERO;
     q.x = p.x; q.y = p.y; q.z = p.z;
@@ -257,5 +259,6 @@ export function createFx(scene, camera) {
     }
   }
 
-  return { puff, burst, debris, explode, light, update, setFlow: (value) => (flow = value) };
+  const api = { puff, burst, debris, explode, light, update, setFlow: (value) => (flow = value), thin: 1 };
+  return api;
 }

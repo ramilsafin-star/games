@@ -1,5 +1,5 @@
 // Частицы «Виража»: дым, пыль, искры, конфетти, следы шин. Каждый вид — один InstancedMesh.
-import * as T from "../vendor/three/three.module.min.js?v=b8d55922";
+import * as T from "../vendor/three/three.module.min.js?v=c71ae3b5";
 
 const M = new T.Matrix4(), Q = new T.Quaternion(), E = new T.Euler(), S = new T.Vector3(), P = new T.Vector3();
 const C = new T.Color();
@@ -9,6 +9,7 @@ export class Pool {
   constructor(scene, max, geometry, material) {
     this.max = max;
     this.count = 0;
+    this.thin = 1;
     this.data = new Float32Array(max * N);
     this.mesh = new T.InstancedMesh(geometry, material, max);
     this.mesh.instanceMatrix.setUsage(T.DynamicDrawUsage);
@@ -21,6 +22,8 @@ export class Pool {
 
   // o: size, grow (во сколько раз вырастет), gravity, drag, spin, stretch (вытянуть вдоль z), yaw
   spawn(x, y, z, vx, vy, vz, life, color, o = {}) {
+    // на средней и низкой графике часть дыма и искр пропускаем
+    if (this.thin < 1 && Math.random() > this.thin) return;
     let i = this.count;
     if (i >= this.max) i = Math.floor(Math.random() * this.max); // переполнение: затираем случайную
     else this.count++;

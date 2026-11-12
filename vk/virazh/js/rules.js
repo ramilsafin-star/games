@@ -2,8 +2,8 @@
 // Заезд можно гонять в Node в сотни раз быстрее настоящего (tests/sim.mjs).
 // Углы: yaw — куда смотрит нос, va — куда на самом деле летит машина (в заносе они расходятся).
 // Руль: +1 — вправо. Поперёк трассы: d > 0 — левее оси.
-import { clamp, damp, wrapAngle } from "./kit.js?v=b8d55922";
-import { rampHeight, trackPoint } from "./tracks.js?v=b8d55922";
+import { clamp, damp, wrapAngle } from "./kit.js?v=c71ae3b5";
+import { iceAt, rampHeight, trackPoint } from "./tracks.js?v=c71ae3b5";
 
 export const LAPS = 3;
 export const POINTS = [10, 7, 5, 3, 2, 1];
@@ -25,11 +25,21 @@ const PECKING = [3, 0, 5, 2, 1, 4];
 // slot — место игрока на старте (с нуля), slow/fast — «резинка»: насколько соперник сбавляет впереди и прибавляет позади,
 // assist — помощь рулю игрока: машина сама подруливает вдоль дороги (на «Новичке» малыш доедет, даже не трогая экран)
 // ease — помощь тормозу: машина сама притормаживает, если едет быстрее безопасной скорости поворота × ease (0 — нет помощи)
+// engine — мотор соперников (у игрока есть мини-турбо и гараж, у «Чемпиона» соперники тоже прокачаны),
+// draft — едут ли соперники в тяге друг за другом (на «Новичке» нет: малыш сам в тягу не попадает)
 export const DIFFS = [
-  { id: "easy", name: "Новичок", top: 0.86, corner: 0.86, spread: 0.055, slot: 3, slow: 0.1, fast: 0.02, nitro: 0.12, assist: 0.45, ease: 1.08 },
-  { id: "mid", name: "Гонщик", top: 0.93, corner: 1.0, spread: 0.05, slot: 5, slow: 0.05, fast: 0.035, nitro: 0.5, assist: 0 },
-  { id: "hard", name: "Чемпион", top: 0.995, corner: 1.18, spread: 0.04, slot: 5, slow: 0.02, fast: 0.045, nitro: 0.9, assist: 0 },
+  { id: "easy", name: "Новичок", top: 0.86, corner: 0.86, spread: 0.055, slot: 3, slow: 0.1, fast: 0.02, nitro: 0.12, assist: 0.45, ease: 1.08, engine: 0, draft: false },
+  { id: "mid", name: "Гонщик", top: 0.93, corner: 1.0, spread: 0.05, slot: 5, slow: 0.05, fast: 0.035, nitro: 0.5, assist: 0, engine: 0, draft: true },
+  { id: "hard", name: "Чемпион", top: 0.995, corner: 1.18, spread: 0.04, slot: 5, slow: 0.02, fast: 0.045, nitro: 0.9, assist: 0, engine: 1.6, draft: true },
 ];
+
+// Гараж: три узла по три уровня. Что даёт уровень — UPGRADE, цена уровня 1, 2, 3 — UPGRADE_COST
+export const UPGRADE = {
+  engine: { top: 0.022, accel: 0.06 }, // мотор: предельная скорость и разгон
+  tires: { grip: 0.07, turn: 0.035 }, // шины: держат дорогу и рулят
+  nitro: { time: 0.12, fill: 0.15 }, // нитро: дольше горит, быстрее копится в заносе
+};
+export const UPGRADE_COST = [120, 260, 450];
 
 export const PHYS = {
   vmax: 40, // предельная скорость без ускорений (на приборе ×4.5 км/ч)
@@ -53,6 +63,11 @@ export const PHYS = {
   gravity: 24,
   radius: 1.3, // машина — два круга такого радиуса на расстоянии axle от центра
   axle: 1.15,
+  turbo1: 0.75, // мини-турбо: занос дольше стольких секунд даёт короткий рывок
+  turbo2: 1.7, // а дольше этих — длинный («оранжевый»)
+  draftTop: 1.06, // в тяге за соперником предельная скорость выше
+  draftNitro: 0.1, // и копится нитро (зарядов в секунду)
+  iceGrip: 0.5, // на льду машину держит слабее
 };
 
 // Куда рулить, чтобы приехать в точку трассы впереди со сдвигом offset от оси
@@ -105,6 +120,25 @@ class Car {
     this.resets = 0;
     this.wallHits = 0;
     this.ai = null;
+    this.charge = 0; // сколько длится нынешний занос (для мини-турбо)
+    this.turbos = 0;
+    this.longDrift = 0; // самый долгий занос заезда, с
+    this.draftT = 0; // сколько секунд едет в тяге
+    this.draft = false;
+    this.drafts = 0;
+    this.onIce = false;
+    // множители гаража (у соперников — единицы)
+    this.mod = { top: 1, accel: 1, grip: 1, turn: 1, nitroTime: 1, fill: 1 };
+  }
+
+  // уровни гаража: { engine, tires, nitro } от 0 до 3
+  tune(up = {}) {
+    const e = up.engine || 0, t = up.tires || 0, n = up.nitro || 0;
+    this.mod = {
+      top: 1 + UPGRADE.engine.top * e, accel: 1 + UPGRADE.engine.accel * e,
+      grip: 1 + UPGRADE.tires.grip * t, turn: 1 + UPGRADE.tires.turn * t,
+      nitroTime: 1 + UPGRADE.nitro.time * n, fill: 1 + UPGRADE.nitro.fill * n,
+    };
   }
 
   put(track, s, d) {
@@ -159,37 +193,56 @@ class Car {
     const air = this.air > this.ground + 0.05;
     const off = !air && Math.abs(this.d) > tr.half + 0.3;
     this.offroad = off;
+    this.onIce = !air && !off && iceAt(tr, this.s);
+    const mod = this.mod;
 
     if (inp.nitro && this.nitroT <= 0 && this.nitro >= 1) {
       this.nitro -= 1;
-      this.nitroT = P.nitroTime;
+      this.nitroT = P.nitroTime * mod.nitroTime;
       race.emit("nitro", this);
     }
     this.nitroT = Math.max(0, this.nitroT - dt);
     this.boostT = Math.max(0, this.boostT - dt);
     const push = this.nitroT > 0 ? P.nitroTop : this.boostT > 0 ? P.padTop : 1;
-    let top = P.vmax * push * (off ? P.offTop : 1);
+    let top = P.vmax * push * (off ? P.offTop : 1) * mod.top * (this.draft ? P.draftTop : 1);
     top *= 1 - clamp(tr.slope[this.i], -0.1, 0.1) * 0.5 * Math.cos(this.va - tr.yaw[this.i]);
 
     let v = this.v;
     const gas = inp.gas ?? 1;
     if (inp.brake) v = Math.max(Math.min(v, P.crawl), v - P.brake * dt);
-    else if (v < top) v = Math.min(top, v + P.accel * gas * clamp(1.25 - v / top, 0.15, 1) * (push > 1 ? 2.1 : 1) * dt);
+    else if (v < top) v = Math.min(top, v + P.accel * mod.accel * gas * clamp(1.25 - v / top, 0.15, 1) * (push > 1 ? 2.1 : 1) * dt);
     if (gas < 1 && !inp.brake) v = Math.max(0, v - (1 - gas) * 7 * dt);
     if (v > top) v = Math.max(top, v - (off ? 28 : 9) * dt);
 
     // руль и занос
     const speedK = clamp(v / 10, 0, 1) * (1 - 0.28 * clamp(v / P.vmax, 0, 1.3));
-    let yawRate = -this.steer * P.turn * speedK;
+    let yawRate = -this.steer * P.turn * speedK * mod.turn;
     const hard = Math.abs(this.steer) > 0.72 && v > P.vmax * 0.58 && !off && !air;
     if (hard) this.driftT += dt;
     else if (Math.abs(this.steer) < 0.4 || v < P.vmax * 0.45 || off) this.driftT = 0;
+    const wasDrift = this.drift;
     this.drift = this.driftT > 0.16;
-    let grip = off ? P.offGrip : P.grip;
+    let grip = (off ? P.offGrip : P.grip) * mod.grip;
     if (this.drift) {
       yawRate *= P.driftTurn;
-      grip = P.driftGrip;
-      this.nitro = Math.min(NITRO_MAX, this.nitro + P.driftNitro * dt);
+      grip = P.driftGrip * mod.grip;
+      this.nitro = Math.min(NITRO_MAX, this.nitro + P.driftNitro * mod.fill * dt);
+      this.charge += dt;
+      this.longDrift = Math.max(this.longDrift, this.charge);
+    } else if (wasDrift) {
+      // занос закончился: чем дольше он шёл, тем сильнее мини-турбо
+      if (this.charge >= P.turbo1 && !off) {
+        const big = this.charge >= P.turbo2;
+        this.boostT = Math.max(this.boostT, big ? 0.8 : 0.45);
+        v += big ? 2.4 : 1.4;
+        this.turbos++;
+        race.emit("turbo", this, big ? 2 : 1);
+      }
+      this.charge = 0;
+    } else this.charge = 0;
+    if (this.onIce) {
+      grip *= P.iceGrip;
+      yawRate *= 0.9;
     }
     if (air) {
       yawRate *= 0.25;
@@ -276,7 +329,8 @@ class Car {
 }
 
 export class Race {
-  // opts: difficulty (id), livery (номер машины игрока), random, laps, attract (все машины едут сами, финиша нет)
+  // opts: difficulty (id), livery (номер машины игрока), random, laps, attract (все машины едут сами, финиша нет),
+  // solo (заезд на время: соперников нет), upgrades (уровни гаража игрока), rival (номер раскраски «соперника дня» — он чуть быстрее)
   constructor(track, opts = {}) {
     this.track = track;
     this.random = opts.random || Math.random;
@@ -292,7 +346,8 @@ export class Race {
     this.finishers = 0;
 
     const mine = this.attract ? -1 : clamp(opts.livery ?? 0, 0, LIVERIES.length - 1);
-    const rivals = PECKING.filter((l) => l !== mine).slice(0, this.attract ? 6 : 5);
+    const rivals = opts.solo ? [] : PECKING.filter((l) => l !== mine).slice(0, this.attract ? 6 : 5);
+    this.solo = !!opts.solo;
     const slots = [0, 1, 2, 3, 4, 5];
     const mySlot = this.attract ? -1 : this.diff.slot;
     this.cars = [];
@@ -300,6 +355,8 @@ export class Race {
     if (!this.attract) {
       this.player = new Car(0, mine, true);
       this.player.ai = { top: 0.8, corner: 0.8, line: 0.6, lane: 0, offset: 0, nitroWait: 99 };
+      this.player.tune(opts.upgrades);
+      if (opts.solo) this.player.slot = 0;
       this.cars.push(this.player);
     }
     const free = slots.filter((s) => s !== mySlot);
@@ -308,9 +365,11 @@ export class Race {
       const jitter = (this.random() - 0.5) * 0.016;
       const weak = (rank / 4) * this.diff.spread - jitter;
       const pace = this.diff.id === "easy" ? (track.def?.novice ?? 1) : 1;
+      // «соперник дня» в гонке дня — самый быстрый в пелотоне
+      const star = opts.rival === livery ? 0.02 : 0;
       car.ai = {
         // на «Новичке» трасса может придержать соперников (novice в описании трассы): в «Ночном городе» углы круче
-        top: (this.diff.top - weak) * pace,
+        top: (this.diff.top - weak + star) * pace,
         corner: (this.diff.corner - weak * 1.2) * pace,
         line: 0.75 + this.random() * 0.25,
         lane: (this.random() * 2 - 1) * 1.5,
@@ -318,9 +377,10 @@ export class Race {
         nitroWait: 3 + this.random() * 6,
       };
       car.slot = free[rank];
+      car.tune({ engine: this.diff.engine });
       this.cars.push(car);
     });
-    if (this.player) this.player.slot = mySlot;
+    if (this.player) this.player.slot = opts.solo ? 0 : mySlot;
     for (const car of this.cars) {
       const d = car.slot % 2 ? -3.4 : 3.4;
       car.put(track, -(9 + car.slot * 7.5), d);
@@ -389,7 +449,36 @@ export class Race {
     if (!moving) return;
     this.collide();
     this.pickups(dt);
+    this.slipstream(dt);
     this.rank();
+  }
+
+  // Тяга: позади другой машины на прямой ехать легче — выше предел скорости и копится нитро
+  slipstream(dt) {
+    const tr = this.track, L = tr.length;
+    for (const car of this.cars) {
+      let behind = false;
+      if (car.v > 22 && !car.offroad && car.air <= car.ground + 0.05 && (car.player || this.diff.draft)) {
+        for (const o of this.cars) {
+          if (o === car || o.ghostT > 0) continue;
+          let gap = o.s - car.s;
+          if (gap > L / 2) gap -= L;
+          else if (gap < -L / 2) gap += L;
+          if (gap > 4.5 && gap < 19 && Math.abs(o.d - car.d) < 2.6) {
+            behind = true;
+            break;
+          }
+        }
+      }
+      car.draftT = behind ? car.draftT + dt : Math.max(0, car.draftT - dt * 2);
+      const was = car.draft;
+      car.draft = car.draftT > 0.45;
+      if (car.draft) car.nitro = Math.min(NITRO_MAX, car.nitro + PHYS.draftNitro * dt);
+      if (car.draft && !was) {
+        car.drafts++;
+        this.emit("draft", car);
+      }
+    }
   }
 
   // Соперник: держит линию, тормозит перед поворотом, объезжает тех, кто впереди
@@ -426,7 +515,7 @@ export class Race {
     const steer = steerTo(tr, car, ai.offset, look);
     const k = (car.i + Math.round((car.v * 0.1) / tr.ds)) % n;
     const push = car.nitroT > 0 ? P.nitroTop : car.boostT > 0 ? P.padTop : 1;
-    let vt = Math.min(tr.vp[k] * ai.corner, P.vmax * ai.top * push) * band;
+    let vt = Math.min(tr.vp[k] * ai.corner, P.vmax * ai.top * push * car.mod.top) * band;
     if (lift) vt = Math.min(vt, car.v - 1);
     let nitro = false;
     ai.nitroWait -= dt;

@@ -1,6 +1,6 @@
 // Модели «Стража орбиты»: корабли дронов, флагман, контейнер снабжения и спаренная пушка турели.
 // Все корабли смотрят носом вдоль −Z, двигатели сзади (+Z).
-import { T, TAU, V, metal, lit, GEO, part, at, along, flare } from "./kit.js?v=98456336";
+import { T, TAU, V, metal, lit, GEO, part, at, along, flare } from "./kit.js?v=c710c864";
 
 const FINISH = /* glsl */ `
   #include <tonemapping_fragment>
@@ -194,6 +194,116 @@ export const MODEL = {
     return g;
   },
 };
+
+// Минёр: пузатый грузовоз с отсеком мин снизу; мины сбрасывает по одной.
+MODEL.miner = () => {
+  const g = new T.Group();
+  const hull = metal("#c9822e", { emissive: "#5a2e08", emissiveIntensity: 0.4 });
+  const dark = metal("#3a2a1c");
+  g.add(part(GEO.ball, hull, 2.2, 1.5, 2.8), at(part(GEO.box, dark, 2.4, 0.8, 2.6), 0, -1.3, 0.2), at(part(GEO.ball, lit("#ffd27a", 1.8), 0.8, 0.5, 0.6), 0, 0.5, -2.3));
+  for (let i = -1; i <= 1; i++) g.add(at(part(GEO.ball, lit("#ff6a3a", 2.2), 0.35), i * 0.8, -1.75, 0.2));
+  for (const side of [-1, 1]) {
+    const fin = at(part(GEO.oct, metal("#e3a05a"), 1.6, 0.3, 1.4), side * 2.3, 0.2, 0.6);
+    fin.rotation.z = side * 0.3;
+    g.add(fin);
+    engine(g, side * 1.2, 0, 2.9, "#ffb35f", 2.2);
+  }
+  return g;
+};
+// Космическая мина: шар с шипами, медленно плывёт к станции.
+MODEL.mine = () => {
+  const g = new T.Group();
+  g.add(part(GEO.low, metal("#5a3a3a", { emissive: "#3a0c08", emissiveIntensity: 0.6 }), 1.1));
+  for (let i = 0; i < 6; i++) {
+    const dir = [V(1, 0, 0), V(-1, 0, 0), V(0, 1, 0), V(0, -1, 0), V(0, 0, 1), V(0, 0, -1)][i];
+    const spike = part(GEO.cone, metal("#9a8a8a"), 0.32, 0.9, 0.32);
+    spike.position.copy(dir).multiplyScalar(1.2);
+    spike.quaternion.setFromUnitVectors(V(0, 1, 0), dir);
+    g.add(spike);
+  }
+  const core = part(GEO.ball, lit("#ff5a3a", 2.6), 0.55);
+  g.add(core);
+  g.userData.core = core;
+  return g;
+};
+// Щитоносец: дальний корабль-излучатель, накрывает соседей щитом.
+MODEL.warden = () => {
+  const g = new T.Group();
+  const shell = metal("#2f6f9a", { emissive: "#0c3a5a", emissiveIntensity: 0.5 });
+  g.add(part(GEO.oct, shell, 2.2, 2.2, 3.2), at(part(GEO.ball, lit("#7fe0ff", 2.4), 1.0), 0, 0, -2.4));
+  const ring = part(GEO.ring, metal("#a8d8f0"), 3.2, 3.2, 2);
+  g.add(ring);
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * TAU;
+    g.add(at(part(GEO.ball, lit("#bff4ff", 2.2), 0.45), Math.cos(a) * 3.2, Math.sin(a) * 3.2, 0));
+  }
+  engine(g, 0, 0, 3.1, "#7fe0ff", 2.6);
+  g.userData.ring = ring;
+  return g;
+};
+// Метеор «Метеорного потока»: глыба с яркими прожилками; золотой даёт больше очков.
+MODEL.meteor = () => {
+  const g = new T.Group();
+  g.add(part(GEO.low, metal("#5d5a6e", { emissive: "#1d1a2e", emissiveIntensity: 0.4 }), 1.9, 1.6, 1.8));
+  const vein = lit("#7ff6ff", 2.4);
+  for (let i = 0; i < 5; i++) {
+    const shard = part(GEO.oct, vein, 0.35, 0.9, 0.35);
+    shard.position.set(Math.sin(i * 2.4) * 1.3, Math.cos(i * 1.7) * 1.1, Math.sin(i * 3.1) * 1.2);
+    shard.rotation.set(i, i * 2, 0);
+    g.add(shard);
+  }
+  g.userData.vein = vein;
+  return g;
+};
+// Улей: шестигранный корабль-матка с четырьмя люками. Люки по очереди открываются и выпускают ос;
+// открытый люк можно разбить, пока все четыре целы — корпус улья почти не пробить.
+MODEL.hive = () => {
+  const g = new T.Group();
+  const shell = metal("#8a6a2a", { emissive: "#3a2a08", emissiveIntensity: 0.5 });
+  const comb = metal("#d9a640", { emissive: "#6a4a10", emissiveIntensity: 0.4 });
+  const amber = lit("#ffc94a", 1.5);
+  g.add(along(part(GEO.hex, shell, 6.4, 7, 6.4)), at(along(part(GEO.hex, comb, 4.6, 1.2, 4.6)), 0, 0, -3.8));
+  // соты на носу
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 6) * TAU;
+    const r = i === 6 ? 0 : 2.4;
+    g.add(at(along(part(GEO.hex, i === 6 ? amber : comb, 1.1, 0.5, 1.1)), Math.cos(a) * r, Math.sin(a) * r, -4.5));
+  }
+  const spin = new T.Group();
+  spin.add(part(GEO.ring, metal("#6a4a1a"), 9, 9, 3), part(GEO.wave, lit("#ffc94a", 1.1), 9.8));
+  g.add(spin);
+  const anchors = [];
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * TAU + Math.PI / 4;
+    const hatch = new T.Group();
+    hatch.position.set(Math.cos(a) * 7.6, Math.sin(a) * 7.6, -1);
+    const glow = part(GEO.ball, lit("#ffe08a", 2.2), 0.9);
+    const lid = new T.Group();
+    lid.add(at(part(GEO.hex, metal("#b88a2a"), 1.6, 0.5, 1.6), 0, 0, 0));
+    lid.rotation.x = Math.PI / 2;
+    hatch.add(part(GEO.box, metal("#5a4418", { emissive: "#2a1a04", emissiveIntensity: 0.5 }), 2.4, 2.4, 1.8), at(glow, 0, 0, -0.9), at(lid, 0, 0, -1.1));
+    hatch.userData = { lid, glow };
+    spin.add(hatch);
+    anchors.push(hatch);
+  }
+  const core = at(part(GEO.ball, lit("#ffe6a0", 1.7), 1.2, 1.2, 0.5), 0, 0, -4.9);
+  const bubble = new T.Mesh(bubbleGeometry, bubbleMaterial());
+  bubble.material.uniforms.tint.value.set("#ffc94a");
+  g.add(core, bubble);
+  for (const side of [-1, 1]) engine(g, side * 2.4, 0, 3.8, "#ffc94a", 5);
+  Object.assign(g.userData, { spin, anchors, core, bubble });
+  return g;
+};
+// Дрон-напарник: маленький шар с пушкой, держится у турели.
+export function buildDrone() {
+  const g = new T.Group();
+  g.add(part(GEO.ball, metal("#9db2cd", { metalness: 0.7, roughness: 0.3 }), 0.22), at(along(part(GEO.cyl, metal("#31486c"), 0.06, 0.32, 0.06)), 0, 0, -0.24));
+  const eye = at(part(GEO.ball, lit("#9dffb0", 1.3), 0.09), 0, 0.06, -0.18);
+  g.add(eye, at(part(GEO.ring, lit("#9dffb0", 0.8), 0.3, 0.3, 0.6), 0, 0, 0));
+  g.userData.eye = eye;
+  g.scale.setScalar(0.42); // рядом с камерой даже маленькая деталь закрывает пол-экрана
+  return g;
+}
 
 // Спаренная лазерная пушка. Закреплена на камере, светящиеся детали меняют цвет с нагревом.
 export function buildGuns() {

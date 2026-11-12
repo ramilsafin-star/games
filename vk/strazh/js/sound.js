@@ -1,6 +1,6 @@
 // Звук «Стража орбиты»: всё синтезируется на лету, файлов нет.
 // Эффекты и тихая музыка идут через общий компрессор, чтобы взрывы не перегружали динамик.
-import { readStorage, writeStorage } from "./kit.js?v=bbca8b34";
+import { readStorage, writeStorage } from "./kit.js?v=ab118089";
 
 const Audio = window.AudioContext || window.webkitAudioContext;
 let ctx = null,
@@ -195,4 +195,9 @@ export const Sound = {
   beam: () => (noise(0.5, 0.45, 5000, 200), tone(300, 0.5, "sawtooth", 0.14, 0.2)),
   stagger: () => (tone(900, 0.18, "square", 0.08, 0.4), noise(0.25, 0.2, 4000, 700)),
   bonus: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.16, "triangle", 0.12, 1, i * 0.06)),
+  // выстрел дрона-напарника, разряд цепной молнии, сброс мины, удар о щит щитоносца
+  drone: () => tone(1500, 0.06, "triangle", 0.025, 0.6),
+  zap: () => (tone(2200, 0.12, "sawtooth", 0.04, 0.3), noise(0.12, 0.08, 8000, 2000, 0, "highpass")),
+  drop: () => tone(260, 0.25, "square", 0.05, 0.5),
+  perfect: () => [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.3, "triangle", 0.12, 1, i * 0.09)),
 };

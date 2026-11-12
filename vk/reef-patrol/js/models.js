@@ -1,5 +1,5 @@
-import * as T from "../vendor/three/three.module.min.js?v=151d9996";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=151d9996";
+import * as T from "../vendor/three/three.module.min.js?v=387c2c1e";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=387c2c1e";
 
 export const GEO = {
   sphere: new T.SphereGeometry(1, 22, 15),
@@ -294,7 +294,152 @@ function titan() {
   return g;
 }
 
-export const enemyModels = { crab, jelly, mine, puffer, eel, titan, boss: kraken };
+// Скат: плоское тело-ромб, крылья-ромбы машут (userData.wings), длинный хвост, светлые пятна на спине
+function ray() {
+  const g = new T.Group();
+  const back = enamel("#4d6fd0", 0.36);
+  const belly = enamel("#c7ddff", 0.5);
+  const spot = glow("#9ff0ff");
+  g.add(mesh(GEO.spark, back, 0, 0, 0, 0.55, 0.22, 1.05), mesh(GEO.spark, belly, 0, -0.05, 0.05, 0.42, 0.16, 0.8));
+  const wings = [];
+  for (const s of [-1, 1]) {
+    const wing = new T.Group();
+    wing.position.set(s * 0.3, 0, 0.1);
+    wing.add(mesh(GEO.spark, back, s * 0.75, 0, 0, 0.95, 0.07, 0.62), mesh(GEO.sphere, spot, s * 0.75, 0.06, -0.05, 0.13, 0.03, 0.13),
+      mesh(GEO.sphere, spot, s * 0.38, 0.08, 0.2, 0.08, 0.03, 0.08));
+    g.add(wing);
+    wings.push(wing);
+    g.add(mesh(GEO.sphere, pale, s * 0.18, 0.15, -0.66, 0.11), mesh(GEO.sphere, ink, s * 0.19, 0.2, -0.72, 0.06));
+  }
+  const tail = mesh(GEO.tube, back, 0, 0, 1.55, 0.05, 1.3, 0.05);
+  tail.rotation.x = Math.PI / 2;
+  g.add(tail, mesh(GEO.sphere, spot, 0, 0, 2.2, 0.09));
+  g.userData.wings = wings;
+  return g;
+}
+
+// Пузырь-ловушка ската: прозрачный шар с розовым огоньком внутри
+const bubbleSkin = new T.MeshStandardMaterial({ color: "#bff6ff", roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.42, emissive: "#3fb4d8", emissiveIntensity: 0.25, depthWrite: false });
+function bubble() {
+  const g = new T.Group();
+  g.add(mesh(GEO.sphere, bubbleSkin, 0, 0, 0, 0.55), mesh(GEO.sphere, glow("#ff8fc8"), 0, 0, 0, 0.17), mesh(GEO.sphere, glow("#ffffff"), -0.2, 0.26, -0.2, 0.09, 0.05, 0.09));
+  return g;
+}
+
+// Морская звезда-щитоносец: пять лучей, светлое сердце и кольцо щита
+function star() {
+  const g = new T.Group();
+  const skin = enamel("#ff8fc4", 0.42);
+  const tip = enamel("#ffd1e8", 0.5);
+  const body = new T.Group();
+  for (let i = 0; i < 5; i++) {
+    const a = i / 5 * Math.PI * 2;
+    const arm = mesh(GEO.cone, skin, Math.sin(a) * 0.5, 0, Math.cos(a) * 0.5, 0.26, 0.82, 0.14);
+    arm.rotation.set(Math.PI / 2, 0, 0);
+    const holder = new T.Group();
+    holder.rotation.y = a;
+    arm.position.set(0, 0, 0.52);
+    holder.add(arm, mesh(GEO.sphere, tip, 0, 0.02, 0.92, 0.1));
+    body.add(holder);
+  }
+  body.add(mesh(GEO.sphere, skin, 0, 0, 0, 0.42, 0.22, 0.42), mesh(GEO.sphere, glow("#fff2a8"), 0, 0.14, 0, 0.2, 0.1, 0.2));
+  const halo = mesh(GEO.ring, glow("#9ffcff"), 0, 0.05, 0, 1.25);
+  halo.rotation.x = Math.PI / 2;
+  g.add(body, halo);
+  g.userData.body = body;
+  g.userData.halo = halo;
+  return g;
+}
+
+// Сундучок-поплавок: не враг, внутри бонус
+function chest() {
+  const g = new T.Group();
+  const wood = enamel("#c27a3f", 0.55);
+  const gold = glow("#ffe07a");
+  g.add(mesh(GEO.box, wood, 0, 0, 0, 0.95, 0.55, 0.7), mesh(GEO.box, wood, 0, 0.36, 0, 0.98, 0.24, 0.72),
+    mesh(GEO.box, gold, 0, 0.02, -0.36, 0.2, 0.26, 0.06), mesh(GEO.box, gold, -0.5, 0.15, 0, 0.06, 0.82, 0.74), mesh(GEO.box, gold, 0.5, 0.15, 0, 0.06, 0.82, 0.74),
+    mesh(GEO.sphere, glow("#fff1a0"), 0, 0.62, 0, 0.16));
+  const float = mesh(GEO.sphere, enamel("#ff6f8f", 0.3), 0, 1.15, 0, 0.32);
+  const string = mesh(GEO.tube, pale, 0, 0.83, 0, 0.015, 0.4, 0.015);
+  g.add(float, string, mesh(GEO.sphere, pale, -0.1, 1.27, -0.18, 0.08));
+  g.userData.float = float;
+  return g;
+}
+
+// Черепаха-крепость: панцирь-крепость с тремя башенками; голова и ласты прячутся в панцирь
+function turtle() {
+  const g = new T.Group();
+  const shellMat = enamel("#3d9a72", 0.45);
+  const plate = enamel("#2b7558", 0.5);
+  const skin = enamel("#9ad7a2", 0.5);
+  const shell = new T.Group();
+  shell.add(mesh(GEO.sphere, shellMat, 0, 0.35, 0.1, 1.95, 1.05, 2.15), mesh(GEO.tube, enamel("#e9d18a", 0.55), 0, -0.02, 0.1, 2.05, 0.28, 2.25));
+  for (let i = 0; i < 6; i++) {
+    const a = i / 6 * Math.PI * 2;
+    shell.add(mesh(GEO.low, plate, Math.sin(a) * 1.15, 0.92, 0.1 + Math.cos(a) * 1.25, 0.45, 0.2, 0.45));
+  }
+  shell.add(mesh(GEO.low, plate, 0, 1.3, 0.1, 0.55, 0.25, 0.55));
+  const turrets = [];
+  for (const [x, z] of [[-0.95, -0.3], [0.95, -0.3], [0, 0.85]]) {
+    const turret = new T.Group();
+    turret.position.set(x, 1.25, z);
+    turret.add(mesh(GEO.tube, enamel("#6f8fa6", 0.3, 0.45), 0, 0, 0, 0.26, 0.4, 0.26), mesh(GEO.sphere, emberGlow, 0, 0.26, -0.18, 0.13));
+    shell.add(turret);
+    turrets.push(turret);
+  }
+  g.add(shell);
+  const head = new T.Group();
+  head.position.set(0, 0.25, -2.0);
+  head.add(mesh(GEO.sphere, skin, 0, 0, -0.3, 0.62, 0.52, 0.66));
+  for (const s of [-1, 1]) head.add(mesh(GEO.sphere, pale, s * 0.28, 0.2, -0.78, 0.16), mesh(GEO.sphere, ink, s * 0.3, 0.22, -0.9, 0.08));
+  head.add(mesh(GEO.box, enamel("#6fb98a", 0.5), 0, -0.18, -0.85, 0.36, 0.06, 0.12));
+  g.add(head);
+  const limbs = [];
+  for (const [x, z] of [[-1.7, -1.1], [1.7, -1.1], [-1.5, 1.3], [1.5, 1.3]]) {
+    const flipper = new T.Group();
+    flipper.position.set(x, 0, z);
+    flipper.add(mesh(GEO.sphere, skin, Math.sign(x) * 0.35, 0, 0, 0.75, 0.16, 0.38));
+    g.add(flipper);
+    limbs.push(flipper);
+  }
+  g.userData = { shell, head, flippers: limbs, turrets };
+  return g;
+}
+
+export const enemyModels = { crab, jelly, mine, puffer, eel, titan, boss: kraken, ray, bubble, star, chest, turtle };
+
+// Капсулы бонусов: стеклянный шар, внутри знак бонуса своего цвета
+export const POWER_COLOR = { spread: "#ffe066", bubble: "#7fe8ff", torpedo: "#ff9a4d", freeze: "#c8f0ff", repair: "#7dff9a" };
+export function capsule(kind) {
+  const g = new T.Group();
+  const color = POWER_COLOR[kind];
+  const core = glow(color);
+  g.add(mesh(GEO.sphere, bubbleSkin, 0, 0, 0, 0.48));
+  const inner = new T.Group();
+  if (kind === "spread") for (let i = -1; i <= 1; i++) inner.add(mesh(GEO.sphere, core, i * 0.17, 0, 0, 0.09));
+  else if (kind === "bubble") inner.add(mesh(GEO.ring, core, 0, 0, 0, 0.24), mesh(GEO.sphere, core, 0, 0, 0, 0.1));
+  else if (kind === "torpedo") {
+    const body = mesh(GEO.tube, core, 0, 0, 0, 0.08, 0.42, 0.08);
+    body.rotation.z = Math.PI / 2;
+    inner.add(body);
+  } else if (kind === "freeze") inner.add(mesh(GEO.spark, core, 0, 0, 0, 0.2, 0.26, 0.2));
+  else inner.add(mesh(GEO.box, core, 0, 0, 0, 0.36, 0.11, 0.11), mesh(GEO.box, core, 0, 0, 0, 0.11, 0.36, 0.11));
+  g.add(inner, mesh(GEO.ring, core, 0, 0, 0, 0.62));
+  g.userData.inner = inner;
+  return g;
+}
+
+// Торпеда: оранжевый корпус, светящийся хвост
+const torpedoBody = enamel("#ffb36b", 0.3, 0.3);
+export function torpedo() {
+  const g = new T.Group();
+  const body = mesh(GEO.tube, torpedoBody, 0, 0, 0, 0.11, 0.62, 0.11);
+  body.rotation.x = Math.PI / 2;
+  const nose = mesh(GEO.cone, ink, 0, 0, -0.42, 0.11, 0.22, 0.11);
+  nose.rotation.x = -Math.PI / 2;
+  g.add(body, nose, mesh(GEO.sphere, glow("#ffe0a0"), 0, 0, 0.36, 0.1));
+  return g;
+}
 
 // Рыбка для стаек у дна: тело и хвост одним куском, нос смотрит в −z; красится общим материалом стаи
 export function fishGeometry() {

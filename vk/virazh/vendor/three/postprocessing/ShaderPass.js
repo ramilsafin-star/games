@@ -1,8 +1,8 @@
 import {
 	ShaderMaterial,
 	UniformsUtils
-} from '../three.module.min.js?v=b8d55922';
-import { Pass, FullScreenQuad } from './Pass.js?v=b8d55922';
+} from '../three.module.min.js?v=c71ae3b5';
+import { Pass, FullScreenQuad } from './Pass.js?v=c71ae3b5';
 
 /**
  * This pass can be used to create a post processing effect

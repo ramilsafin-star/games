@@ -1,21 +1,24 @@
 // Сцена «Грозового каньона»: стены и дно едут навстречу, истребитель стоит в плоскости z = 0.
 // Правила (rules.js) ничего не знают о графике; здесь только то, что видно.
-import { T, GEO, TAU, V, clamp, hot, lit, part, at, flare } from "./kit.js?v=4a3b319e";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=4a3b319e";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=4a3b319e";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=4a3b319e";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=4a3b319e";
-import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=4a3b319e";
-import { createFx, tone, GLOW, SMOKE, FIRE, RING, STAR } from "./fx.js?v=4a3b319e";
-import { jet, wingman, enemyModels, enemyColor, pillar, arch, ridge, ringGate, GEM_GEO, gemMaterial, repairKit } from "./models.js?v=4a3b319e";
-import { SCROLL, FAR } from "./rules.js?v=4a3b319e";
+import { T, GEO, TAU, V, clamp, hot, lit, part, at, flare } from "./kit.js?v=9a05a695";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=9a05a695";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=9a05a695";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=9a05a695";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=9a05a695";
+import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=9a05a695";
+import { createFx, tone, GLOW, SMOKE, FIRE, RING, STAR } from "./fx.js?v=9a05a695";
+import { jet, wingman, enemyModels, enemyColor, pillar, arch, ridge, ringGate, GEM_GEO, gemMaterial, repairKit, capsule, CAPSULE_COLOR } from "./models.js?v=9a05a695";
+import { SCROLL, FAR } from "./rules.js?v=9a05a695";
 
-// Оформление зон. rock/rock2 — два оттенка скал, glow — цвет светящихся вкраплений (или null).
+// Оформление зон по порядку. rock/rock2 — два оттенка скал, glow — цвет светящихся вкраплений (или null),
+// rain/snow — осадки, lightning — молнии в небе.
 const THEMES = [
   { top: "#2f66d0", low: "#ffb07a", fog: "#f0a273", rock: "#b0523a", rock2: "#de8a54", floor: "#c58454", lava: 0, sun: "#fff0c8", sunPower: 3.2, sky: "#ffdcc0", ground: "#7a3b2b", amb: 1.25, glow: null, stars: 0 },
   { top: "#081530", low: "#1b6c88", fog: "#14546a", rock: "#2c4667", rock2: "#44739a", floor: "#234a66", lava: 0, sun: "#bff4ff", sunPower: 2.3, sky: "#8fe6ff", ground: "#14263f", amb: 1.3, glow: "#58f0ff", stars: 0.3 },
-  { top: "#1d2333", low: "#58677f", fog: "#4f5d76", rock: "#474f62", rock2: "#6b768c", floor: "#434e60", lava: 0, sun: "#dfe8ff", sunPower: 2.0, sky: "#b4c2dc", ground: "#2a3040", amb: 1.35, glow: null, stars: 0, rain: true },
+  { top: "#1d2333", low: "#58677f", fog: "#4f5d76", rock: "#474f62", rock2: "#6b768c", floor: "#434e60", lava: 0, sun: "#dfe8ff", sunPower: 2.0, sky: "#b4c2dc", ground: "#2a3040", amb: 1.35, glow: null, stars: 0, rain: true, lightning: true },
+  { top: "#2f69b8", low: "#cfeaff", fog: "#9fc7e2", rock: "#6a93bb", rock2: "#cfe8f8", floor: "#93bcd8", lava: 0, sun: "#ffffff", sunPower: 2.5, sky: "#dcefff", ground: "#56789e", amb: 1.25, glow: "#9ff0ff", stars: 0, snow: true },
   { top: "#240c10", low: "#c4421c", fog: "#8a2c16", rock: "#36201f", rock2: "#5e3029", floor: "#3a1a14", lava: 1, sun: "#ffb37a", sunPower: 2.4, sky: "#ffa060", ground: "#ff4a10", amb: 1.4, glow: "#ff8a2a", stars: 0, embers: true },
+  { top: "#0e0824", low: "#57307e", fog: "#3a2462", rock: "#3a3060", rock2: "#5f4c92", floor: "#2f2550", lava: 0, sun: "#e0c4ff", sunPower: 2.1, sky: "#c4a8f4", ground: "#24183c", amb: 1.45, glow: "#c08aff", stars: 0.7, rain: true, lightning: true },
   { top: "#171a52", low: "#ff8fb0", fog: "#b287cc", rock: "#6a65a4", rock2: "#a094dc", floor: "#e6d2ff", lava: 0, sun: "#ffe6f2", sunPower: 2.8, sky: "#dccaff", ground: "#6a5a9a", amb: 1.45, glow: "#ffd27a", stars: 1, clouds: true },
 ];
 const COLOR_KEYS = ["top", "low", "fog", "rock", "rock2", "floor", "sun", "sky", "ground"];
@@ -188,6 +191,22 @@ export class CanyonView {
     this.rainMesh.frustumCulled = false;
     this.rainMesh.visible = false;
     scene.add(this.rainMesh);
+    // снег ледяного разлома
+    this.snow = Array.from({ length: 220 }, () => ({ x: (random() - 0.5) * 60, y: random() * 26, z: -random() * 120 + 8, v: 2 + random() * 3, w: random() * TAU }));
+    this.snowMesh = new T.InstancedMesh(GEO.oct, new T.MeshBasicMaterial({ color: "#ffffff", toneMapped: false, fog: true }), this.snow.length);
+    this.snowMesh.frustumCulled = false;
+    this.snowMesh.visible = false;
+    scene.add(this.snowMesh);
+    // зигзаги: молния-оружие, линия прицела снайпера, молнии в небе грозовых зон
+    this.zigMat = new T.MeshBasicMaterial({ color: "#ffffff", toneMapped: false, fog: false, transparent: true, depthWrite: false });
+    this.zigMesh = new T.InstancedMesh(GEO.box, this.zigMat, 260);
+    this.zigMesh.frustumCulled = false;
+    this.zigMesh.count = 0;
+    this.zigMesh.setColorAt(0, new T.Color());
+    this.zigMesh.renderOrder = 7;
+    scene.add(this.zigMesh);
+    this.strikes = []; // { points, color, life, max, width, jag }
+    this.skyBolt = 2;
 
     // ---------- Истребитель, ведомые, прицел ----------
     this.ship = jet();
@@ -196,6 +215,30 @@ export class CanyonView {
     scene.add(this.ship);
     this.wings = [wingman(), wingman()];
     this.wings.forEach(w => ((w.visible = false), scene.add(w)));
+    // пузырь щита вокруг «Стрижа»
+    this.bubbleMat = new T.MeshBasicMaterial({ color: hot("#6fd8ff", 1.4), transparent: true, opacity: 0.22, toneMapped: false, depthWrite: false, blending: T.AdditiveBlending });
+    this.bubble = new T.Group();
+    this.bubble.add(part(GEO.low, this.bubbleMat, 2.5, 1.5, 2.6), part(GEO.ring, lit("#9fe8ff", 2.2), 2.55, 2.55, 1.2));
+    this.bubble.children[1].rotation.x = Math.PI / 2;
+    this.bubble.visible = false;
+    this.bubblePulse = 0;
+    scene.add(this.bubble);
+    // инверсионные следы: две ленты от кончиков крыльев, воздух уносит их назад вместе с миром
+    this.trails = [-1, 1].map(() => {
+      const N = 16;
+      const geometry = new T.BufferGeometry();
+      const pos = new Float32Array(N * 2 * 3), col = new Float32Array(N * 2 * 3);
+      geometry.setAttribute("position", new T.BufferAttribute(pos, 3).setUsage(T.DynamicDrawUsage));
+      geometry.setAttribute("color", new T.BufferAttribute(col, 3).setUsage(T.DynamicDrawUsage));
+      const index = [];
+      for (let i = 0; i < N - 1; i++) index.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
+      geometry.setIndex(index);
+      const mesh = new T.Mesh(geometry, new T.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: T.AdditiveBlending, depthWrite: false, toneMapped: false, fog: false, side: T.DoubleSide }));
+      mesh.frustumCulled = false;
+      mesh.renderOrder = 5;
+      scene.add(mesh);
+      return { mesh, pos, col, N, points: Array.from({ length: N }, () => V(0, 0, 0)), age: new Float32Array(N), fresh: true };
+    });
     const sightMat = new T.MeshBasicMaterial({ color: hot("#7fe9ff", 1.6), transparent: true, opacity: 0.55, toneMapped: false, depthTest: false, fog: false });
     this.sightNear = part(GEO.wave, sightMat, 1.0);
     this.lockMat = new T.MeshBasicMaterial({ color: hot("#ffb02e", 2.2), transparent: true, opacity: 0.9, toneMapped: false, depthTest: false, fog: false });
@@ -213,6 +256,7 @@ export class CanyonView {
       return mesh;
     };
     this.boltMesh = pool(GEO.box, lit("#6fe6ff", 3.2), 220);
+    this.plasmaMesh = pool(GEO.box, lit("#ff6ad8", 3.2), 200);
     this.shotMesh = pool(GEO.ball, new T.MeshBasicMaterial({ toneMapped: false }), 110);
     this.shotMesh.setColorAt(0, new T.Color());
     this.threatMesh = pool(GEO.wave, new T.MeshBasicMaterial({ color: hot("#ff5a3a", 2.4), toneMapped: false, depthTest: false, fog: false }), 40);
@@ -232,7 +276,7 @@ export class CanyonView {
 
     // ---------- Свечение и финальная цветокоррекция ----------
     this.grade = new ShaderPass({
-      uniforms: { tDiffuse: { value: null }, hurt: { value: 0 } },
+      uniforms: { tDiffuse: { value: null }, hurt: { value: 0 }, white: { value: 0 } },
       vertexShader: /* glsl */ `
         varying vec2 vUv;
         void main() {
@@ -241,7 +285,7 @@ export class CanyonView {
         }`,
       fragmentShader: /* glsl */ `
         uniform sampler2D tDiffuse;
-        uniform float hurt;
+        uniform float hurt, white;
         varying vec2 vUv;
         void main() {
           vec2 c = vUv - 0.5;
@@ -251,6 +295,7 @@ export class CanyonView {
           col *= 1.0 - smoothstep(0.18, 0.75, r2) * 0.42;
           col = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 1.12);
           col = mix(col, vec3(1.0, 0.18, 0.12), hurt * smoothstep(0.05, 0.5, r2) * 0.6);
+          col = mix(col, vec3(1.0, 0.97, 0.9), white);
           gl_FragColor = vec4(col, 1.0);
         }`,
     });
@@ -260,7 +305,114 @@ export class CanyonView {
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
     this.composer.addPass(this.grade);
-    this.perf = { glow: true, slow: 0, seen: 0 };
+    this.perf = { sum: 0, seen: 0, dropAt: 0 };
+    this.slow = 0; // замедление после победы над хозяином зоны
+    this.white = 0; // белая вспышка на весь экран
+    this.choice = "auto";
+    this.quality = "high";
+    this.applyQuality();
+  }
+
+  // Качество графики: auto (сам решает и снижает, если кадры тяжёлые), high, mid, low
+  setQuality(choice) {
+    this.choice = choice;
+    if (choice === "auto") {
+      const memory = navigator.deviceMemory ?? 8, cores = navigator.hardwareConcurrency ?? 8;
+      this.quality = memory >= 4 && cores >= 6 ? "high" : "mid";
+    } else this.quality = choice;
+    this.perf = { sum: 0, seen: 0, dropAt: 0 };
+    this.applyQuality();
+  }
+
+  applyQuality() {
+    const q = this.quality;
+    this.glow = q !== "low";
+    this.fx.thin = q === "high" ? 1 : q === "mid" ? 0.75 : 0.45; // доля мелких частиц
+    this.bloom.strength = q === "high" ? 0.5 : 0.42;
+    if (this.size) this.resize();
+  }
+
+  // во сколько раз медленнее идёт время (после победы над хозяином зоны)
+  timeScale() {
+    return 1 - 0.68 * Math.min(1, this.slow);
+  }
+
+  // Инверсионные следы: голова ленты — у кончика крыла, старые точки уносит к камере
+  drawTrails(dt, off) {
+    const ship = this.ship;
+    const roll = ship.rotation.z;
+    this.trails.forEach((trail, k) => {
+      trail.mesh.visible = !off;
+      if (off) {
+        trail.fresh = true;
+        return;
+      }
+      const s = k ? 1 : -1;
+      const head = V(ship.position.x + Math.cos(roll) * s * 2.3, ship.position.y + 0.12 + Math.sin(roll) * s * 2.3, 1.2);
+      const { points, pos, col, N } = trail;
+      if (trail.fresh) {
+        points.forEach(q => q.copy(head));
+        trail.fresh = false;
+      }
+      // каждая точка отстаёт на ~0,02 с: сдвигаем «воздух» к камере и тянем цепочку за головой
+      for (let i = N - 1; i > 0; i--) {
+        points[i].copy(points[i - 1]);
+        points[i].z += SCROLL * 0.32 * Math.max(dt, 1 / 120);
+      }
+      points[0].copy(head);
+      const speed = Math.min(1, Math.hypot(this.lastVx || 0, 0) / 18);
+      for (let i = 0; i < N; i++) {
+        const q = points[i], fade = 1 - i / (N - 1);
+        const w = 0.045 + 0.03 * (1 - fade);
+        pos.set([q.x - w, q.y, q.z, q.x + w, q.y, q.z], i * 6);
+        const c = fade * fade * fade * (0.45 + speed * 0.35);
+        col.set([c * 0.9, c * 0.97, c, c * 0.9, c * 0.97, c], i * 6);
+      }
+      trail.mesh.geometry.attributes.position.needsUpdate = true;
+      trail.mesh.geometry.attributes.color.needsUpdate = true;
+    });
+  }
+
+  // Ломаная молния между точками: jag — насколько зубчатая, width — толщина
+  strike(points, color, life, width = 0.09, jag = 0.6) {
+    if (this.strikes.length > 14) this.strikes.shift();
+    this.strikes.push({ points, color: tone(color, 2.6), life, max: life, width, jag });
+  }
+
+  drawStrikes(dt) {
+    const d = this.dummy;
+    let n = 0;
+    const a = V(), b = V(), mid = V();
+    for (let s = this.strikes.length - 1; s >= 0; s--) {
+      const k = this.strikes[s];
+      k.life -= dt;
+      if (k.life <= 0) {
+        this.strikes.splice(s, 1);
+        continue;
+      }
+      const fade = k.life / k.max;
+      for (let i = 0; i + 1 < k.points.length; i++) {
+        const p0 = k.points[i], p1 = k.points[i + 1];
+        const parts = k.jag ? 5 : 1;
+        a.set(p0.x, p0.y, p0.z);
+        for (let j = 1; j <= parts && n < 260; j++) {
+          const t = j / parts;
+          b.set(p0.x + (p1.x - p0.x) * t, p0.y + (p1.y - p0.y) * t, p0.z + (p1.z - p0.z) * t);
+          if (j < parts) b.add(mid.set((Math.random() - 0.5) * k.jag * 2, (Math.random() - 0.5) * k.jag * 2, (Math.random() - 0.5) * k.jag));
+          const len = a.distanceTo(b);
+          d.position.copy(a).add(b).multiplyScalar(0.5);
+          d.lookAt(b);
+          d.scale.set(k.width * (0.6 + fade * 0.6), k.width * (0.6 + fade * 0.6), len);
+          d.updateMatrix();
+          this.zigMesh.setMatrixAt(n, d.matrix);
+          this.zigMesh.setColorAt(n++, k.color);
+          a.copy(b);
+        }
+      }
+    }
+    this.zigMesh.count = n;
+    this.zigMesh.instanceMatrix.needsUpdate = true;
+    if (this.zigMesh.instanceColor) this.zigMesh.instanceColor.needsUpdate = true;
   }
 
   resize() {
@@ -268,7 +420,7 @@ export class CanyonView {
     const h = this.canvas.clientHeight || innerHeight;
     const aspect = w / h;
     this.aspect = aspect;
-    const ratio = Math.min(devicePixelRatio || 1, this.perf.glow ? 1.6 : 1.25);
+    const ratio = Math.min(devicePixelRatio || 1, this.quality === "high" ? 2 : this.quality === "mid" ? 1.4 : 1);
     this.renderer.setPixelRatio(ratio);
     this.renderer.setSize(w, h, false);
     this.composer.setPixelRatio(ratio);
@@ -304,10 +456,46 @@ export class CanyonView {
     } else if (e.type === "spark") fx.burst(V(e.x, e.y, e.z), ["#ffd9a0", "#ffffff"], 3, 12, 0.18);
     else if (e.type === "burst") {
       const boss = e.kind === "boss";
-      const level = boss ? 3 : e.kind === "bomber" ? 2 : e.kind === "scout" || e.kind === "turret" ? 1 : 0;
-      fx.explode(V(e.x, e.y, e.z), boss ? 6 : e.kind === "bomber" ? 3 : e.kind === "scout" || e.kind === "turret" ? 1.5 : 1.1, this.shadeFor(e.kind), level);
-      if (boss) this.shake = 1;
-      else if (e.z > -30) this.shake = Math.max(this.shake, 0.25);
+      const big = e.kind === "cruiser" || e.kind === "bomber";
+      const level = boss ? 3 : big ? 2 : e.kind === "drone" || e.kind === "mine" || e.kind === "dart" ? 0 : 1;
+      const size = boss ? 6 : e.kind === "cruiser" ? 4.2 : e.kind === "bomber" ? 3 : level ? 1.5 : 1.1;
+      fx.explode(V(e.x, e.y, e.z), size, this.shadeFor(e.kind), level);
+      if (boss) {
+        // победа над хозяином зоны: замедление, белая вспышка, ударная волна
+        this.shake = 1;
+        this.slow = this.reduced ? 0 : 1.5;
+        this.white = 1;
+        fx.puff(RING, V(e.x, e.y, e.z), null, 4, 46, 1.1, tone("#fff2c0", 2.4), 0.9);
+        fx.puff(RING, V(e.x, e.y, e.z), null, 2, 30, 0.8, tone(this.shadeFor("boss"), 2.6), 0.9);
+      } else if (e.kind === "cruiser") {
+        this.shake = Math.max(this.shake, 0.7);
+        this.slow = this.reduced ? 0 : 0.7;
+        fx.puff(RING, V(e.x, e.y, e.z), null, 2, 28, 0.8, tone("#ffd9a0", 2.4), 0.9);
+      } else if (e.kind === "carrier") {
+        fx.burst(V(e.x, e.y, e.z), ["#ffe27a", "#ffffff"], 30, 30, 0.5);
+      } else if (e.z > -30) this.shake = Math.max(this.shake, 0.25);
+    } else if (e.type === "chain") {
+      this.strike(e.points, "#fff3a0", 0.16, 0.1, 0.7);
+      this.strike(e.points, "#9fe8ff", 0.12, 0.05, 1.1);
+      const last = e.points[e.points.length - 1];
+      fx.puff(GLOW, V(last.x, last.y, last.z), null, 1.4, 3, 0.18, tone("#fff3a0", 2.4), 0.9);
+    } else if (e.type === "block") {
+      fx.burst(V(e.x, e.y, e.z), ["#9fe8ff", "#ffffff"], 2, 10, 0.16);
+    } else if (e.type === "shield-break") {
+      fx.burst(V(e.x, e.y, e.z), ["#7fe9ff", "#ffffff", "#bff4ff"], 26, 26, 0.36);
+      fx.puff(RING, V(e.x, e.y, e.z), null, 1, 5, 0.4, tone("#7fe9ff", 2.4), 0.9);
+    } else if (e.type === "shield-hit") {
+      this.bubblePulse = 1;
+      fx.burst(V(p.x, p.y, 0), ["#7fe9ff", "#ffffff"], 10, 12, 0.08);
+      this.shake = Math.max(this.shake, 0.3);
+    } else if (e.type === "capsule" || e.type === "weapon") {
+      const hex = CAPSULE_COLOR[e.power || e.kind] || "#ffffff";
+      fx.puff(RING, V(p.x, p.y, -0.6), null, 1, 4.5, 0.45, tone(hex, 2.4), 0.9);
+      fx.puff(STAR, V(p.x, p.y + 0.3, -0.6), null, 1.2, 3.4, 0.35, tone(hex, 2.2), 0.9);
+    } else if (e.type === "flock") {
+      fx.puff(RING, V(e.x, e.y, e.z), null, 1, 9, 0.6, tone("#7fe9ff", 2.4), 0.9);
+    } else if (e.type === "task") {
+      for (let i = 0; i < 7; i++) fx.puff(STAR, V(p.x + (Math.random() - 0.5) * 6, p.y + 1 + Math.random() * 3, -4 - Math.random() * 6), null, 0.6, 2.4, 0.6 + Math.random() * 0.3, tone("#ffd76a", 2.4), 0.9);
     } else if (e.type === "rocket-hit") {
       fx.puff(GLOW, V(e.x, e.y, e.z), null, 1, 3, 0.2, tone("#ffd9a0", 2.4), 0.8);
       fx.burst(V(e.x, e.y, e.z), ["#ffd27a", "#ffffff"], 10, 22, 0.3);
@@ -421,6 +609,39 @@ export class CanyonView {
     // плитка дна — 20 единиц: сдвигаем текстуру вместе с миром
     this.floorMap.offset.y = this.veins.offset.y = (this.offset / 20) % 1;
     const goal = this.goal || THEMES[0];
+    this.snowMesh.visible = !!goal.snow;
+    if (goal.snow) {
+      this.snow.forEach((flake, i) => {
+        flake.y -= flake.v * dt;
+        flake.z += speed * dt * 0.75;
+        flake.w += dt * 1.3;
+        if (flake.y < -2 || flake.z > 12) {
+          flake.y = 18 + Math.random() * 8;
+          flake.z = -Math.random() * 120 + 6;
+          flake.x = this.camera.position.x + (Math.random() - 0.5) * 60;
+        }
+        d.position.set(flake.x + Math.sin(flake.w) * 0.8, flake.y, flake.z);
+        d.rotation.set(flake.w, flake.w * 0.7, 0);
+        d.scale.setScalar(0.09);
+        d.updateMatrix();
+        this.snowMesh.setMatrixAt(i, d.matrix);
+      });
+      this.snowMesh.instanceMatrix.needsUpdate = true;
+    }
+    // молнии в небе грозовых зон: ломаная от облаков к скалам и вспышка неба
+    if (goal.lightning && !this.reduced && this.quality !== "low") {
+      this.skyBolt -= dt;
+      if (this.skyBolt <= 0) {
+        this.skyBolt = 2.2 + Math.random() * 4;
+        const side = Math.random() < 0.5 ? -1 : 1;
+        const x = side * (this.wallX + 8 + Math.random() * 30), z = -120 - Math.random() * 60;
+        const points = [];
+        for (let k = 0, y = 70; k < 7; k++, y -= 10 + Math.random() * 4) points.push({ x: x + (Math.random() - 0.5) * 14, y, z: z + (Math.random() - 0.5) * 6 });
+        this.strike(points, "#d8e6ff", 0.22, 0.5, 2.5);
+        if (Math.random() < 0.5) this.strike(points.slice(2, 5).map(q => ({ x: q.x + side * 6, y: q.y - 4, z: q.z })), "#b8c8ff", 0.18, 0.3, 2);
+        this.flash = Math.max(this.flash, 0.55);
+      }
+    }
     this.rainMesh.visible = !!goal.rain;
     if (goal.rain) {
       this.rain.forEach((drop, i) => {
@@ -465,7 +686,20 @@ export class CanyonView {
       m.position.set(e.x, e.y, e.z);
       // модели чуть крупнее «честного» размера: издалека их должно быть видно
       m.scale.setScalar(e.kind === "boss" ? 1.3 + e.flash * 0.3 : 1.45 * (1 + e.flash * 1.2));
-      if (e.kind === "dart") {
+      if (e.kind === "drone") {
+        m.rotation.set(e.state === "dive" ? 0.6 : 0, clamp(-e.vx * 0.03, -0.5, 0.5), clamp(-e.vx * 0.06, -0.7, 0.7));
+        m.userData.spin[0].rotation.y = this.time * 34;
+        m.scale.setScalar(1.35 * (1 + e.flash * 1.5));
+      } else if (e.kind === "carrier") {
+        m.rotation.set(Math.sin(this.time * 2) * 0.15, this.time * 1.4, e.dir * 0.2);
+        m.userData.spin.forEach(r => (r.rotation.y = this.time * 30));
+      } else if (e.kind === "cruiser") {
+        m.scale.setScalar(1.75 + e.flash * 0.3);
+        m.rotation.set(e.state === "out" ? -0.3 : 0, clamp(-e.vx * 0.015, -0.3, 0.3), clamp(-e.vx * 0.03, -0.4, 0.4));
+        m.userData.radar.rotation.y = this.time * 2.5;
+      } else if (e.kind === "sniper") {
+        m.lookAt(this.aimPoint.set(e.charge > 0 ? e.aimX : p.x, e.charge > 0 ? e.aimY : p.y, 8));
+      } else if (e.kind === "dart") {
         m.rotation.set(0, 0, this.time * 9);
         m.lookAt(this.aimPoint.set(e.x + e.vx * 0.1, e.y + e.vy * 0.1, e.z + Math.max(1, e.vz) * 0.1));
         m.rotateZ(this.time * 9);
@@ -474,6 +708,11 @@ export class CanyonView {
       else {
         m.rotation.set(e.state === "out" ? -0.5 : 0, clamp(-e.vx * 0.02, -0.4, 0.4), clamp(-e.vx * 0.05, -0.6, 0.6));
         m.userData.spin?.forEach(blade => (blade.rotation.y = this.time * 30));
+        if (e.kind === "shield") {
+          const plate = m.userData.plate;
+          plate.visible = e.shield > 0;
+          plate.scale.setScalar(e.open > 0 ? 0.35 : 1 + Math.sin(this.time * 8) * 0.03);
+        }
         if (e.kind === "boss") {
           const pulse = 1 + Math.sin(this.time * (e.health < e.maxHealth / 2 ? 14 : 6)) * 0.12;
           m.userData.core.scale.setScalar(1.05 * pulse);
@@ -533,13 +772,30 @@ export class CanyonView {
       let record = this.hazards.get(h.id);
       if (!record) {
         const group = new T.Group();
-        const colorHex = h.kind === "bolt" ? "#bfe0ff" : h.kind === "geyser" ? "#ff8a2a" : "#ff4fb0";
+        const colorHex = h.kind === "bolt" ? "#bfe0ff" : h.kind === "geyser" ? "#ff8a2a" : h.kind === "icicle" ? "#9ff0ff" : "#ff4fb0";
         const warnMat = new T.MeshBasicMaterial({ color: hot(colorHex, 1.6), transparent: true, opacity: 0.4, toneMapped: false, depthWrite: false, fog: false });
         const liveMat = new T.MeshBasicMaterial({ color: hot(colorHex, 3.4), toneMapped: false, fog: false });
         let warn, live;
         if (h.kind === "beam") {
           warn = part(GEO.box, warnMat, this.wallX * 2 + 6, 0.12, 0.12);
           live = part(GEO.box, liveMat, this.wallX * 2 + 6, h.half * 2, 0.5);
+        } else if (h.kind === "icicle") {
+          // сосульки: полоса на дне и нить от середины высоты вверх; живые — ледяные клыки сверху
+          warn = new T.Group();
+          const strip = part(GEO.box, warnMat, h.half * 2, 0.05, 46);
+          strip.position.set(0, -1.9, -20);
+          const thread = part(GEO.box, warnMat, 0.14, 14, 0.14);
+          thread.position.set(0, h.y0 + 7, 0);
+          const mark = part(GEO.box, warnMat, h.half * 2.2, 0.1, 0.1);
+          mark.position.y = h.y0;
+          warn.add(strip, thread, mark);
+          live = new T.Group();
+          for (let k = -1; k <= 1; k++) {
+            const fang = part(GEO.cone, liveMat, h.half * (k ? 0.32 : 0.45), 9, h.half * (k ? 0.32 : 0.45));
+            fang.rotation.x = Math.PI; // остриём вниз
+            fang.position.set(k * h.half * 0.6, h.y0 + 4.5 + Math.abs(k) * 0.8, k * 0.3);
+            live.add(fang);
+          }
         } else {
           const top = h.kind === "geyser" ? h.y1 : 32;
           // полоса на дне показывает, куда ударит; тонкая нить — на какой высоте
@@ -563,7 +819,9 @@ export class CanyonView {
       warn.visible = !h.on || h.kind !== "beam";
       live.visible = h.on;
       warnMat.opacity = h.on ? 0.75 : 0.28 + 0.3 * Math.abs(Math.sin(this.time * 14));
-      if (h.on && h.kind !== "beam") {
+      if (h.on && h.kind === "icicle") {
+        if (Math.random() < 0.5) this.fx.burst(V(h.x + (Math.random() - 0.5) * h.half * 2, h.y0, -0.4), ["#dff8ff", "#ffffff"], 1, 8, 0.15);
+      } else if (h.on && h.kind !== "beam") {
         live.scale.x = live.scale.z = h.half * (h.kind === "bolt" ? 0.22 : 0.9) * (0.7 + Math.random() * 0.6);
         if (h.kind === "bolt") live.position.x = (Math.random() - 0.5) * h.half * 0.8;
         const hex = h.kind === "bolt" ? "#bfe0ff" : "#ffb04a";
@@ -581,17 +839,26 @@ export class CanyonView {
 
   syncPools(game) {
     const d = this.dummy;
-    let n = 0;
+    let n = 0, m = 0;
     for (const bolt of game.bolts) {
-      if (n >= 220) break;
+      const plasma = bolt.kind === "plasma";
+      if (plasma ? m >= 200 : n >= 220) continue;
       d.position.set(bolt.x, bolt.y, bolt.z);
       d.lookAt(this.aimPoint.set(bolt.x + bolt.vx, bolt.y + bolt.vy, bolt.z + bolt.vz));
-      d.scale.set(0.085, 0.085, 3.2);
-      d.updateMatrix();
-      this.boltMesh.setMatrixAt(n++, d.matrix);
+      if (plasma) {
+        d.scale.set(0.3, 0.3, 2.6);
+        d.updateMatrix();
+        this.plasmaMesh.setMatrixAt(m++, d.matrix);
+      } else {
+        d.scale.set(0.085, 0.085, 3.2);
+        d.updateMatrix();
+        this.boltMesh.setMatrixAt(n++, d.matrix);
+      }
     }
     this.boltMesh.count = n;
-    this.boltMesh.instanceMatrix.needsUpdate = true;
+    this.plasmaMesh.count = m;
+    this.boltMesh.instanceMatrix.needsUpdate = this.plasmaMesh.instanceMatrix.needsUpdate = true;
+    n = 0;
 
     n = 0;
     let marks = 0;
@@ -622,16 +889,20 @@ export class CanyonView {
     n = 0;
     const kits = new Set();
     for (const gem of game.gems) {
-      if (gem.kind === "repair") {
+      if (gem.kind === "repair" || gem.kind === "power") {
         kits.add(gem.id);
         let kit = this.kits.get(gem.id);
         if (!kit) {
-          kit = repairKit();
+          kit = gem.kind === "power" ? capsule(gem.power) : repairKit();
           this.scene.add(kit);
           this.kits.set(gem.id, kit);
         }
         kit.position.set(gem.x, gem.y, gem.z);
         kit.rotation.z = this.time * 2;
+        if (gem.kind === "power") {
+          kit.userData.ring.rotation.set(this.time * 3, this.time * 2, 0);
+          kit.scale.setScalar(1.3 + Math.sin(this.time * 9) * 0.1);
+        }
         continue;
       }
       if (n >= 60) continue;
@@ -674,6 +945,8 @@ export class CanyonView {
     this.paintTheme(Math.max(0, game.zone - 1), dt);
     this.scenery(dt, idle ? SCROLL * 0.6 : SCROLL);
     this.flash = Math.max(0, this.flash - dt * 4);
+    this.slow = Math.max(0, this.slow - (frameMs ?? 16) / 1000); // по настоящему времени, а не замедленному
+    this.white = Math.max(0, this.white - dt * 1.6);
     this.hurt = Math.max(0, this.hurt - dt * 2.2);
     this.shake = Math.max(0, this.shake - dt * 1.8);
     this.muzzle = Math.max(0, this.muzzle - dt * 12);
@@ -684,6 +957,7 @@ export class CanyonView {
     const vx = idle ? Math.cos(t * 0.6) * 1.2 : p.vx;
     const vy = idle ? Math.cos(t * 0.9) * 0.5 : p.vy;
     const ship = this.ship;
+    this.lastVx = vx;
     ship.position.set(sx, sy + Math.sin(t * 5) * 0.04, 0);
     ship.rotation.z += (clamp(-vx * 0.045, -0.75, 0.75) - ship.rotation.z) * Math.min(1, dt * 10);
     ship.rotation.x += (clamp(vy * 0.03, -0.35, 0.35) - ship.rotation.x) * Math.min(1, dt * 10);
@@ -692,6 +966,17 @@ export class CanyonView {
     ship.userData.flames.forEach((flame, i) => flame.scale.setScalar(1 + Math.sin(t * 50 + i) * 0.18 + this.muzzle * 0.1));
     if (ship.visible && !this.reduced) {
       for (const s of [-1, 1]) this.fx.puff(GLOW, V(sx + s * 0.47, sy + 0.02, 2.5), V(0, 0, 9), 0.34, 0.06, 0.1, tone("#59dcff", 1.8), 0.6);
+    }
+    this.drawTrails(dt, idle || !ship.visible && p.health <= 0 || this.quality === "low");
+    // пузырь щита
+    this.bubblePulse = Math.max(0, this.bubblePulse - dt * 3);
+    this.bubble.visible = !idle && p.shield > 0 && p.health > 0;
+    if (this.bubble.visible) {
+      this.bubble.position.set(sx, sy, 0);
+      this.bubble.children[0].rotation.set(t * 0.7, t * 1.1, 0);
+      this.bubble.children[1].rotation.z = t * 2;
+      this.bubble.children[1].scale.setScalar(2.55 * (1 + this.bubblePulse * 0.25));
+      this.bubbleMat.opacity = 0.24 + 0.08 * Math.sin(t * 6) + this.bubblePulse * 0.4;
     }
     this.wings.forEach((wing, i) => {
       wing.visible = !idle && p.wing > i && p.health > 0;
@@ -717,9 +1002,16 @@ export class CanyonView {
     }
 
     this.syncActors(game, dt);
+    for (const e of game.enemies) {
+      if (e.kind !== "sniper" || e.charge <= 0) continue;
+      // линия прицела: тоньше и ярче к выстрелу
+      const k = 1 - e.charge / 1.05;
+      this.strike([{ x: e.x, y: e.y, z: e.z + 1.5 }, { x: e.aimX, y: e.aimY, z: 0.3 }], k > 0.7 && Math.sin(t * 40) > 0 ? "#ffffff" : "#ff3a5a", Math.max(dt, 0.001) * 1.01, 0.05 + k * 0.05, 0);
+    }
     this.syncRocks(game);
     this.syncHazards(game);
     this.syncPools(game);
+    this.drawStrikes(dt);
     this.fx.update(dt, t);
 
     // камера идёт за истребителем вполсилы, чтобы он двигался по экрану, а не стоял в центре
@@ -739,20 +1031,21 @@ export class CanyonView {
     cam.position.y += Math.cos(t * 71) * jolt * 0.35;
     cam.rotation.z += clamp(-vx * 0.004, -0.06, 0.06) + Math.sin(t * 97) * jolt * 0.02;
     this.grade.uniforms.hurt.value = this.hurt;
+    this.grade.uniforms.white.value = this.white * 0.75;
 
-    // если устройство не тянет свечение — выключаем его и снижаем чёткость
-    if (frameMs !== undefined && this.perf.glow) {
-      this.perf.seen++;
-      if (frameMs > 26) this.perf.slow++;
-      if (this.perf.seen >= 150) {
-        if (this.perf.slow > 90) {
-          this.perf.glow = false;
-          this.resize();
+    // «Авто»: если средний кадр за 2,5 с тяжелее 22 мс (меньше ~45 кадров в секунду) — ступенью ниже
+    if (frameMs !== undefined && this.choice === "auto" && this.quality !== "low" && frameMs < 250) {
+      this.perf.sum += frameMs;
+      if (++this.perf.seen >= 150) {
+        if (this.perf.sum / this.perf.seen > 22) {
+          this.quality = this.quality === "high" ? "mid" : "low";
+          this.applyQuality();
+          this.onQuality?.(this.quality);
         }
-        this.perf.seen = this.perf.slow = 0;
+        this.perf.sum = this.perf.seen = 0;
       }
     }
-    if (this.perf.glow) this.composer.render();
+    if (this.glow) this.composer.render();
     else this.renderer.render(this.scene, this.camera);
     void b;
   }

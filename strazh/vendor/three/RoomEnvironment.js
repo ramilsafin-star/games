@@ -8,7 +8,7 @@ import {
  	PointLight,
  	Scene,
  	Object3D,
-} from './three.module.min.js?v=98456336';
+} from './three.module.min.js?v=c710c864';
 
 /**
  * This class represents a scene with a basic room setup that can be used as

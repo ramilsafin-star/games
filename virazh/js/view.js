@@ -1,10 +1,55 @@
 // Сцена «Виража»: дорога, земля, декорации четырёх тем, машины, камера, частицы.
-import * as T from "../vendor/three/three.module.min.js?v=81afe732";
-import { clamp, damp, lerp, seeded, smooth, wrapAngle } from "./kit.js?v=81afe732";
-import { trackPoint } from "./tracks.js?v=81afe732";
-import { LIVERIES, PHYS } from "./rules.js?v=81afe732";
-import { PROPS, canvasTexture, fuse, makeCar, makePodiumBlock } from "./models.js?v=81afe732";
-import { Pool, Streaks } from "./fx.js?v=81afe732";
+import * as T from "../vendor/three/three.module.min.js?v=f774c88c";
+import { clamp, damp, lerp, seeded, smooth, wrapAngle } from "./kit.js?v=f774c88c";
+import { trackPoint } from "./tracks.js?v=f774c88c";
+import { LIVERIES, PHYS } from "./rules.js?v=f774c88c";
+import { PROPS, canvasTexture, fuse, makeCar, makePodiumBlock } from "./models.js?v=f774c88c";
+import { Pool, Streaks } from "./fx.js?v=f774c88c";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=f774c88c";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=f774c88c";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=f774c88c";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=f774c88c";
+import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=f774c88c";
+
+// Последний проход высокой графики: сглаживание (FXAA, раз MSAA на композере нельзя), радиальное размытие на нитро и виньетка
+const FINAL = {
+  uniforms: { tDiffuse: { value: null }, resolution: { value: new T.Vector2(1, 1) }, blur: { value: 0 }, vig: { value: 0.32 } },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform vec2 resolution;
+    uniform float blur, vig;
+    varying vec2 vUv;
+    vec3 fxaa(vec2 uv) {
+      vec2 px = 1.0 / resolution;
+      vec3 nw = texture2D(tDiffuse, uv + vec2(-1.0, -1.0) * px).rgb, ne = texture2D(tDiffuse, uv + vec2(1.0, -1.0) * px).rgb;
+      vec3 sw = texture2D(tDiffuse, uv + vec2(-1.0, 1.0) * px).rgb, se = texture2D(tDiffuse, uv + vec2(1.0, 1.0) * px).rgb;
+      vec3 m = texture2D(tDiffuse, uv).rgb;
+      vec3 k = vec3(0.299, 0.587, 0.114);
+      float a = dot(nw, k), b = dot(ne, k), c = dot(sw, k), d = dot(se, k), e = dot(m, k);
+      float lo = min(e, min(min(a, b), min(c, d))), hi = max(e, max(max(a, b), max(c, d)));
+      vec2 dir = vec2(-((a + b) - (c + d)), (a + c) - (b + d));
+      float reduce = max((a + b + c + d) * 0.03125, 1.0 / 128.0);
+      dir = clamp(dir / (min(abs(dir.x), abs(dir.y)) + reduce), -8.0, 8.0) * px;
+      vec3 p = 0.5 * (texture2D(tDiffuse, uv - dir / 6.0).rgb + texture2D(tDiffuse, uv + dir / 6.0).rgb);
+      vec3 q = p * 0.5 + 0.25 * (texture2D(tDiffuse, uv - dir * 0.5).rgb + texture2D(tDiffuse, uv + dir * 0.5).rgb);
+      float l = dot(q, k);
+      return (l < lo || l > hi) ? p : q;
+    }
+    void main() {
+      vec3 col = fxaa(vUv);
+      vec2 c = vUv - vec2(0.5, 0.56);
+      if (blur > 0.001) {
+        vec3 acc = col;
+        for (int i = 1; i <= 5; i++) acc += texture2D(tDiffuse, vUv - c * blur * 0.035 * float(i)).rgb;
+        col = mix(col, acc / 6.0, smoothstep(0.08, 0.5, length(c)));
+      }
+      col *= 1.0 - smoothstep(0.18, 0.75, dot(c, c)) * vig;
+      gl_FragColor = vec4(col, 1.0);
+    }`,
+};
 
 const TAU = Math.PI * 2;
 const M = new T.Matrix4(), Q = new T.Quaternion(), E = new T.Euler(), S = new T.Vector3(), P = new T.Vector3();
@@ -31,6 +76,12 @@ const THEMES = {
     sun: ["#ffd3a2", 2.4, [0.6, 0.42, -0.5]], hemi: ["#ffe2c4", "#b8603a", 1.2],
     asphalt: "#6b5d5b", mark: "#fff1d0", curb: ["#ffd23e", "#3a2f33"], shoulder: ["#dc8b52", "#cf7b45"],
     wall: ["#ffd23e", "#3a2f33"], dust: "#e6a670", cloud: "#ffd9c2",
+  },
+  snow: {
+    sky: ["#3f86d6", "#a8d4f5", "#eef7ff"], fog: ["#e6f1fb", 220, 1250],
+    sun: ["#fff7e8", 2.5, [0.4, 0.75, -0.45]], hemi: ["#f2f8ff", "#a7bfd6", 1.35],
+    asphalt: "#5c6472", mark: "#ffffff", curb: ["#e2574c", "#ffffff"], shoulder: ["#f4f8fd", "#e4edf7"],
+    wall: ["#ffffff", "#3f7bd8"], dust: "#f4f8ff", cloud: "#ffffff", snow: true,
   },
   city: {
     sky: ["#060920", "#1a1550", "#5b2b80"], fog: ["#2b1e58", 150, 900],
@@ -118,13 +169,82 @@ export class View {
     this.look = new T.Vector3();
     this.shift = { x: 0, y: 0 };
     this.shifted = null;
+    // высокая графика: свечение (bloom), сглаживание, размытие на нитро; тени от машин
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.bloom = new UnrealBloomPass(new T.Vector2(256, 256), 0.35, 0.5, 0.9);
+    this.composer.addPass(this.bloom);
+    this.composer.addPass(new OutputPass());
+    this.final = new ShaderPass(FINAL);
+    this.composer.addPass(this.final);
+    this.renderer.shadowMap.type = T.PCFSoftShadowMap;
+    this.perf = { sum: 0, seen: 0 };
+    this.slow = 0;
+    this.reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    this.choice = "auto";
+    this.quality = "high";
+    // призрак заезда на время
+    const ghostCar = makeCar("#bfe8ff", 0);
+    ghostCar.group.traverse((o) => {
+      if (!o.material) return;
+      o.material = o.material.clone();
+      o.material.transparent = true;
+      o.material.opacity = 0.5;
+      o.material.depthWrite = false;
+    });
+    ghostCar.flames.forEach((f) => (f.visible = false));
+    this.ghostCar = ghostCar.group;
+    this.ghostCar.rotation.order = "YXZ";
+    this.ghostCar.visible = false;
+    this.scene.add(this.ghostCar);
     this.resize();
+  }
+
+  // Качество графики: auto (сам решает и снижает при тяжёлых кадрах), high, mid, low
+  setQuality(choice) {
+    this.choice = choice;
+    if (choice === "auto") {
+      const memory = navigator.deviceMemory ?? 8, cores = navigator.hardwareConcurrency ?? 8;
+      this.quality = memory >= 4 && cores >= 6 ? "high" : "mid";
+    } else this.quality = choice;
+    this.perf = { sum: 0, seen: 0 };
+    this.applyQuality();
+  }
+  applyQuality() {
+    const high = this.quality === "high";
+    const shadows = high;
+    if (this.renderer.shadowMap.enabled !== shadows) {
+      this.renderer.shadowMap.enabled = shadows;
+      // материалы пересобираются с тенями или без
+      this.scene.traverse((o) => o.material && [].concat(o.material).forEach((m) => (m.needsUpdate = true)));
+    }
+    this.thin = this.quality === "low" ? 0.5 : this.quality === "mid" ? 0.8 : 1;
+    for (const pool of [this.smoke, this.bits]) if (pool) pool.thin = this.thin;
+    this.resize();
+  }
+  // во сколько раз медленнее идёт время (на финише)
+  timeScale() {
+    return 1 - 0.6 * clamp(this.slow, 0, 1);
+  }
+  // призрак: pose {x, y, z, yaw} или null
+  ghost(pose) {
+    this.ghostCar.visible = !!pose;
+    if (!pose) return;
+    this.ghostCar.position.set(pose.x, pose.y, pose.z);
+    this.ghostCar.rotation.set(0, pose.yaw, 0);
   }
 
   resize() {
     const w = this.canvas.clientWidth || window.innerWidth, h = this.canvas.clientHeight || window.innerHeight;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+    const q = this.quality || "mid";
+    const ratio = Math.min(window.devicePixelRatio || 1, q === "high" ? 2 : q === "mid" ? 1.5 : 1);
+    this.renderer.setPixelRatio(ratio);
     this.renderer.setSize(w, h, false);
+    if (this.composer) {
+      this.composer.setPixelRatio(ratio);
+      this.composer.setSize(w, h);
+      this.final.uniforms.resolution.value.set(w * ratio, h * ratio);
+    }
     this.camera.aspect = w / h;
     this.camera.clearViewOffset();
     this.shifted = null;
@@ -159,9 +279,17 @@ export class View {
     scene.fog = new T.Fog(th.fog[0], th.fog[1], th.fog[2]);
     this.renderer.setClearColor(th.fog[0]);
     w.add(new T.HemisphereLight(th.hemi[0], th.hemi[1], th.hemi[2]));
-    const sun = new T.DirectionalLight(th.sun[0], th.sun[1]);
+    const sun = (this.sunLight = new T.DirectionalLight(th.sun[0], th.sun[1]));
     sun.position.set(...th.sun[2]).multiplyScalar(100);
-    w.add(sun);
+    // тени (только на высокой графике): небольшая область вокруг машины игрока
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(1024, 1024);
+    Object.assign(sun.shadow.camera, { left: -38, right: 38, top: 38, bottom: -38, near: 1, far: 260 });
+    sun.shadow.bias = -0.0006;
+    sun.shadow.normalBias = 0.04;
+    w.add(sun, sun.target);
+    this.bloom.strength = th.night ? 0.85 : 0.3;
+    this.bloom.threshold = th.night ? 0.55 : 0.88;
 
     // небо
     const skyTex = canvasTexture(4, 256, (g) => {
@@ -188,6 +316,19 @@ export class View {
     this.buildItems();
     DECOR[track.theme](this);
     this.buildClouds();
+    // асфальт, обочины и земля принимают тени машин
+    w.traverse((o) => {
+      if (o.isMesh && !o.isInstancedMesh) o.receiveShadow = true;
+    });
+    // снегопад
+    this.flakes = null;
+    if (th.snow) {
+      const n = 420;
+      this.flakes = { mesh: new T.InstancedMesh(new T.OctahedronGeometry(0.11, 0), new T.MeshBasicMaterial({ color: "#ffffff" }), n), items: [] };
+      for (let k = 0; k < n; k++) this.flakes.items.push({ x: (rnd() - 0.5) * 120, y: rnd() * 40, z: (rnd() - 0.5) * 120, v: 2.2 + rnd() * 2.5, w: rnd() * TAU });
+      this.flakes.mesh.frustumCulled = false;
+      w.add(this.flakes.mesh);
+    }
 
     // частицы
     this.smoke = new Pool(w, 240, new T.IcosahedronGeometry(0.5, 1), new T.MeshLambertMaterial({ transparent: true, opacity: 0.82, depthWrite: false }));
@@ -196,6 +337,7 @@ export class View {
     this.marks = new Pool(w, 380, new T.BoxGeometry(0.34, 0.02, 1), new T.MeshBasicMaterial({ color: "#16181f", transparent: true, opacity: 0.42, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
     this.acc = [];
     this.podiumGroup = null;
+    if (this.thin) this.smoke.thin = this.bits.thin = this.thin;
   }
 
   buildRoad() {
@@ -474,6 +616,43 @@ export class View {
       m.position.set(pad.x, pad.y + 0.07, pad.z);
       w.add(m);
     }
+    // лёд: голубые блестящие пятна поверх асфальта
+    if (tr.ice?.length) {
+      const iceTex = canvasTexture(64, 64, (g) => {
+        g.fillStyle = "#cdefff";
+        g.fillRect(0, 0, 64, 64);
+        const r = seeded(5);
+        for (let k = 0; k < 40; k++) {
+          g.strokeStyle = r() < 0.5 ? "rgba(255,255,255,.9)" : "rgba(120,190,230,.6)";
+          g.lineWidth = 1 + r() * 2;
+          g.beginPath();
+          const x = r() * 64, y = r() * 64;
+          g.moveTo(x, y);
+          g.lineTo(x + (r() - 0.5) * 30, y + (r() - 0.5) * 30);
+          g.stroke();
+        }
+      }, true);
+      const iceMat = new T.MeshPhongMaterial({ map: iceTex, transparent: true, opacity: 0.78, shininess: 120, specular: "#ffffff", polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+      for (const [s0, s1] of tr.ice) {
+        const pos = [], uv = [], idx = [], p = {};
+        const steps = Math.max(2, Math.round((s1 - s0) / 2));
+        for (let k = 0; k <= steps; k++) {
+          const s = s0 + ((s1 - s0) * k) / steps, edge = Math.sin((k / steps) * Math.PI); // края пятна скруглены
+          for (const side of [1, -1]) {
+            trackPoint(tr, s, side * (tr.half - 0.4) * (0.55 + 0.45 * Math.sqrt(edge)), p);
+            pos.push(p.x, p.y + 0.06, p.z);
+            uv.push(side > 0 ? 0 : 3, k / 3);
+          }
+        }
+        for (let k = 0; k < steps; k++) idx.push(k * 2, k * 2 + 1, k * 2 + 3, k * 2, k * 2 + 3, k * 2 + 2);
+        const g = new T.BufferGeometry();
+        g.setAttribute("position", new T.Float32BufferAttribute(pos, 3));
+        g.setAttribute("uv", new T.Float32BufferAttribute(uv, 2));
+        g.setIndex(idx);
+        g.computeVertexNormals();
+        w.add(new T.Mesh(g, iceMat));
+      }
+    }
     const canGeo = PROPS.can();
     const canMat = new T.MeshPhongMaterial({ vertexColors: true, shininess: 80, emissive: "#0a5b88", emissiveIntensity: 0.5 });
     this.cans = tr.cans.map((can) => {
@@ -586,6 +765,7 @@ export class View {
     this.clearCars();
     this.cars = race.cars.map((car) => {
       const model = makeCar(LIVERIES[car.livery].color, car.livery + 1, !!this.theme.night);
+      model.body.castShadow = true;
       model.holder = new T.Group();
       model.holder.add(model.shadow);
       this.world.add(model.group, model.holder);
@@ -654,7 +834,15 @@ export class View {
       } else if (e.type === "reset") {
         this.burst(this.smoke, car.x, car.y + 0.8, car.z, 10, ["#ffffff"], { speed: 4, up: 2, size: 0.8, grow: 2, life: 0.6, drag: 2 });
         if (car.player) this.snap = true;
-      } else if (e.type === "finish" && car.player) this.celebrate(car);
+      } else if (e.type === "turbo") {
+        // мини-турбо: вспышка пламени и искры цвета заряда
+        const colors = e.value === 2 ? ["#ffb03a", "#ffe27a", "#ffffff"] : ["#5fe2ff", "#bff4ff", "#ffffff"];
+        this.burst(this.bits, car.x - Math.sin(car.yaw) * 2.2, car.y + 0.5, car.z - Math.cos(car.yaw) * 2.2, e.value === 2 ? 22 : 12, colors, { speed: 6, up: 3, gravity: 8, size: 0.22, stretch: 2.6, life: 0.45, spin: 8, vx: Math.sin(car.va) * car.v * 0.5, vz: Math.cos(car.va) * car.v * 0.5 });
+        if (near) this.kick = Math.max(this.kick, e.value === 2 ? 0.9 : 0.6);
+      } else if (e.type === "finish" && car.player) {
+        this.celebrate(car);
+        this.slow = 1.3; // короткое замедление на финише
+      }
     }
   }
 
@@ -826,13 +1014,51 @@ export class View {
         cam.updateProjectionMatrix();
       }
       const rush = mode === "race" ? clamp((car.v - PHYS.vmax * 1.02) / (PHYS.vmax * 0.22), 0, 1) : 0;
-      this.streaks.update(dt, Math.max(rush, this.kick * (mode === "race" ? 1 : 0)), car.v);
+      const draft = mode === "race" && car.draft ? 0.55 : 0;
+      this.streaks.update(dt, Math.max(rush, draft, this.kick * (mode === "race" ? 1 : 0)), car.v);
+      this.final.uniforms.blur.value = mode === "race" && !this.reduced ? Math.max(this.kick * 0.6, rush * 0.35) : 0;
+      // тень от солнца следует за машиной
+      if (this.sunLight && this.renderer.shadowMap.enabled) {
+        const sd = this.theme.sun[2];
+        this.sunLight.position.set(car.x + sd[0] * 90, car.y + sd[1] * 90, car.z + sd[2] * 90);
+        this.sunLight.target.position.set(car.x, car.y, car.z);
+      }
     }
     this.sky.position.copy(cam.position);
     const sd = this.theme.sun[2];
     this.sunSprite.position.set(cam.position.x + sd[0] * 3600, cam.position.y + sd[1] * 3600, cam.position.z + sd[2] * 3600);
     for (const pool of [this.smoke, this.bits, this.confetti, this.marks]) pool.update(dt);
-    this.renderer.render(this.scene, cam);
+    if (this.flakes) {
+      const d = new T.Object3D();
+      this.flakes.items.forEach((f, k) => {
+        f.y -= f.v * dt;
+        f.w += dt;
+        if (f.y < -3) f.y = 36 + Math.random() * 6;
+        // хлопья живут в кубе вокруг камеры
+        const x = cam.position.x + ((((f.x - cam.position.x) % 120) + 180) % 120) - 60;
+        const z = cam.position.z + ((((f.z - cam.position.z) % 120) + 180) % 120) - 60;
+        d.position.set(x + Math.sin(f.w) * 0.9, cam.position.y - 12 + f.y, z);
+        d.rotation.set(f.w, f.w * 0.7, 0);
+        d.updateMatrix();
+        this.flakes.mesh.setMatrixAt(k, d.matrix);
+      });
+      this.flakes.mesh.instanceMatrix.needsUpdate = true;
+    }
+    this.slow = Math.max(0, this.slow - (this.realDt ?? dt));
+    // «Авто»: средний кадр за 2,5 с тяжелее 22 мс (меньше ~45 кадров в секунду) — ступенью ниже
+    if (this.choice === "auto" && this.quality !== "low" && this.realDt !== undefined && this.realDt < 0.25) {
+      this.perf.sum += this.realDt;
+      if (++this.perf.seen >= 150) {
+        if (this.perf.sum / this.perf.seen > 0.022) {
+          this.quality = this.quality === "high" ? "mid" : "low";
+          this.applyQuality();
+          this.onQuality?.(this.quality);
+        }
+        this.perf.sum = this.perf.seen = 0;
+      }
+    }
+    if (this.quality === "high") this.composer.render();
+    else this.renderer.render(this.scene, cam);
   }
 
   // Дым, пыль, пламя и следы от одной машины
@@ -847,10 +1073,12 @@ export class View {
         const side = Math.random() < 0.5 ? 1 : -1;
         this.smoke.spawn(rearX + cz * side, y + 0.35, rearZ - sx * side, (Math.random() - 0.5) * 2, 1 + Math.random() * 1.5, (Math.random() - 0.5) * 2, 0.5 + Math.random() * 0.35, this.theme.night ? "#c9cdf2" : "#f4f6fa", { size: 0.7, grow: 2.8, drag: 1.5 });
       }
-      if (Math.random() < dt * (mine ? 22 : 8)) {
-        // искры из-под задних колёс
+      // искры из-под задних колёс: занос копит мини-турбо — сначала голубые, потом оранжевые и гуще
+      const tier = car.charge >= PHYS.turbo2 ? 2 : car.charge >= PHYS.turbo1 ? 1 : 0;
+      if (Math.random() < dt * (mine ? 22 + tier * 26 : 8)) {
         const side = Math.random() < 0.5 ? 1 : -1;
-        this.bits.spawn(rearX + cz * side, y + 0.15, rearZ - sx * side, -sx * 3 + (Math.random() - 0.5) * 5, 2 + Math.random() * 3.5, -cz * 3 + (Math.random() - 0.5) * 5, 0.25 + Math.random() * 0.2, Math.random() < 0.5 ? "#ffd76a" : "#ff9a3d", { size: 0.11, stretch: 2.2, gravity: 13, spin: 9 });
+        const color = tier === 2 ? (Math.random() < 0.5 ? "#ffb03a" : "#fff0a8") : tier === 1 ? (Math.random() < 0.5 ? "#5fe2ff" : "#ffffff") : Math.random() < 0.5 ? "#ffd76a" : "#ff9a3d";
+        this.bits.spawn(rearX + cz * side, y + 0.15, rearZ - sx * side, -sx * 3 + (Math.random() - 0.5) * 5, 2 + Math.random() * 3.5, -cz * 3 + (Math.random() - 0.5) * 5, 0.25 + Math.random() * 0.2, color, { size: tier ? 0.15 : 0.11, stretch: 2.2, gravity: 13, spin: 9 });
       }
       a.mark += dt;
       if (a.mark > 0.03) {
@@ -906,6 +1134,14 @@ const LAND = {
       const band = Math.floor((h + 60) / 3.2) % 3;
       const v = n(x / 14, z / 14);
       return band === 0 ? (v > 0.5 ? "#cf6c3c" : "#c8643a") : band === 1 ? "#dc8550" : "#e79d62";
+    },
+  },
+  snow: {
+    far: "#eef4fb", farY: -3,
+    height: (x, z, out, base, n) => base - 0.9 + (n(x / 95, z / 95) - 0.36) * 40 * smooth(0, 150, out),
+    color: (x, z, h, out, base, n) => {
+      const v = n(x / 24, z / 24);
+      return v > 0.66 ? "#dfe9f5" : v > 0.4 ? "#f4f8fd" : v > 0.28 ? "#ffffff" : "#e8f0fa";
     },
   },
   city: {
@@ -973,6 +1209,20 @@ const DECOR = {
       const ang = (k++ / 18) * TAU + rnd() * 0.25, r = 760 + rnd() * 320;
       return [a.cx + Math.cos(ang) * r, a.cz + Math.sin(ang) * r, -8];
     }, { scale: [110, 220], tall: [0.6, 1.3], sink: 0 });
+  },
+  snow(v) {
+    const a = v.area, rnd = v.rnd;
+    v.scatter(PROPS.snowPine(), 520, v.beside(3.5, 190), { scale: [1.0, 2.0], tall: [0.9, 1.3] });
+    v.scatter(PROPS.rock(), 70, v.beside(3.5, 150), { scale: [0.6, 2.2], colors: ["#c9d6e4", "#b4c4d6", "#dfe8f2"] });
+    v.scatter(PROPS.snowman(), 14, v.beside(4, 40), { scale: [0.8, 1.2] });
+    v.scatter(PROPS.hut(), 8, v.beside(10, 60), { scale: [1.1, 1.5], colors: ["#fff1d6", "#d9eaff", "#ffe2e2"] });
+    // заснеженные вершины на горизонте
+    const peak = fuse([[new T.ConeGeometry(1, 1, 7), "#8fa6c2", [0, 0.5, 0]], [new T.ConeGeometry(0.55, 0.55, 7), "#ffffff", [0, 0.725, 0]]]);
+    let k = 0;
+    v.scatter(peak, 18, () => {
+      const ang = (k++ / 18) * TAU + rnd() * 0.2, r = 820 + rnd() * 280;
+      return [a.cx + Math.cos(ang) * r, a.cz + Math.sin(ang) * r, -20];
+    }, { scale: [190, 320], tall: [0.9, 1.5], sink: 0 });
   },
   city(v) {
     const tr = v.track, a = v.area, rnd = v.rnd, w = v.world;

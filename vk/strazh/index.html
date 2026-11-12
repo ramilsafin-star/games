@@ -5,12 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
     <meta name="theme-color" content="#05060f" />
     <title>Страж орбиты</title>
-    <meta name="description" content="Космический 3D-шутер: ты стрелок орбитальной станции. Отбивай волны дронов лазерами и ракетами, срывай залпы копий, выбирай улучшения и снимай щит с флагмана." />
+    <meta name="description" content="Космический 3D-шутер: ты стрелок орбитальной станции. Отбивай волны дронов лазерами и ракетами, разбивай метеорный поток, побеждай флагман и Улей, улучшай турель в ангаре и проходи «Бой дня»." />
     <link rel="icon" href="./icon-192.png" />
     <link rel="apple-touch-icon" href="./icon-180.png" />
-    <script src="./vendor/vk/vk-bridge.min.js?v=bbca8b34"></script>
-    <script src="./js/vk-host.js?v=bbca8b34" data-keys="strazh_save,strazh_mute" data-ad-gap="120"></script>
-    <link rel="stylesheet" href="./style.css?v=bbca8b34" />
+    <script src="./vendor/vk/vk-bridge.min.js?v=ab118089"></script>
+    <script src="./js/vk-host.js?v=ab118089" data-keys="strazh_save,strazh_mute" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=ab118089" />
   <style>
 html.vk-banner #rocket { visibility: hidden; }
 </style>
@@ -45,7 +45,16 @@ html.vk-banner #rocket { visibility: hidden; }
       <p class="desktop-controls">На клавиатуре: WASD или стрелки · пробел — лазеры · E — ракеты · Esc — пауза</p>
       <button id="start" class="big" disabled>В БОЙ</button>
       <p id="load-status" role="status">Запускаем 3D-сцену…</p>
-      <p class="best">Лучший результат: волна <b id="best">0</b></p>
+      <div class="menu-row" id="menu-row" hidden>
+        <button class="mode" id="open-daily"><b>📅 Бой дня</b><small id="daily-note">новый каждый день</small></button>
+        <button class="mode" id="open-hangar"><b>🛠️ Ангар</b><small id="credits-note">◆ 0</small></button>
+        <button class="mode" id="open-tasks"><b>🎯 Задания</b><small id="tasks-note">3 задания</small></button>
+      </div>
+      <p class="best">Лучший результат: волна <b id="best">0</b> <button id="quality" class="chip">Графика: авто</button></p>
+    </section>
+    <section id="sheet" class="panel" aria-labelledby="sheet-title" hidden>
+      <div id="sheet-body"></div>
+      <button id="sheet-back" class="ghost">НАЗАД</button>
     </section>
     <section id="upgrade" class="panel" hidden>
       <h2>Волна отбита! Выбери улучшение</h2>
@@ -56,15 +65,17 @@ html.vk-banner #rocket { visibility: hidden; }
     <section id="paused" class="panel" aria-labelledby="pause-title" hidden>
       <h2 id="pause-title">Пауза</h2>
       <button id="resume" class="big">ПРОДОЛЖИТЬ</button>
-      <button id="pause-menu" class="ghost">В МЕНЮ</button>
+      <div class="ghost-row"><button id="pause-quality" class="ghost">ГРАФИКА</button><button id="pause-menu" class="ghost">В МЕНЮ</button></div>
     </section>
     <section id="dead" class="panel" hidden>
-      <h2>Корпус пробит</h2>
+      <h2 id="dead-title">Корпус пробит</h2>
       <p id="result"></p>
-      <p>Щит и корпус восстановятся. Улучшения останутся, счёт уменьшится на 20%.</p>
+      <p id="earned" class="earned"></p>
+      <p id="dead-text">Щит и корпус восстановятся. Улучшения останутся, счёт уменьшится на 20%.</p>
       <button id="retry" class="big">ЕЩЁ РАЗ</button>
-      <button id="dead-menu" class="ghost">В МЕНЮ</button>
+      <div class="ghost-row"><button id="reward" class="ghost gold" hidden>▶ Ролик</button><button id="dead-menu" class="ghost">В МЕНЮ</button></div>
     </section>
-    <script type="module" src="./js/boot.js?v=bbca8b34"></script>
+    <canvas id="party" aria-hidden="true"></canvas>
+    <script type="module" src="./js/boot.js?v=ab118089"></script>
   </body>
 </html>

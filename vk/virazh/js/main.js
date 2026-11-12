@@ -1,25 +1,40 @@
 // «Вираж»: меню, управление, приборы, панели, сохранение. Правила — в rules.js, картинка — в view.js.
-import { TRACKS, buildTrack } from "./tracks.js?v=b8d55922";
-import { Cup, DIFFS, LAPS, LIVERIES, NITRO_MAX, PHYS, Race, steerTo } from "./rules.js?v=b8d55922";
-import { View } from "./view.js?v=b8d55922";
-import { Sound } from "./sound.js?v=b8d55922";
-import { clamp, clock, readStorage, writeStorage } from "./kit.js?v=b8d55922";
+import { TRACKS, buildTrack, reverseDef } from "./tracks.js?v=c71ae3b5";
+import { Cup, DIFFS, LAPS, LIVERIES, NITRO_MAX, PHYS, Race, UPGRADE_COST, steerTo } from "./rules.js?v=c71ae3b5";
+import { View } from "./view.js?v=c71ae3b5";
+import { Sound } from "./sound.js?v=c71ae3b5";
+import { clamp, clock, readStorage, seeded, writeStorage } from "./kit.js?v=c71ae3b5";
 
 const el = (id) => document.getElementById(id);
 const STEP = 1 / 120; // шаг правил, секунд
 const KEY = "virazh-v1";
-const MAP_BG = { sea: "#2aa5dd", pine: "#4d9d47", canyon: "#cf6f40", city: "#232757" };
+const MAP_BG = { sea: "#2aa5dd", pine: "#4d9d47", canyon: "#cf6f40", city: "#232757", snow: "#9fc6e6" };
+const GHOST_KEY = "virazh-ghost"; // призраки заезда на время — только на этом устройстве (в облако VK не идут)
 
 // ---------- сохранение ----------
 await window.vkGameHost?.ready;
 // cupRun — недоигранный кубок: сложность, машина, сколько заездов пройдено и очки; null — кубка в работе нет
-const save = { open: 1, best: {}, medals: {}, cups: {}, livery: 0, diff: "easy", track: 0, races: 0, cupRun: null };
+// v2 (2026-11-12): coins — монеты, up — гараж, ach — награды, trial — лучшие круги на время, daily — день последней
+// «Гонки дня» с наградой, dir — 1 «обратно», quality — графика
+const save = { open: 1, best: {}, medals: {}, cups: {}, livery: 0, diff: "easy", track: 0, races: 0, cupRun: null,
+  v: 2, coins: 0, up: { engine: 0, tires: 0, nitro: 0 }, ach: {}, trial: {}, daily: "", dir: 0, quality: "auto" };
+let firstV2 = false;
 try {
   const old = JSON.parse(readStorage(KEY) || "{}");
-  for (const key of Object.keys(save)) if (typeof old[key] === typeof save[key]) save[key] = old[key];
+  firstV2 = !old.v;
+  for (const key of Object.keys(save)) if (typeof old[key] === typeof save[key] && (old[key] === null) === (save[key] === null || key === "cupRun")) save[key] = old[key];
+  if (old.cupRun && typeof old.cupRun === "object") save.cupRun = old.cupRun;
+  // в старой версии было четыре трассы: кто проехал «Ночной город», тому сразу открыта пятая
+  if (firstV2 && old.open >= 4 && old.best?.city) save.open = 5;
 } catch {
   // повреждённое сохранение — начинаем с чистого
 }
+save.v = 2;
+const whole = (n, max) => (Number.isFinite(n) ? clamp(Math.round(n), 0, max) : 0);
+save.coins = whole(save.coins, 1e7);
+save.up = { engine: whole(save.up?.engine, 3), tires: whole(save.up?.tires, 3), nitro: whole(save.up?.nitro, 3) };
+save.dir = save.dir ? 1 : 0;
+if (!["auto", "high", "mid", "low"].includes(save.quality)) save.quality = "auto";
 save.open = clamp(Math.round(save.open) || 1, 1, TRACKS.length);
 save.livery = clamp(Math.round(save.livery) || 0, 0, LIVERIES.length - 1);
 if (!DIFFS.some((d) => d.id === save.diff)) save.diff = "easy";
@@ -36,9 +51,14 @@ const store = () => writeStorage(KEY, JSON.stringify(save));
 
 // ---------- состояние ----------
 const tracks = TRACKS.map(buildTrack);
+const backs = TRACKS.map((def) => buildTrack(reverseDef(def))); // те же трассы в обратную сторону
+const trackFor = (i, dir) => (dir ? backs[i] : tracks[i]);
 const view = new View(el("scene"));
+view.setQuality(save.quality);
 let screen = "menu"; // menu | race | result | podium
-let mode = "single"; // single | cup
+let mode = "single"; // single | cup | trial (на время, без соперников) | daily (гонка дня)
+let dir = 0; // направление нынешнего заезда: 0 — обычное, 1 — обратное
+let lastCoins = 0; // монеты за последний заезд (для ролика «×2» в VK)
 let race = null;
 let cup = null;
 let trackIndex = save.track;
@@ -205,8 +225,9 @@ function renderMenu() {
     b.className = "track" + (open ? "" : " locked");
     b.setAttribute("role", "radio");
     b.setAttribute("aria-checked", String(i === trackIndex));
-    const best = save.best[def.id];
-    const medal = save.medals[def.id]?.[save.diff];
+    const id = def.id + (save.dir ? "-r" : "");
+    const best = save.best[id];
+    const medal = save.medals[id]?.[save.diff];
     b.innerHTML = `<canvas width="10" height="10"></canvas><span><b>${def.name}</b><small>${open ? (best ? "Круг " + clock(best) : def.blurb) : "Сначала проедь предыдущую"}</small></span>${open ? "" : LOCK}${medal ? `<i class="medal p${medal}">${medal}</i>` : ""}`;
     onPress(b, () => {
       Sound.unlock();
@@ -219,8 +240,21 @@ function renderMenu() {
       attract();
     });
     box.appendChild(b);
-    drawMap(b.firstChild, tracks[i], { bg: MAP_BG[def.theme], size: 62, thick: 0.085 });
+    drawMap(b.firstChild, trackFor(i, save.dir), { bg: MAP_BG[def.theme], size: 62, thick: 0.085 });
   });
+  // направление, монеты, награды, гонка дня, графика
+  el("dir").setAttribute("aria-pressed", String(!!save.dir));
+  el("dir-label").textContent = save.dir ? "Обратно" : "Прямо";
+  el("coins").textContent = save.coins;
+  el("ach-n").textContent = `${Object.keys(save.ach).filter((k) => ACH[k]).length}/${Object.keys(ACH).length}`;
+  const day = dailyPlan();
+  el("daily-label").textContent = save.daily === today() ? "Гонка дня ✓" : "Гонка дня";
+  el("daily").title = `${TRACKS[day.track].name}${day.dir ? ", обратно" : ""}: монеты ×2`;
+  // графика: на кнопке коротко, полностью — в подсказке
+  const look = "Графика: " + QUALITY_NAMES[save.quality] + (save.quality === "auto" ? ` (${QUALITY_NAMES[view.quality]})` : "");
+  el("quality-label").textContent = save.quality === "auto" ? "Авто" : QUALITY_NAMES[save.quality][0].toUpperCase() + QUALITY_NAMES[save.quality].slice(1);
+  el("quality").setAttribute("aria-label", look);
+  el("quality").title = look;
   const diffs = el("diffs");
   diffs.textContent = "";
   for (const d of DIFFS) {
@@ -279,15 +313,15 @@ function setScreen(name) {
   }
 }
 
-function useTrack(i) {
-  const track = tracks[i];
+function useTrack(i, back = 0) {
+  const track = trackFor(i, back);
   if (view.track !== track) view.build(track);
   return track;
 }
 
 // Меню: на выбранной трассе сами по себе едут шесть машин
 function attract() {
-  const track = useTrack(trackIndex);
+  const track = useTrack(trackIndex, save.dir);
   race = new Race(track, { attract: true });
   view.spawn(race);
   Sound.music("menu");
@@ -312,10 +346,15 @@ function startRace(i) {
   closePanel();
   clearInput();
   trackIndex = i;
-  const track = useTrack(i);
-  race = new Race(track, { difficulty: save.diff, livery: save.livery });
+  // направление: в кубке всегда обычное, в гонке дня — как велит день, иначе — как выбрано в меню
+  const day = mode === "daily" ? dailyPlan() : null;
+  dir = mode === "cup" ? 0 : day ? day.dir : save.dir;
+  const track = useTrack(i, dir);
+  race = new Race(track, { difficulty: save.diff, livery: save.livery, upgrades: save.up, solo: mode === "trial", rival: day?.rival });
+  ghost.start(track.id);
   view.spawn(race);
   setScreen("race");
+  el("place").hidden = mode === "trial"; // на время соперников нет
   paused = false;
   finishT = -1;
   raceNews = [];
@@ -331,9 +370,14 @@ function startRace(i) {
   teachT = 0;
   el("hud").classList.add("teach");
   el("lesson").classList.toggle("need", save.races < 2);
+  el("hud").classList.toggle("trial", mode === "trial");
+  el("delta").hidden = true;
   Sound.music(null);
   Sound.idle();
   race.startCountdown();
+  // соперник дня — короткая подсказка перед стартом
+  if (day) setTimeout(() => screen === "race" && race.phase !== "race" && banner("Гонка дня", `соперник дня — ${LIVERIES[day.rival].name}`), 300);
+  else if (mode === "trial") setTimeout(() => screen === "race" && banner("На время", ghost.best ? `призрак: ${clock(ghost.best.t)}` : "первый круг станет призраком"), 300);
 }
 
 function banner(text, small = "") {
@@ -362,7 +406,13 @@ function onEvents() {
     }
     if (!me || e.car !== me.index) continue;
     if (e.type === "nitro") Sound.nitro();
-    else if (e.type === "pad") Sound.pad();
+    else if (e.type === "turbo") {
+      Sound.turbo(e.value);
+      if (e.value === 2) banner("Турбо!");
+    } else if (e.type === "draft") {
+      Sound.draft();
+      flash("Тяга!");
+    } else if (e.type === "pad") Sound.pad();
     else if (e.type === "can") Sound.can();
     else if (e.type === "wall") Sound.wall(e.value);
     else if (e.type === "bump") Sound.bump();
@@ -372,6 +422,7 @@ function onEvents() {
       Sound.reset();
       banner("Возвращаем на трассу");
     } else if (e.type === "lap") {
+      ghost.lap(race.player.lastLap);
       const record = lapRecord();
       if (e.value === LAPS) {
         Sound.last();
@@ -384,6 +435,19 @@ function onEvents() {
   }
   view.react(race, race.events);
   race.events.length = 0;
+}
+
+// Короткая плашка «Тяга!» над спидометром
+let flashTimer = 0;
+function flash(text) {
+  const box = el("chip");
+  box.textContent = text;
+  box.hidden = false;
+  box.classList.remove("show");
+  void box.offsetWidth;
+  box.classList.add("show");
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => (box.hidden = true), 1300);
 }
 
 // Только что закончился круг: если он лучший за всё время — запоминаем
@@ -400,6 +464,7 @@ function lapRecord() {
 
 function onFinish() {
   const me = race.player, id = race.track.id;
+  ghost.lap(me.lastLap);
   const record = lapRecord();
   finishT = 0;
   clearInput();
@@ -412,14 +477,169 @@ function onFinish() {
     save.open = trackIndex + 2;
     raceNews.push(`<span class="gold">Открыта трасса «${TRACKS[trackIndex + 1].name}»</span>`);
   }
-  if (me.place <= 3 && !race.skipped) {
+  if (me.place <= 3 && !race.skipped && mode !== "trial") {
     const m = (save.medals[id] ||= {});
     if (!(m[save.diff] <= me.place)) m[save.diff] = me.place;
   }
+  payout();
   store();
   el("hud").hidden = true;
   el("pause").hidden = true;
 }
+
+// ---------- монеты и награды ----------
+const PLACE_COINS = [50, 40, 30, 22, 16, 12];
+const MEDALS = ["", "Золото", "Серебро", "Бронза"];
+// Медаль заезда на время: лучший круг против «идеального» круга трассы
+function trialMedal(track, t) {
+  const p = track.par;
+  return t <= p * 0.94 ? 1 : t <= p * 1.02 ? 2 : t <= p * 1.15 ? 3 : 0;
+}
+const trialTargets = (track) => [0.94, 1.02, 1.15].map((k) => track.par * k);
+let payNote = [];
+function payout() {
+  const me = race.player, id = race.track.id;
+  payNote = [];
+  let coins = 0;
+  if (mode === "trial") {
+    const medal = trialMedal(race.track, me.bestLap);
+    coins += [10, 40, 25, 15][medal];
+    payNote.push(medal ? `${MEDALS[medal]} на время` : "Круг на время");
+    if (!race.skipped && me.bestLap < (save.trial[id] ?? Infinity)) save.trial[id] = Math.round(me.bestLap * 100) / 100;
+  } else {
+    coins += PLACE_COINS[me.place - 1];
+    payNote.push(`${me.place} место`);
+  }
+  const turbo = Math.min(20, me.turbos * 2), draft = Math.min(10, me.drafts * 2);
+  if (turbo) payNote.push(`турбо +${turbo}`);
+  if (draft) payNote.push(`тяга +${draft}`);
+  coins += turbo + draft;
+  if (raceNews.some((line) => line.includes("Рекорд круга"))) {
+    coins += 15;
+    payNote.push("рекорд +15");
+  }
+  if (mode === "daily" && save.daily !== today()) {
+    coins *= 2;
+    save.daily = today();
+    payNote.push("гонка дня ×2");
+  }
+  if (race.skipped) coins = 0; // перенос к финишу для проверок — без монет
+  lastCoins = coins;
+  save.coins += coins;
+  // награды за этот заезд
+  if (!race.skipped) {
+    const won = mode !== "trial" && me.place === 1;
+    check("first", true);
+    check("win", won);
+    check("drift3", me.longDrift >= 3);
+    check("turbo10", me.turbos >= 10);
+    check("clean", me.wallHits === 0);
+    check("draft5", me.drafts >= 5);
+    check("gold", mode === "trial" && trialMedal(race.track, me.bestLap) === 1);
+    check("reverse", won && dir === 1);
+    check("snow", race.track.theme === "snow");
+    check("champion", won && save.diff === "hard");
+  }
+}
+
+// Награды: название, как получить, монеты
+const ACH = {
+  first: ["Первый финиш", "Доехать до финиша", 30],
+  win: ["Победитель", "Выиграть заезд", 50],
+  drift3: ["Мастер заноса", "Занос дольше 3 секунд", 40],
+  turbo10: ["Турбо-ас", "10 мини-турбо за заезд", 50],
+  clean: ["Чистый заезд", "Ни разу не задеть борт", 60],
+  draft5: ["Охотник за тягой", "5 раз сесть в тягу за заезд", 40],
+  gold: ["Золотой круг", "Золото в заезде на время", 80],
+  reverse: ["Задом наперёд", "Победа в обратном направлении", 60],
+  snow: ["Снежный барс", "Финиш на «Снежной вершине»", 40],
+  cup: ["Обладатель кубка", "Выиграть Кубок Виража", 100],
+  champion: ["Чемпион", "Победа на «Чемпионе»", 100],
+  garage: ["Механик", "Прокачать один узел до конца", 60],
+};
+let fresh = []; // награды, полученные только что
+function check(key, done) {
+  if (!done || save.ach[key] || !ACH[key]) return;
+  save.ach[key] = 1;
+  save.coins += ACH[key][2];
+  fresh.push(key);
+}
+
+// ---------- гонка дня ----------
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+// День задаёт трассу (из открытых), направление и «соперника дня»
+function dailyPlan() {
+  let h = 2166136261;
+  for (const ch of today()) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  const r = seeded(h >>> 0);
+  const track = Math.floor(r() * save.open);
+  const back = r() < 0.5 ? 1 : 0;
+  const others = [0, 1, 2, 3, 4, 5].filter((k) => k !== save.livery);
+  return { track, dir: back, rival: others[Math.floor(r() * others.length)] };
+}
+
+// ---------- призрак заезда на время ----------
+// Запись: каждые 0,1 с [время круга, путь от линии, x, y, z, курс]. Лучший круг трассы хранится на устройстве.
+const ghost = {
+  id: "", best: null, rec: [], last: -1, on: false,
+  start(id) {
+    this.id = id;
+    this.on = mode === "trial";
+    this.rec = [];
+    this.last = -1;
+    this.best = null;
+    if (!this.on) return;
+    try {
+      const all = JSON.parse(readStorage(GHOST_KEY) || "{}");
+      const g = all[id];
+      if (g && Array.isArray(g.p) && g.p.length > 12 && Number.isFinite(g.t)) this.best = g;
+    } catch {
+      // повреждённый призрак — просто без него
+    }
+  },
+  // каждый кадр: записать себя и вернуть, где призрак
+  frame(me) {
+    if (!this.on || race.phase !== "race" || me.finished) return null;
+    const t = race.time - me.lapStart, u = me.total - me.lap * race.track.length;
+    if (t - this.last >= 0.1) {
+      this.last = t;
+      this.rec.push(+t.toFixed(2), +u.toFixed(1), +me.x.toFixed(2), +me.y.toFixed(2), +me.z.toFixed(2), +me.yaw.toFixed(3));
+    }
+    const p = this.best?.p;
+    if (!p) return null;
+    // где призрак в это же время круга
+    let k = 0;
+    while (k + 6 < p.length && p[k + 6] <= t) k += 6;
+    if (t > p[p.length - 6]) return null; // призрак уже доехал
+    const n = Math.min(k + 6, p.length - 6), f = n === k ? 0 : clamp((t - p[k]) / (p[n] - p[k] || 1), 0, 1);
+    const at = (j) => p[k + j] + (p[n + j] - p[k + j]) * f;
+    // разница во времени: когда призрак был на том же месте пути
+    let j = 0;
+    while (j + 6 < p.length && p[j + 7] < u) j += 6;
+    const delta = u > 5 ? t - p[j] : null;
+    return { x: at(2), y: at(3), z: at(4), yaw: p[k + 5] + wrap(p[n + 5] - p[k + 5]) * f, delta };
+  },
+  lap(time) {
+    if (!this.on) return;
+    const rec = this.rec;
+    this.rec = [];
+    this.last = -1;
+    if (race.skipped || !(time > 0) || rec.length < 60) return;
+    if (this.best && this.best.t <= time) return;
+    this.best = { t: Math.round(time * 100) / 100, p: rec };
+    try {
+      const all = JSON.parse(readStorage(GHOST_KEY) || "{}");
+      all[this.id] = this.best;
+      writeStorage(GHOST_KEY, JSON.stringify(all));
+    } catch {
+      // нет места — призрак останется только до перезагрузки
+    }
+  },
+};
+const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 const ORDINAL = ["", "1-е", "2-е", "3-е", "4-е", "5-е", "6-е"];
 function rowsHtml(rows, cupMode) {
@@ -433,11 +653,33 @@ function rowsHtml(rows, cupMode) {
     .join("");
 }
 
+// Строка «+N монет» и только что полученные награды
+function coinsHtml() {
+  const awards = fresh.map((k) => `<span class="gold">🏅 ${ACH[k][0]} +${ACH[k][2]}</span>`).join("");
+  return `<div class="coins"><b class="gain">+${lastCoins}</b><i class="coin" aria-hidden="true"></i><small>${payNote.join(" · ")}</small></div>` +
+    (awards ? `<div class="news">${awards}</div>` : "") + rewardOffer();
+}
+
 function showResult() {
   const results = race.results();
   const mine = results.find((r) => r.player);
   setScreen("result");
   let actions;
+  if (fresh.length) Sound.award();
+  if (mode === "trial") {
+    const me = race.player, medal = trialMedal(race.track, me.bestLap), goals = trialTargets(race.track);
+    const prev = save.trial[race.track.id];
+    actions = `<div class="actions"><button class="primary plain" data-act="menu">В меню</button><button class="primary" data-act="again">Ещё раз</button></div>`;
+    openPanel(
+      `<h2>${medal ? MEDALS[medal] + "!" : "Финиш!"}</h2><p class="sub">На время · ${race.track.name}${dir ? " (обратно)" : ""} · лучший круг <b>${clock(me.bestLap)}</b></p>` +
+        coinsHtml() +
+        `<div class="goals">${goals.map((g, k) => `<span class="m${k + 1}${me.bestLap <= g ? " got" : ""}"><i></i>${clock(g)}</span>`).join("")}</div>` +
+        `<p class="sub">Рекорд трассы: <b>${clock(prev)}</b> · призрак едет твоим лучшим кругом</p>${actions}`,
+      { menu: showMenu, again: () => adBreak(() => startRace(trackIndex)), double: () => rewardTake() },
+    );
+    fresh = [];
+    return;
+  }
   if (mode === "cup") {
     cup.add(results);
     // кубок запоминается после каждого заезда: можно выйти в меню и продолжить позже
@@ -449,14 +691,14 @@ function showResult() {
       ? `<div class="actions one"><button class="primary" data-act="podium">К пьедесталу</button></div>`
       : `<div class="actions"><button class="primary plain" data-act="menu">В меню</button><button class="primary" data-act="next">Дальше</button></div>`;
   } else {
-    const more = trackIndex + 1 < save.open && trackIndex + 1 < TRACKS.length;
+    const more = mode === "single" && trackIndex + 1 < save.open && trackIndex + 1 < TRACKS.length;
     actions = `<div class="actions"><button class="primary plain" data-act="menu">В меню</button><button class="primary" data-act="again">Ещё раз</button></div>` + (more ? `<div class="actions one"><button class="primary alt" data-act="nextSingle">Следующая трасса</button></div>` : "");
   }
   const title = mine.place === 1 ? "Победа!" : mine.place <= 3 ? "Отлично!" : "Финиш!";
-  const round = mode === "cup" ? `Кубок, заезд ${cup.round} из ${cup.rounds} · ` : "";
+  const round = mode === "cup" ? `Кубок, заезд ${cup.round} из ${cup.rounds} · ` : mode === "daily" ? "Гонка дня · " : "";
   openPanel(
-    `<h2>${title}</h2><p class="sub">${round}${race.track.name} · <b>${ORDINAL[mine.place]} место</b></p>` +
-      (raceNews.length ? `<div class="news">${raceNews.join("")}</div>` : "") +
+    `<h2>${title}</h2><p class="sub">${round}${race.track.name}${dir ? " (обратно)" : ""} · <b>${ORDINAL[mine.place]} место</b></p>` +
+      coinsHtml() + (raceNews.length ? `<div class="news">${raceNews.join("")}</div>` : "") +
       `<div class="table">${rowsHtml(results, mode === "cup" ? "race" : "")}</div>${actions}`,
     {
       menu: showMenu,
@@ -468,9 +710,39 @@ function showResult() {
         adBreak(() => startRace(trackIndex + 1));
       },
       podium: showPodium,
+      double: () => rewardTake(),
     },
   );
+  fresh = [];
+  if (lastCoins > 0) Sound.coin();
 }
+
+// Кнопка «монеты ×2 за ролик» — только в VK-версии (там эти две функции подменяют)
+let rewardOffer = () =>
+  window.vkGameHost?.rewardReady && lastCoins > 0
+    ? `<div class="actions one"><button class="primary alt reward" data-act="double">▶ Ролик: монеты ×2 (+${lastCoins})</button></div>`
+    : "";
+let rewardTake = async () => {
+  const b = el("panel-body").querySelector("[data-act=double]");
+  if (!b || b.disabled || adBusy) return;
+  b.disabled = true;
+  const gift = lastCoins;
+  adBusy = true;
+  let shown = false;
+  try {
+    shown = await window.vkGameHost?.rewarded();
+  } finally {
+    adBusy = false;
+  }
+  if (shown && gift > 0) {
+    save.coins += gift;
+    lastCoins = 0;
+    store();
+    b.textContent = `Получено: +${gift}`;
+    Sound.coin();
+  } else b.textContent = "Ролик не загрузился";
+  updateVisibility();
+};
 
 const TROPHY = '<svg class="trophy" viewBox="0 0 64 64" aria-hidden="true"><path d="M18 8h28v6h9v8c0 7-5 12-12 12h-1.500C39 39 36 41.500 34 42.500V50h8v7H22v-7h8v-7.500C28 41.500 25 39 22.500 34H21C14 34 9 29 9 22v-8h9zm0 12h-3v2c0 2.800 1.200 5 3 6zm28 0v8c1.800-1 3-3.200 3-6v-2z" fill="#ffd23e" stroke="#b06a00" stroke-width="2.500" stroke-linejoin="round"/></svg>';
 function showPodium() {
@@ -480,13 +752,19 @@ function showPodium() {
   setScreen("podium");
   race = null;
   if (!(save.cups[save.diff] <= mine.place)) save.cups[save.diff] = mine.place;
+  fresh = [];
+  check("cup", mine.place === 1);
+  const prize = [80, 50, 30][mine.place - 1] || 0;
+  save.coins += prize;
   store();
   Sound.music("menu");
   Sound.finish(mine.place);
   const diff = DIFFS.find((d) => d.id === save.diff).name;
   const title = mine.place === 1 ? "Кубок твой!" : mine.place <= 3 ? "Ты на пьедестале!" : "Кубок завершён";
+  const awards = fresh.map((k) => `<span class="gold">🏅 ${ACH[k][0]} +${ACH[k][2]}</span>`).join("");
+  fresh = [];
   openPanel(
-    `${mine.place === 1 ? TROPHY : ""}<h2>${title}</h2><p class="sub">Кубок Виража · «${diff}» · <b>${ORDINAL[mine.place]} место</b></p><div class="table cup">${rowsHtml(table, "final")}</div>` +
+    `${mine.place === 1 ? TROPHY : ""}<h2>${title}</h2><p class="sub">Кубок Виража · «${diff}» · <b>${ORDINAL[mine.place]} место</b>${prize ? ` · <b class="gain">+${prize}</b> монет` : ""}</p>${awards ? `<div class="news">${awards}</div>` : ""}<div class="table cup">${rowsHtml(table, "final")}</div>` +
       `<div class="actions"><button class="primary plain" data-act="menu">В меню</button><button class="primary alt" data-act="cup">Ещё кубок</button></div>`,
     { menu: showMenu, cup: () => adBreak(startCup) },
     true,
@@ -604,6 +882,90 @@ onPress(el("cup"), () => {
   Sound.pick();
   askCup();
 });
+onPress(el("trial"), () => {
+  Sound.unlock();
+  Sound.pick();
+  mode = "trial";
+  startRace(trackIndex);
+});
+onPress(el("daily"), () => {
+  Sound.unlock();
+  Sound.pick();
+  mode = "daily";
+  startRace(dailyPlan().track);
+});
+onPress(el("dir"), () => {
+  Sound.unlock();
+  Sound.click();
+  save.dir = save.dir ? 0 : 1;
+  store();
+  renderMenu();
+  attract();
+});
+onPress(el("garage"), () => {
+  Sound.unlock();
+  Sound.click();
+  showGarage();
+});
+onPress(el("awards"), () => {
+  Sound.unlock();
+  Sound.click();
+  showAwards();
+});
+const QUALITY_NAMES = { auto: "авто", high: "высокая", mid: "средняя", low: "низкая" };
+onPress(el("quality"), () => {
+  const order = ["auto", "high", "mid", "low"];
+  save.quality = order[(order.indexOf(save.quality) + 1) % order.length];
+  view.setQuality(save.quality);
+  store();
+  Sound.unlock();
+  Sound.click();
+  renderMenu();
+});
+view.onQuality = () => screen === "menu" && renderMenu();
+
+// ---------- гараж ----------
+const PARTS = {
+  engine: ["Мотор", "быстрее на прямой и разгон", "M4 13h3l2-4h6l2 4h3v5H4z"],
+  tires: ["Шины", "держат дорогу и рулят", "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18zm0 5a4 4 0 1 1 0 8a4 4 0 1 1 0-8z"],
+  nitro: ["Нитро", "горит дольше, копится в заносе", "M13.5 2L5 13.4h5.2L9 22l9-12.2h-5.4z"],
+};
+function showGarage(bought = "") {
+  const rows = Object.entries(PARTS).map(([key, [name, about, icon]]) => {
+    const lvl = save.up[key], cost = UPGRADE_COST[lvl];
+    const pips = UPGRADE_COST.map((_, k) => `<i class="${k < lvl ? "on" : ""}"></i>`).join("");
+    const btn = cost === undefined ? `<button class="buy" disabled>Готово</button>` : `<button class="buy" data-act="buy-${key}" ${save.coins < cost ? "disabled" : ""}><i class="coin"></i>${cost}</button>`;
+    return `<div class="part${bought === key ? " pop" : ""}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${icon}" fill="currentColor"/></svg><span><b>${name}</b><small>${about}</small><span class="pips">${pips}</span></span>${btn}</div>`;
+  }).join("");
+  const acts = { back: closeMenuPanel };
+  for (const key of Object.keys(PARTS))
+    acts["buy-" + key] = () => {
+      const cost = UPGRADE_COST[save.up[key]];
+      if (cost === undefined || save.coins < cost) return;
+      save.coins -= cost;
+      save.up[key]++;
+      fresh = [];
+      check("garage", save.up[key] >= UPGRADE_COST.length);
+      store();
+      Sound.buy();
+      showGarage(key);
+    };
+  openPanel(
+    `<h2>Гараж</h2><p class="sub">У тебя <b><i class="coin"></i>${save.coins}</b> монет<span class="why"> — за места, мини-турбо, тягу, рекорды и награды</span></p>` +
+      `<div class="parts">${rows}</div><div class="actions one"><button class="primary plain" data-act="back">Готово</button></div>`,
+    acts,
+  );
+}
+function showAwards() {
+  const rows = Object.entries(ACH).map(([key, [name, how, coins]]) =>
+    `<div class="award${save.ach[key] ? " got" : ""}"><b>${save.ach[key] ? "🏅" : "○"}</b><span><b>${name}</b><small>${how}</small></span><em>+${coins}</em></div>`).join("");
+  openPanel(`<h2>Награды</h2><p class="sub">Получено ${Object.keys(save.ach).filter((k) => ACH[k]).length} из ${Object.keys(ACH).length}. За каждую — монеты.</p><div class="awards">${rows}</div>` +
+    `<div class="actions one"><button class="primary plain" data-act="back">Готово</button></div>`, { back: closeMenuPanel });
+}
+function closeMenuPanel() {
+  closePanel();
+  renderMenu();
+}
 function quiet() {
   if (screen === "race" && !paused && finishT < 0) togglePause();
   else Sound.hush();
@@ -734,8 +1096,9 @@ function tick(now) {
   last = now;
   if (paused) return;
   let camMode = "menu", t = 0;
+  const slow = view.timeScale(); // короткое замедление на финише
   if (race) {
-    acc += real * rush;
+    acc += real * rush * slow;
     const input = screen === "race" && finishT < 0 ? readInput() : { steer: 0 };
     if (nitroTap) {
       input.nitro = true;
@@ -762,14 +1125,25 @@ function tick(now) {
     } else {
       hud.update();
       sound(me);
+      const g = ghost.frame(me);
+      view.ghost(g);
+      const d = el("delta");
+      d.hidden = !g || g.delta === null;
+      if (g && g.delta !== null) {
+        const text = (g.delta < 0 ? "−" : "+") + Math.abs(g.delta).toFixed(2);
+        if (d.textContent !== text) d.textContent = text;
+        d.className = g.delta < 0 ? "ahead" : "behind";
+      }
       if (race.phase === "race") {
         teachT += real;
         if (teachT > 6) el("hud").classList.remove("teach");
       }
     }
+    if (finishT >= 0) view.ghost(null);
   } else if (screen === "result") camMode = "orbit";
   else if (screen === "podium") camMode = "podium";
-  view.frame(race, real * (screen === "menu" ? 1 : Math.min(rush, 3)), camMode, t);
+  view.realDt = real;
+  view.frame(race, real * (screen === "menu" ? 1 : Math.min(rush, 3)) * slow, camMode, t);
 }
 
 addEventListener("resize", () => {
@@ -788,9 +1162,10 @@ window.virazh = {
     const me = race?.player;
     return {
       screen, mode, paused, track: race ? race.track.id : null, trackIndex, diff: save.diff, phase: race ? race.phase : null,
-      time: race ? +race.time.toFixed(2) : 0, cupRound: cup ? cup.round : null, panel: !el("panel").hidden,
+      time: race ? +race.time.toFixed(2) : 0, cupRound: cup ? cup.round : null, panel: !el("panel").hidden, dir, look: view.quality,
+      ghost: ghost.best ? ghost.best.t : null, coins: save.coins, lastCoins,
       ...(me
-        ? { lap: me.lap, place: me.place, speed: +me.v.toFixed(1), nitro: +me.nitro.toFixed(2), s: +me.s.toFixed(1), d: +me.d.toFixed(2), wrong: me.wrong, offroad: me.offroad, drift: me.drift, finished: me.finished, resets: me.resets, walls: me.wallHits, best: me.bestLap }
+        ? { lap: me.lap, place: me.place, speed: +me.v.toFixed(1), nitro: +me.nitro.toFixed(2), s: +me.s.toFixed(1), d: +me.d.toFixed(2), wrong: me.wrong, offroad: me.offroad, drift: me.drift, finished: me.finished, resets: me.resets, walls: me.wallHits, best: me.bestLap, turbos: me.turbos, drafts: me.drafts, draft: me.draft, ice: me.onIce, rivals: race.cars.length - 1 }
         : {}),
       save: JSON.parse(JSON.stringify(save)),
     };
@@ -829,6 +1204,7 @@ setScreen("menu");
 placeScene();
 attract();
 el("load").hidden = true;
+for (const id of ["trial", "daily", "garage", "awards"]) el(id).disabled = false;
 el("race").disabled = el("cup").disabled = false;
 window.vkGameHost?.bannerWhen(() => screen !== "race" || paused);
 requestAnimationFrame(tick);

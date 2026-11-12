@@ -1,6 +1,6 @@
 // Модели «Грозового каньона»: истребитель, роботы-стражи, скалы, кольца и кристаллы.
 // Истребитель смотрит в −z (вглубь каньона), враги — в +z (на игрока).
-import { T, GEO, TAU, part, at, along, metal, lit, flare } from "./kit.js?v=4a3b319e";
+import { T, GEO, TAU, part, at, along, metal, lit, flare } from "./kit.js?v=9a05a695";
 
 const white = metal("#e9eef6", { roughness: 0.35 });
 const orange = metal("#ff7a2e", { roughness: 0.4 });
@@ -120,9 +120,9 @@ function bomber() {
   return g;
 }
 
-// Хозяин зоны: один корпус, пять расцветок. core — светящееся ядро (пульсирует), guns — пушки.
-const BOSS_TINT = ["#c9654a", "#4bb6c9", "#7b6fe0", "#e0792e", "#d94f8a"];
-const BOSS_GLOW = ["#ffb02e", "#7ff2ff", "#b8a8ff", "#ffd24a", "#ff7fc8"];
+// Хозяин зоны: один корпус, семь расцветок (по порядку зон). core — светящееся ядро (пульсирует), guns — пушки.
+const BOSS_TINT = ["#c9654a", "#4bb6c9", "#7b6fe0", "#a8dcf2", "#e0792e", "#8a4fd0", "#d94f8a"];
+const BOSS_GLOW = ["#ffb02e", "#7ff2ff", "#b8a8ff", "#e6fbff", "#ffd24a", "#d08aff", "#ff7fc8"];
 function boss(zone = 1) {
   const g = new T.Group();
   const shell = metal(BOSS_TINT[zone - 1], { roughness: 0.4 });
@@ -148,8 +148,103 @@ function boss(zone = 1) {
   return g;
 }
 
-export const enemyModels = { scout, dart, turret, mine, bomber, boss };
-export const enemyColor = { scout: "#ff6a4a", dart: "#ff9a3a", turret: "#ffb02e", mine: "#ff5252", bomber: "#ff5fb8", boss: "#ffd27a" };
+// Дрон из звена: маленький, круглый, с винтом сверху
+function drone() {
+  const g = new T.Group();
+  const shell = metal("#9fe8ff", { roughness: 0.35 });
+  g.add(part(GEO.ball, shell, 0.62, 0.48, 0.62), at(part(GEO.box, dark, 1.4, 0.07, 0.18), 0, 0.12, 0),
+    at(part(GEO.ball, eyeAmber, 0.2), 0, 0.02, 0.5), at(flare("#7fe9ff", 1.6, 1.6), 0, 0, 0.55));
+  const rotor = new T.Group();
+  rotor.add(at(part(GEO.box, white, 1.2, 0.03, 0.1), 0, 0.5, 0), at(part(GEO.cyl, dark, 0.08, 0.2, 0.08), 0, 0.4, 0));
+  g.add(rotor);
+  g.userData.spin = [rotor];
+  return g;
+}
+
+// Щитоносец: крепкий корпус и шестигранный щит спереди
+const shieldGlass = new T.MeshBasicMaterial({ color: new T.Color("#6fd8ff").multiplyScalar(1.6), transparent: true, opacity: 0.38, toneMapped: false, depthWrite: false, side: T.DoubleSide });
+function shieldBearer() {
+  const g = new T.Group();
+  const shell = metal("#5a7fa8", { roughness: 0.4 });
+  g.add(part(GEO.oct, shell, 1.2, 0.9, 1.1), at(part(GEO.box, hullDark, 2.2, 0.35, 0.8), 0, -0.1, -0.2),
+    at(part(GEO.ball, eyeRed, 0.26), 0, 0.15, 0.95), at(flare("#ff5a3a", 2, 2), 0, 0.15, 1.0));
+  for (const s of [-1, 1]) g.add(at(along(part(GEO.cyl, gun, 0.16, 1.1, 0.16)), s * 0.95, -0.25, 0.7));
+  const plate = new T.Group();
+  const hex = part(GEO.hex, shieldGlass, 1.75, 0.08, 1.75);
+  hex.rotation.x = Math.PI / 2;
+  const rim = part(GEO.ring, lit("#7fe9ff", 2.4), 1.78);
+  rim.scale.z = 0.4;
+  plate.add(hex, rim);
+  plate.position.z = 1.55;
+  g.add(plate);
+  g.userData.plate = plate;
+  return g;
+}
+
+// Снайпер: длинный ствол и большой глаз-прицел
+function sniper() {
+  const g = new T.Group();
+  const shell = metal("#d8c0e8", { roughness: 0.35 });
+  g.add(part(GEO.hex, shell, 0.9, 0.5, 0.9), at(part(GEO.ball, hullDark, 0.6, 0.5, 0.7), 0, 0.2, 0),
+    at(along(part(GEO.cyl, gun, 0.12, 2.6, 0.12)), 0, 0, 1.4), at(part(GEO.ball, eyePink, 0.34), 0, 0.42, 0.45),
+    at(flare("#ff4f8a", 2.4, 2.4), 0, 0.42, 0.55));
+  for (const s of [-1, 1]) g.add(at(part(GEO.box, shell, 0.9, 0.06, 0.4), s * 0.95, 0, -0.2));
+  return g;
+}
+
+// Контейнер с оружием: золотой ящик со звездой и двумя винтами
+function carrier() {
+  const g = new T.Group();
+  const gold = metal("#ffcf4a", { roughness: 0.3, metalness: 0.55 });
+  g.add(part(GEO.box, gold, 1.5, 1.1, 1.5), at(part(GEO.box, dark, 1.6, 0.18, 1.6), 0, 0, 0),
+    at(part(GEO.oct, lit("#ffffff", 2.2), 0.42, 0.42, 0.12), 0, 0.05, 0.78), at(flare("#ffe27a", 3.4, 3.4), 0, 0, 0));
+  const rotors = [];
+  for (const s of [-1, 1]) {
+    const rotor = new T.Group();
+    rotor.position.set(s * 1.05, 0.75, 0);
+    rotor.add(part(GEO.box, white, 1.1, 0.03, 0.12), at(part(GEO.cyl, dark, 0.06, 0.4, 0.06), 0, -0.2, 0));
+    rotors.push(rotor);
+    g.add(rotor);
+  }
+  g.userData.spin = rotors;
+  return g;
+}
+
+// Крейсер: длинный корпус, две башни, тарелка радара и сияющие двигатели
+function cruiser(zone = 1) {
+  const g = new T.Group();
+  const shell = metal(BOSS_TINT[(zone + 2) % BOSS_TINT.length], { roughness: 0.42 });
+  const glow = lit("#ffb04a", 3);
+  g.add(part(GEO.oct, shell, 3.4, 1.0, 2.6), at(part(GEO.box, hullDark, 6.4, 0.5, 1.6), 0, -0.25, -0.3),
+    at(part(GEO.box, steel, 1.4, 0.8, 2.2), 0, 0.75, -0.4), at(part(GEO.ball, glow, 0.5, 0.3, 0.4), 0, 0.15, 2.4),
+    at(flare("#ffb04a", 4, 4), 0, 0.15, 2.5));
+  for (const s of [-1, 1]) {
+    g.add(at(part(GEO.hex, dark, 0.7, 0.45, 0.7), s * 2.4, 0.45, 0.6), at(along(part(GEO.cyl, gun, 0.18, 1.6, 0.18)), s * 2.4, 0.5, 1.4),
+      at(part(GEO.box, shell, 1.6, 0.12, 1.2), s * 3.6, -0.15, -0.6), at(along(part(GEO.cyl, lit("#7fe9ff", 2), 0.3, 0.2, 0.3)), s * 1.2, -0.1, -2.1));
+  }
+  const radar = new T.Group();
+  radar.position.set(0, 1.35, -0.6);
+  radar.add(part(GEO.cyl, steel, 0.08, 0.5, 0.08), at(part(GEO.cyl, metal("#e9eef6"), 0.75, 0.08, 0.75), 0, 0.3, 0), at(part(GEO.ball, eyeRed, 0.12), 0, 0.4, 0));
+  g.add(radar);
+  g.userData = { radar };
+  return g;
+}
+
+export const enemyModels = { scout, dart, turret, mine, bomber, boss, drone, shield: shieldBearer, sniper, carrier, cruiser };
+export const enemyColor = { scout: "#ff6a4a", dart: "#ff9a3a", turret: "#ffb02e", mine: "#ff5252", bomber: "#ff5fb8", boss: "#ffd27a", drone: "#7fe9ff", shield: "#5fd0ff", sniper: "#ff5a8a", carrier: "#ffd23e", cruiser: "#ff9a4a" };
+
+// Капсулы с оружием: цвет говорит, что внутри
+export const CAPSULE_COLOR = { plasma: "#ff5ad0", chain: "#ffe14a", shield: "#5fd0ff" };
+export function capsule(kind) {
+  const g = new T.Group();
+  const color = CAPSULE_COLOR[kind] || "#ffffff";
+  const core = part(GEO.ball, lit(color, 2.6), 0.5);
+  const shellMat = new T.MeshBasicMaterial({ color: new T.Color(color).multiplyScalar(1.2), transparent: true, opacity: 0.35, toneMapped: false, depthWrite: false });
+  const ring = part(GEO.ring, lit("#ffffff", 2), 0.85);
+  g.add(core, part(GEO.ball, shellMat, 0.85), ring, flare(color, 3.6, 3.6));
+  g.userData = { ring, core };
+  return g;
+}
 
 // ---------- Скалы. Материал общий и перекрашивается под зону. ----------
 function seededRandom(seed) {
