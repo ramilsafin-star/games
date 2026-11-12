@@ -1,12 +1,13 @@
 // «Снежный ком»: экраны, управление, звук, сохранение, реклама VK и главный цикл.
-import { HALF, radiusOf, gateLabel, START } from "./rules.js?v=8ae2940b";
-import { buildLevel, LEVEL_COUNT, MOUNTAINS, INTRO, mountainOf } from "./levels.js?v=8ae2940b";
-import { Run } from "./run.js?v=8ae2940b";
-import { makePilot } from "./pilot.js?v=8ae2940b";
-import { SAVE_KEY, UPGRADES, SKINS, upgradeCost, upgradeText, startSize, magnetRadius, levelReward, readSave, writeSave, setBest, bestOf } from "./economy.js?v=8ae2940b";
-import { readStorage, writeStorage } from "./kit.js?v=8ae2940b";
-import { Sound } from "./sound.js?v=8ae2940b";
-import { SnowView } from "./view.js?v=8ae2940b";
+import { HALF, radiusOf, gateLabel, START } from "./rules.js?v=51f23175";
+import { buildLevel, LEVEL_COUNT, MOUNTAINS, INTRO, FOE_INTRO, QUEST_TEXT, mountainOf } from "./levels.js?v=51f23175";
+import { Run } from "./run.js?v=51f23175";
+import { makePilot } from "./pilot.js?v=51f23175";
+import { SAVE_KEY, UPGRADES, SKINS, upgradeCost, upgradeText, levelReward, readSave, writeSave, setBest, bestOf, gear, skinOpen, AD_AMMO } from "./economy.js?v=51f23175";
+import { readStorage, writeStorage } from "./kit.js?v=51f23175";
+import { Sound } from "./sound.js?v=51f23175";
+import { SnowView, TIERS } from "./view.js?v=51f23175";
+import { FOE_ICONS, CONFETTI } from "./icons.js?v=51f23175";
 
 const $ = (name) => document.getElementById(name);
 const host = () => window.vkGameHost;
@@ -20,6 +21,17 @@ Sound.set(!!save.snd);
 const view = new SnowView($("stage"));
 view.onCrush = () => Sound.crush();
 view.onSteam = () => Sound.steam();
+view.onFoe = (kind) => (kind === "thud" ? Sound.thud() : Sound.smash());
+// Качество графики: «само» выбирает по устройству и снижает, если кадров меньше ~45 в секунду
+const QUALITY = ["auto", "high", "medium", "low"];
+function startTier() {
+  const mem = navigator.deviceMemory;
+  const cores = navigator.hardwareConcurrency || 4;
+  if ((mem && mem <= 2) || cores <= 2) return "low";
+  if ((mem === undefined || mem >= 6) && cores >= 4) return "high";
+  return "medium";
+}
+view.setQuality(QUALITY[save.q] || "auto", startTier());
 
 let screen = "title"; // title | play
 let paused = false;
@@ -31,7 +43,9 @@ let pilotSeed = 1;
 let panel = null; // что открыто на панели
 let adBusy = false;
 let resultShown = false;
-let introShown = false;
+let intros = []; // подсказки уровня: о новом препятствии, монстре, подборе
+let introAt = 0;
+let slowmo = 0; // замедление после удара по снеговику
 let finaleShown = false; // объявление крепости или босса — до удара, а не поверх него
 let reward = null; // награда последнего уровня (для ×3)
 let tripled = false;
@@ -168,7 +182,7 @@ function text(el, value) {
 }
 // kind: "" — крупное объявление, "quick" — короткое (уходит до удара в финале),
 // "tip" — плашка-подсказка под верхней полосой, чтобы не закрывать ворота
-function banner(message, above = "", warn = false, kind = "") {
+function banner(message, above = "", warn = false, kind = "", icon = "") {
   const el = $("banner");
   el.className = "";
   el.classList.toggle("warn", warn);
@@ -178,6 +192,12 @@ function banner(message, above = "", warn = false, kind = "") {
   if (kind === "tip") {
     box.className = "pill";
     el.append(box);
+  }
+  if (icon && FOE_ICONS[icon]) {
+    const ico = document.createElement("i");
+    ico.className = "ico";
+    ico.innerHTML = FOE_ICONS[icon];
+    box.append(ico);
   }
   if (above) {
     const small = document.createElement("small");
@@ -233,6 +253,7 @@ function setScreen(name) {
   $("pause").hidden = name !== "play";
   $("size").hidden = name !== "play";
   $("hint").hidden = true;
+  $("gear").hidden = true;
 }
 function paintSound() {
   $("sound").setAttribute("aria-pressed", String(!!save.snd));
@@ -291,11 +312,16 @@ $("open-skins").addEventListener("click", () => {
   Sound.tap();
   openSkins();
 });
+$("open-settings").addEventListener("click", () => {
+  Sound.unlock();
+  Sound.tap();
+  openSettings();
+});
 
 function showMenuScene() {
   const L = buildLevel(save.at);
   if (view.level !== L) view.load(L);
-  run = new Run(L, { start: startSize(save.up[0]) });
+  run = new Run(L, gear(save.up));
   level = L;
   view.snap = true;
 }
@@ -311,17 +337,22 @@ function toTitle() {
 }
 
 // ---------- Уровень ----------
-function startLevel(n) {
+function startLevel(n, extra = {}) {
   closePanel();
   level = buildLevel(n);
   save.at = n;
   persist();
   if (view.level !== level) view.load(level);
   else view.load(level); // предметы и следы — с чистого листа
-  run = new Run(level, { start: startSize(save.up[0]), magnet: magnetRadius(save.up[2]) });
+  run = new Run(level, { ...gear(save.up), ...extra });
   paused = false;
   resultShown = false;
-  introShown = false;
+  slowmo = 0;
+  intros = [];
+  if (level.intro) intros.push({ at: level.introAt, text: INTRO[level.intro], icon: "" });
+  for (const q of level.intros) intros.push({ at: q.at, text: FOE_INTRO[q.key], icon: q.key });
+  intros.sort((p, q) => p.at - q.at);
+  buildGear();
   reward = null;
   tripled = false;
   failCredit = 0;
@@ -350,6 +381,7 @@ function begin() {
   if (!run || run.mode !== "ready") return;
   run.begin();
   $("hint").hidden = true;
+  $("gear").hidden = false;
   Sound.start();
 }
 function pause() {
@@ -385,7 +417,7 @@ function closePanel() {
 function paintRewardButtons() {
   const ok = rewardOk();
   for (const b of document.querySelectorAll("[data-reward]")) {
-    const spent = b.dataset.reward === "triple" ? tripled : !run?.canContinue();
+    const spent = b.dataset.reward === "triple" ? tripled : b.dataset.reward === "gun" ? false : !run?.canContinue();
     b.hidden = !ok || spent;
   }
 }
@@ -393,19 +425,26 @@ const ICONS = {
   start: '<svg viewBox="0 0 32 32"><circle cx="11" cy="20" r="5"/><circle cx="21" cy="16" r="8"/><path d="M4 9l4-4M8 9V5H4"/></svg>',
   coin: '<svg viewBox="0 0 32 32"><path d="M16 4v24M5.6 10l20.8 12M5.6 22L26.4 10"/><path d="M24 4v6M21 7h6"/></svg>',
   magnet: '<svg viewBox="0 0 32 32"><path d="M8 6v10a8 8 0 0 0 16 0V6"/><path d="M8 6h5v10a3 3 0 0 0 6 0V6h5"/><path d="M4 26l3-2M28 26l-3-2M16 30v-3"/></svg>',
+  gun: '<svg viewBox="0 0 32 32"><path d="M5 20l14-8 3 5-14 8z"/><circle cx="9" cy="25" r="3"/><circle cx="26" cy="9" r="3"/><path d="M28 4l1-2M30 8h2"/></svg>',
+  rate: '<svg viewBox="0 0 32 32"><circle cx="8" cy="16" r="3"/><circle cx="17" cy="16" r="3"/><circle cx="26" cy="16" r="3"/><path d="M4 9h24M4 23h24"/></svg>',
+  spike: '<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="6"/><path d="M16 3v5M16 24v5M3 16h5M24 16h5M7 7l3.5 3.5M21.5 21.5L25 25M25 7l-3.5 3.5M10.5 21.5L7 25"/></svg>',
 };
 function bankHtml() {
   return `<div class="bank"><i class="flake"></i>${fmt(save.co)}</div>`;
 }
-function openUpgrades() {
+let upgradeTab = "ball";
+function openUpgrades(tab = upgradeTab) {
+  upgradeTab = tab;
   const cards = UPGRADES.map((u, i) => {
+    if (!!u.arms !== (tab === "arms")) return "";
     const k = save.up[i];
     const cost = upgradeCost(i, k);
     const pips = Array.from({ length: u.max }, (_, j) => `<i class="${j < k ? "on" : ""}"></i>`).join("");
     const btn = cost === null ? `<button class="buy on" disabled>Всё</button>` : `<button class="buy" data-action="upgrade" data-index="${i}" ${save.co >= cost ? "" : "disabled"}><i class="flake"></i>${fmt(cost)}</button>`;
     return `<div class="card"><div class="ico">${ICONS[u.id]}</div><div><b>${u.name}</b><small>${upgradeText(i, k)}</small><div class="lv">${pips}</div></div>${btn}</div>`;
   }).join("");
-  openPanel("upgrades", `<h2 id="panel-title">Улучшения</h2>${bankHtml()}<div class="list">${cards}</div>
+  const tabs = `<div class="tabs"><button class="tab ${tab === "ball" ? "on" : ""}" data-action="tab" data-tab="ball">Ком</button><button class="tab ${tab === "arms" ? "on" : ""}" data-action="tab" data-tab="arms">Оружие</button></div>`;
+  openPanel("upgrades", `<h2 id="panel-title">Улучшения</h2>${bankHtml()}${tabs}<div class="list">${cards}</div>
     <div class="pair" style="grid-template-columns:1fr"><button class="choice" data-action="back">Назад</button></div>`);
 }
 const ORBS = {
@@ -415,16 +454,20 @@ const ORBS = {
   orange: "radial-gradient(circle at 35% 30%, #ffd08a, #ff8a1a 55%, #c85a00)",
   disco: "conic-gradient(#e6e6f0, #8a8aa0, #ffffff, #6a6a80, #f0f0ff, #9a9ab0, #e6e6f0)",
   night: "radial-gradient(circle at 30% 30%, #ffe27a 0 2px, transparent 3px), radial-gradient(circle at 65% 55%, #fff 0 1.5px, transparent 2.5px), radial-gradient(circle at 45% 75%, #fff 0 1.5px, transparent 2.5px), linear-gradient(160deg, #1a2a7a, #2a1a5e)",
+  hunter: "radial-gradient(circle at 35% 30%, #ffffff, #f2e6d2 50%, #b8946a)",
+  storm: "conic-gradient(from 30deg, #bff4ff, #5f8cff, #ffffff, #3a5ae0, #9fe8ff, #bff4ff)",
 };
 function openSkins() {
   const cards = SKINS.map((sk, i) => {
-    const owned = !!(save.sk & (1 << i));
+    const owned = skinOpen(save, i);
     const worn = save.cur === i;
     const btn = worn
       ? `<button class="buy on" disabled>Надет</button>`
       : owned
         ? `<button class="buy" data-action="wear" data-index="${i}">Надеть</button>`
-        : `<button class="buy" data-action="skin" data-index="${i}" ${save.co >= sk.price ? "" : "disabled"}><i class="flake"></i>${fmt(sk.price)}</button>`;
+        : sk.kills
+          ? `<button class="buy hunt" disabled>Монстров ${Math.min(save.kl, sk.kills)}/${sk.kills}</button>`
+          : `<button class="buy" data-action="skin" data-index="${i}" ${save.co >= sk.price ? "" : "disabled"}><i class="flake"></i>${fmt(sk.price)}</button>`;
     return `<div class="skin ${worn ? "worn" : ""}"><i class="orb" style="background:${ORBS[sk.id]}"></i><b>${sk.name}</b>${btn}</div>`;
   }).join("");
   openPanel("skins", `<h2 id="panel-title">Облики кома</h2>${bankHtml()}<div class="skins">${cards}</div>
@@ -433,6 +476,7 @@ function openSkins() {
 
 function showFinish() {
   const r = levelReward(level, run, save.up[1]);
+  save.kl += run.kills.all;
   reward = r;
   tripled = false;
   save.co += r.total;
@@ -448,13 +492,15 @@ function showFinish() {
     r.bonus > 1 ? `<span><b>+${Math.round((r.bonus - 1) * 100)}%</b>бонус</span>` : "",
     `<span><b>+${r.base}</b>за уровень</span>`,
     r.boss ? `<span><b>+${r.boss}</b>за босса</span>` : "",
+    r.kills ? `<span><b>${r.kills}</b>${plural(r.kills, "монстр", "монстра", "монстров")}</span>` : "",
+    r.quest ? `<span class="done"><b>+${r.quest}</b>задание</span>` : "",
   ].join("");
   const last = level.n >= LEVEL_COUNT;
   openPanel("finish", `<div class="eyebrow"><i></i> УРОВЕНЬ ${level.n} · ${MOUNTAINS[level.mountain].name.toUpperCase()}</div>
     <h2 id="panel-title">${title}</h2>
     <div class="big-mult">×${r.mult}</div>
     <div class="facts">${facts}</div>
-    <div class="reward" id="reward"><i class="flake"></i>+${fmt(r.total)}</div>
+    <div class="reward" id="reward"><i class="flake"></i><b class="count">+0</b></div>
     <button class="ad" data-reward="triple" data-action="triple" hidden>×3 снежинки за рекламу</button>
     <button class="primary" data-action="next">${last ? "Все горы пройдены!" : "Дальше"}</button>
     <div class="pair"><button class="choice" data-action="again">Ещё раз</button><button class="choice" data-action="menu">В меню</button></div>`);
@@ -462,9 +508,44 @@ function showFinish() {
   $("coins").classList.remove("bump");
   void $("coins").offsetWidth;
   $("coins").classList.add("bump");
+  countUp($("reward")?.querySelector(".count"), r.total);
+  confetti(r.mult >= 8 || level.boss ? 70 : 40);
 }
+// награда набегает числом и подпрыгивает
+function countUp(el, total) {
+  if (!el) return;
+  const t0 = performance.now();
+  const tick = (now) => {
+    const u = Math.min(1, (now - t0) / 900);
+    el.textContent = "+" + fmt(Math.round(total * (1 - Math.pow(1 - u, 3))));
+    if (u < 1 && el.isConnected) requestAnimationFrame(tick);
+    else el.parentElement?.classList.add("pop");
+  };
+  requestAnimationFrame(tick);
+}
+// конфетти поверх экрана итога: разноцветные снежинки и звёздочки
+function confetti(count) {
+  const box = $("confetti");
+  box.textContent = "";
+  for (let i = 0; i < count; i++) {
+    const el = document.createElement("i");
+    el.innerHTML = CONFETTI[i % CONFETTI.length];
+    el.style.left = `${Math.random() * 100}%`;
+    el.style.setProperty("--dx", `${(Math.random() * 2 - 1) * 120}px`);
+    el.style.setProperty("--r", `${(Math.random() * 2 - 1) * 540}deg`);
+    el.style.animationDelay = `${Math.random() * 0.5}s`;
+    el.style.animationDuration = `${1.8 + Math.random() * 1.4}s`;
+    el.style.scale = String(0.6 + Math.random() * 0.8);
+    box.append(el);
+  }
+  clearTimeout(confetti.timer);
+  confetti.timer = setTimeout(() => (box.textContent = ""), 4200);
+}
+const plural = (n, one, few, many) => (n % 10 === 1 && n % 100 !== 11 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? few : many);
 function showFail() {
   failCredit = run.coins;
+  save.kl += run.kills.all;
+  persist();
   const why = run.failReason === "fall" ? "Сорвался с моста!" : run.failReason === "boss" ? `${level.finale.boss.name} крупнее!` : "Ком растаял!";
   const tip =
     run.failReason === "boss"
@@ -477,6 +558,7 @@ function showFail() {
     <p>${tip}</p>
     <p>Собранные снежинки останутся: <b>+${run.coins}</b></p>
     <button class="ad" data-reward="continue" data-action="continue" hidden>Продолжить с этого места за рекламу</button>
+    ${level.n >= 2 ? `<button class="ad gun" data-reward="gun" data-action="gun-ad" hidden>Ещё раз со снежной пушкой</button>` : ""}
     <button class="primary" data-action="again">Ещё раз</button>
     <div class="pair" style="grid-template-columns:1fr"><button class="choice" data-action="menu">В меню</button></div>`);
 }
@@ -502,6 +584,13 @@ $("sheet").addEventListener("click", async (e) => {
   } else if (action === "back") {
     closePanel();
     paintTitle();
+  } else if (action === "tab") {
+    openUpgrades(b.dataset.tab);
+  } else if (action === "quality") {
+    save.q = Number(b.dataset.q);
+    persist();
+    view.setQuality(QUALITY[save.q], startTier());
+    openSettings();
   } else if (action === "upgrade") {
     const i = Number(b.dataset.index);
     const cost = upgradeCost(i, save.up[i]);
@@ -525,7 +614,7 @@ $("sheet").addEventListener("click", async (e) => {
     paintCoins();
   } else if (action === "wear") {
     const i = Number(b.dataset.index);
-    if (!(save.sk & (1 << i))) return;
+    if (!skinOpen(save, i)) return;
     save.cur = i;
     persist();
     view.setSkin(i);
@@ -555,6 +644,14 @@ $("sheet").addEventListener("click", async (e) => {
     if (el) el.innerHTML = `<i class="flake"></i>+${fmt(reward.total * 3)}`;
     paintCoins();
     paintRewardButtons();
+  } else if (action === "gun-ad") {
+    // ролик за награду: тот же уровень заново, а в пушке — снежки с собой
+    const ok = await rewarded();
+    if (!ok) return;
+    creditFail();
+    startLevel(level.n, { ammo: AD_AMMO });
+    banner(`${AD_AMMO} снежков в пушке!`, "СНЕЖНАЯ ПУШКА", false, "tip", "gun");
+    updateVisibility();
   } else if (action === "continue") {
     if (!run.canContinue()) return;
     const ok = await rewarded();
@@ -572,9 +669,11 @@ $("sheet").addEventListener("click", async (e) => {
 // ---------- События заезда ----------
 let lastSize = START;
 const sizePoint = { x: 0, y: 0, on: false };
+const testLog = []; // для проверок в браузере: кто кого и чем победил
 function handleEvents() {
   for (const e of run.events) {
     view.event(e, run);
+    if (e.type === "kill" || e.type === "pickup") (testLog.push({ type: e.type, kind: e.kind, how: e.how }), testLog.length > 200 && testLog.shift());
     switch (e.type) {
       case "flake":
         Sound.flake();
@@ -616,7 +715,54 @@ function handleEvents() {
         if (e.win) {
           Sound.boss();
           banner("Бах!", "СНЕГОВИК ПОВЕРЖЕН");
+          slowmo = 0.9;
         } else Sound.bounce();
+        break;
+      case "kill":
+        Sound.kill(e.kind, e.how);
+        if (e.gain) floatText("+" + e.gain, "good", false, 24);
+        else if (e.how !== "bite") floatText("+" + e.coins, "coin", false, 30);
+        break;
+      case "bite":
+        Sound.bite();
+        floatText("−" + e.dmg, "bad", false, -20);
+        break;
+      case "bonk":
+        Sound.bonk();
+        floatText("−" + e.dmg, "bad", true);
+        break;
+      case "drain":
+        Sound.drain();
+        floatText("−" + e.dmg, "bad", false, Math.random() * 40 - 20);
+        break;
+      case "pow":
+        Sound.pow();
+        break;
+      case "shot":
+        Sound.shot();
+        break;
+      case "pickup":
+        Sound.pickup(e.kind);
+        floatText(PICK_NAMES[e.kind], "good", true);
+        break;
+      case "wave":
+        Sound.wave();
+        break;
+      case "spirit":
+        Sound.spirit();
+        break;
+      case "chase":
+        Sound.chase();
+        banner("Лавина-йети!", "БЕГИ!", true, "quick", "chase");
+        break;
+      case "chase-end":
+        if (e.caught) {
+          Sound.caught();
+          floatText("−" + e.dmg, "bad", true);
+        } else {
+          Sound.escape();
+          banner(`Ушёл от лавины! +${e.coins}`, "", false, "quick");
+        }
         break;
       case "step":
         Sound.step(e.k);
@@ -662,7 +808,10 @@ function frame(now) {
     fps.since = now;
   }
   if (screen === "play" && run && !paused && !adBusy) {
-    let left = dt * speed;
+    // после удара по снеговику мир на миг замирает
+    const slow = slowmo > 0 ? 0.3 : 1;
+    slowmo = Math.max(0, slowmo - dt);
+    let left = dt * speed * slow;
     while (left > 1e-6 && run.mode !== "won" && run.mode !== "fail") {
       const h = Math.min(1 / 60, left);
       run.step(h, input(h));
@@ -670,9 +819,11 @@ function frame(now) {
       if (run.events.length) handleEvents();
     }
     if (run.events.length) handleEvents();
-    if (!introShown && level.intro && run.s > level.introAt) {
-      introShown = true;
-      banner(INTRO[level.intro], "ВНИМАНИЕ", true, "tip");
+    // подсказки по очереди: не чаще раза в три секунды
+    if (intros.length && run.s > intros[0].at && now - introAt > 3000 && run.mode === "run") {
+      const q = intros.shift();
+      introAt = now;
+      banner(q.text, q.icon ? "НОВОЕ" : "ВНИМАНИЕ", true, "tip", q.icon);
       Sound.hint();
     }
     if (!finaleShown && run.mode === "run" && run.s > level.length - 12) finaleBanner();
@@ -682,10 +833,57 @@ function frame(now) {
     if (!view.needsDraw) return;
     view.needsDraw = false;
   }
-  view.draw(run, paused || adBusy ? 0 : dt, screen === "title" ? "menu" : "play", ms);
+  view.draw(run, paused || adBusy ? 0 : dt * (slowmo > 0 ? 0.3 : 1), screen === "title" ? "menu" : "play", ms);
   if (screen === "play") paintHud();
 }
+// ---------- Оружие, задание и лавина: плашки в левом нижнем углу ----------
+const PICK_NAMES = { gun: "Пушка!", spike: "Шипы!", wave: "Волна!", boost: "Рывок!" };
+const QUEST_ICON = { imp: "imps", yeti: "yeti", any: "bigyeti" };
+function buildGear() {
+  const q = level.quest;
+  $("gear").innerHTML = `
+    <div class="gp chase" hidden><i class="ico">${FOE_ICONS.chase}</i><b>Лавина</b><span class="bar"><i></i></span></div>
+    <div class="gp gun" hidden><i class="ico">${FOE_ICONS.gun}</i><b>Пушка</b><span class="bar"><i></i></span></div>
+    <div class="gp spike" hidden><i class="ico">${FOE_ICONS.spike}</i><b>Шипы</b><span class="bar"><i></i></span></div>
+    ${q ? `<div class="gp quest"><i class="ico">${FOE_ICONS[QUEST_ICON[q.kind]]}</i><b>${QUEST_TEXT[q.kind]}</b><em>0/${q.need}</em></div>` : ""}`;
+  gearEls = {};
+  for (const k of ["chase", "gun", "spike", "quest"]) gearEls[k] = $("gear").querySelector("." + k);
+  gearShown = {};
+}
+let gearEls = {};
+let gearShown = {};
+function gearPill(name, on, k, label = null) {
+  const el = gearEls[name];
+  if (!el) return;
+  if (gearShown[name] !== on) {
+    el.hidden = !on;
+    gearShown[name] = on;
+  }
+  if (!on) return;
+  const bar = el.querySelector(".bar i");
+  if (bar) bar.style.transform = `scaleX(${Math.max(0, Math.min(1, k)).toFixed(3)})`;
+  if (label !== null) text(el.querySelector("b"), label);
+}
+function paintGear() {
+  if (!gearEls.quest && !level.chases.length && !run.armed && run.spikeT <= 0) return;
+  const ch = run.chase;
+  gearPill("chase", !!ch, ch ? ch.gap / 14 : 0);
+  if (gearEls.chase) gearEls.chase.classList.toggle("close", !!ch && ch.gap < 5);
+  gearPill("gun", run.armed, run.gunT > 0 ? run.gunT / run.gunTime : run.ammo / AD_AMMO, run.gunT > 0 ? "Пушка" : `Пушка · ${run.ammo}`);
+  gearPill("spike", run.spikeT > 0, run.spikeT / run.spikeTime);
+  const q = level.quest;
+  if (q && gearEls.quest) {
+    const done = run.questDone;
+    text(gearEls.quest.querySelector("em"), done ? "✓" : `${run.questProgress}/${q.need}`);
+    if (gearEls.quest.classList.contains("done") !== done) {
+      gearEls.quest.classList.toggle("done", done);
+      if (done) Sound.coin(), banner(`Задание выполнено! +${q.reward}`, "", false, "quick");
+    }
+  }
+}
+
 function paintHud() {
+  paintGear();
   $("hud-progress").style.transform = `scaleX(${Math.min(1, run.s / (level.finale.end - 4)).toFixed(3)})`;
   // в заезде — снежинки этого заезда, на панелях — копилка
   if (panel) paintCoins();
@@ -715,6 +913,18 @@ function resize() {
 addEventListener("resize", resize);
 resize();
 
+// ---------- Настройки: качество графики ----------
+function openSettings() {
+  const now = view.perf.tier;
+  const opts = QUALITY.map((m, i) => {
+    const label = m === "auto" ? `Само · ${TIERS[now].name.toLowerCase()}` : TIERS[m].name;
+    const note = m === "auto" ? "по устройству, ниже — если тормозит" : m === "high" ? "тени, свечение, больше снега" : m === "medium" ? "свечение без теней" : "для слабых телефонов";
+    return `<button class="opt ${save.q === i ? "on" : ""}" data-action="quality" data-q="${i}"><b>${label}</b><small>${note}</small></button>`;
+  }).join("");
+  openPanel("settings", `<h2 id="panel-title">Графика</h2><div class="opts">${opts}</div>
+    <div class="pair" style="grid-template-columns:1fr"><button class="choice" data-action="back">Назад</button></div>`);
+}
+
 // ---------- Старт ----------
 view.setSkin(save.cur);
 paintSound();
@@ -737,7 +947,9 @@ window.snezhok = {
   },
   save,
   persist,
-  state: () => ({ screen, paused, panel, adBusy, mode: run?.mode, s: run?.s, size: run?.size, coins: save.co, lv: save.lv, at: save.at, n: level?.n, fps: fps.value, perf: { ...view.perf } }),
+  state: () => ({ screen, paused, panel, adBusy, mode: run?.mode, s: run?.s, size: run?.size, coins: save.co, lv: save.lv, at: save.at, n: level?.n, fps: fps.value, perf: { ...view.perf }, kills: run?.kills.all, armed: run?.armed, spikeT: run?.spikeT, ammo: run?.ammo }),
+  quality: (mode) => view.setQuality(mode, startTier()),
+  log: testLog,
   fps: () => [...fps.log],
   play: (n) => startLevel(n),
   autopilot(kind = "good", seed = 1) {

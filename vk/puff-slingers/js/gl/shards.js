@@ -1,8 +1,8 @@
 // Обломки блоков: куски того же материала с той же текстурой. Сначала лежат точно на месте блока,
 // потом разлетаются, кувыркаются и отскакивают от земли. Форм мало, поэтому отрисовок тоже мало
-import * as T from '../../vendor/three/three.module.min.js?v=d6bb936e';
-import { boxUV, rockBox, seededRandom } from './shapes.js?v=d6bb936e';
-import { BLOCK_DEPTH } from './blocks.js?v=d6bb936e';
+import * as T from '../../vendor/three/three.module.min.js?v=7f585ca2';
+import { boxUV, rockBox, seededRandom } from './shapes.js?v=7f585ca2';
+import { BLOCK_DEPTH } from './blocks.js?v=7f585ca2';
 
 const CAPACITY = 150;
 // Сколько обломков держать одновременно на каждом уровне качества

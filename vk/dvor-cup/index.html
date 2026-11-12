@@ -5,26 +5,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#7fd0ff" />
     <title>Дворовой кубок</title>
-    <meta name="description" content="Футбол один на один во дворе: зверята с большими головами, звёздный удар и кубок чемпиона." />
+    <meta name="description" content="Футбол один на один во дворе: три кубка, соперники с характером, бонусы на поле, испытания и раздевалка." />
     <link rel="icon" href="./icon-192.png" />
     <link rel="apple-touch-icon" href="./icon-180.png" />
-    <script src="./vendor/vk/vk-bridge.min.js?v=0c6b65d0"></script>
-    <script src="./js/vk-host.js?v=0c6b65d0" data-keys="dvorcup3d-v1" data-ad-gap="120"></script>
-    <link rel="stylesheet" href="./style.css?v=0c6b65d0" />
+    <script src="./vendor/vk/vk-bridge.min.js?v=aaeea594"></script>
+    <script src="./js/vk-host.js?v=aaeea594" data-keys="dvorcup3d-v1" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=aaeea594" />
   <style>
 html.vk-banner .screen { padding-bottom: 24px; }
+html.vk-banner .title { gap: 8px; }
 @media (max-height: 430px) {
-  html.vk-banner .screen { padding-top: 10px; }
-  html.vk-banner .sheet { padding: 12px 16px 14px; }
-  html.vk-banner .sheet h2 { margin: 0 0 8px; font-size: 24px; }
-  html.vk-banner .steps { margin-bottom: 10px; }
-  html.vk-banner .card { padding: 12px 24px 16px; }
-  html.vk-banner .card h2 { margin: 0 0 4px; font-size: 28px; }
-  html.vk-banner .result-pic { font-size: 64px; }
-  html.vk-banner .result-pic img { width: 88px; height: 88px; }
-  html.vk-banner .result-score { margin-bottom: 10px; font-size: 24px; }
-  html.vk-banner .big { height: 62px; font-size: 26px; }
-  html.vk-banner .round.wide { width: 62px; height: 62px; font-size: 28px; }
+  html.vk-banner .screen.dim { padding-top: 54px; }
+  html.vk-banner .title .logo p { display: none; }
+  html.vk-banner .pill { height: 38px; }
+  html.vk-banner .big { height: 54px; font-size: 24px; }
+  html.vk-banner .round.wide { width: 54px; height: 54px; font-size: 26px; }
+  html.vk-banner .sheet { padding: 8px 14px 10px; }
+  html.vk-banner .sheet h2 { margin: 0 0 4px; font-size: 22px; }
+  html.vk-banner .tier-sub { margin-bottom: 4px; }
+  html.vk-banner .steps { margin-bottom: 6px; }
+  html.vk-banner .step img, html.vk-banner .step .ico { width: 46px; height: 46px; font-size: 28px; }
+  html.vk-banner .tip { margin-bottom: 4px; }
+  html.vk-banner .hero img { max-width: 60px; }
+  html.vk-banner .shop-item { padding: 4px; }
+  html.vk-banner .ball-ico, html.vk-banner .kit-ico, html.vk-banner .decor-ico { width: 42px; height: 42px; font-size: 32px; line-height: 42px; }
+  html.vk-banner .card { padding: 8px 20px 10px; }
+  html.vk-banner .result-pic { display: none; }
+  html.vk-banner .card h2 { margin: 0; font-size: 22px; }
+  html.vk-banner .result-score { margin-bottom: 2px; font-size: 19px; }
+  html.vk-banner .result-stars i { font-size: 26px; }
 }
 </style>
 </head>
@@ -33,17 +42,21 @@ html.vk-banner .screen { padding-bottom: 24px; }
     <header class="top">
       
       <div id="board" class="board" hidden>
-        <div class="team"><img id="pic0" alt="" /><span class="meter"><i id="star0"></i></span></div>
+        <div class="team"><img id="pic0" alt="" /><span class="meter"><i id="star0"></i></span><span id="fx0" class="fx"></span></div>
         <div class="score"><b id="score">0 : 0</b><small id="clock">1:00</small></div>
-        <div class="team right"><span class="meter"><i id="star1"></i></span><img id="pic1" alt="" /></div>
+        <div class="team right"><span id="fx1" class="fx"></span><span class="meter"><i id="star1"></i></span><img id="pic1" alt="" /></div>
       </div>
       <div class="tools">
+        <span id="coins" class="coins" hidden>🪙 0</span>
+        <button id="gear" class="round" aria-label="Настройки графики" hidden></button>
         <button id="pause" class="round" aria-label="Пауза" hidden></button>
         <button id="music" class="round"></button>
         <button id="sound" class="round"></button>
       </div>
     </header>
     <div id="banner" class="banner" aria-live="polite"></div>
+    <div id="toast" class="toast" aria-live="polite"></div>
+    <div id="flash" class="flash"></div>
 
     <!-- Кнопки на экране: у каждого игрока свои -->
     <div id="pad0" class="pad left" hidden>
@@ -64,6 +77,11 @@ html.vk-banner .screen { padding-bottom: 24px; }
         <button id="mode-cup" class="big">🏆 Кубок</button>
         <button id="mode-two" class="big alt">👫 Вдвоём</button>
       </div>
+      <div class="extras">
+        <button id="mode-trials" class="pill">🎯 Испытания</button>
+        <button id="mode-shop" class="pill">👕 Раздевалка</button>
+        <button id="mode-awards" class="pill">🏅 Награды <b id="awards-count"></b></button>
+      </div>
       <p id="cups" class="cups"></p>
     </section>
 
@@ -76,9 +94,61 @@ html.vk-banner .screen { padding-bottom: 24px; }
 
     <section id="ladder" class="screen dim" hidden>
       <div class="sheet">
-        <h2>Кубок двора</h2>
+        <div class="tier-head">
+          <button id="tier-prev" class="round" aria-label="Предыдущий кубок">◀</button>
+          <h2 id="tier-name">Кубок двора</h2>
+          <button id="tier-next" class="round" aria-label="Следующий кубок">▶</button>
+        </div>
+        <p id="tier-sub" class="tier-sub"></p>
         <div id="steps" class="steps"></div>
-        <button id="go" class="big">На поле ▶</button>
+        <p id="tip" class="tip"></p>
+        <div class="row">
+          <button id="ladder-back" class="round wide" aria-label="В меню">🏠</button>
+          <button id="go" class="big">На поле ▶</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="trials" class="screen dim" hidden>
+      <div class="sheet">
+        <button id="trials-back" class="round back" aria-label="В меню">🏠</button>
+        <h2>Испытания</h2>
+        <div id="trial-cards" class="trial-cards"></div>
+      </div>
+    </section>
+
+    <section id="shop" class="screen dim" hidden>
+      <div class="sheet">
+        <button id="shop-back" class="round back" aria-label="В меню">🏠</button>
+        <div class="shop-head">
+          <h2>Раздевалка</h2>
+          <span id="shop-coins" class="coins">🪙 0</span>
+        </div>
+        <div id="shop-tabs" class="tabs">
+          <button data-tab="ball" class="on">⚽ Мячи</button>
+          <button data-tab="kit">👕 Форма</button>
+          <button data-tab="decor">🎈 Двор</button>
+        </div>
+        <div id="shop-items" class="shop-items"></div>
+        <p id="shop-note" class="tip"></p>
+      </div>
+    </section>
+
+    <section id="awards" class="screen dim" hidden>
+      <div class="sheet">
+        <button id="awards-back" class="round back" aria-label="В меню">🏠</button>
+        <h2 id="awards-title">Награды</h2>
+        <div id="badges" class="badges"></div>
+        <p id="stats" class="tip"></p>
+      </div>
+    </section>
+
+    <section id="settings" class="screen dim" hidden>
+      <div class="card">
+        <h2>Графика</h2>
+        <div id="quality" class="quality"></div>
+        <p id="quality-now" class="tip"></p>
+        <button id="settings-ok" class="big">Готово</button>
       </div>
     </section>
 
@@ -87,6 +157,7 @@ html.vk-banner .screen { padding-bottom: 24px; }
         <h2>Пауза</h2>
         <div class="row">
           <button id="quit" class="round wide" aria-label="Выйти в меню">🏠</button>
+          <button id="pause-gear" class="round wide" aria-label="Настройки графики">⚙️</button>
           <button id="resume" class="big">▶ Дальше</button>
         </div>
       </div>
@@ -97,6 +168,11 @@ html.vk-banner .screen { padding-bottom: 24px; }
         <div id="result-pic" class="result-pic"></div>
         <h2 id="result-title"></h2>
         <p id="result-score" class="result-score"></p>
+        <div id="result-stars" class="result-stars" hidden></div>
+        <p id="result-coins" class="result-coins" hidden></p>
+        <div id="result-badges" class="result-badges"></div>
+        <p id="result-note" class="result-note" hidden></p>
+        <button id="double" class="pill reward" hidden></button>
         <div class="row">
           <button id="again" class="round wide" aria-label="Сыграть ещё раз">↻</button>
           <button id="next" class="big">Дальше ▶</button>
@@ -110,8 +186,8 @@ html.vk-banner .screen { padding-bottom: 24px; }
     <div id="nogl" class="screen nogl" hidden>
       <p>Тут нужна 3D-графика (WebGL), а браузер её не включил. Попробуйте другой браузер.</p>
     </div>
-    <script src="./js/audio.js?v=0c6b65d0"></script>
-    <script type="module" src="./js/game.js?v=0c6b65d0"></script>
-    <script src="./js/juice.js?v=0c6b65d0"></script>
+    <script src="./js/audio.js?v=aaeea594"></script>
+    <script type="module" src="./js/game.js?v=aaeea594"></script>
+    <script src="./js/juice.js?v=aaeea594"></script>
   </body>
 </html>

@@ -1,6 +1,6 @@
 // Уровень «как есть» → готовый к игре: углы кусков земли, препятствия для пера, лимит чернил, звёзды.
 // И «перо» — правила рисования линии. Без DOM и без физики: работает и в Node.
-import { dist, polyLength, segDist, segPolyDist, pointInPoly, segSegDist, rdp, rectPoly, resample, clamp } from "./geom.js?v=b97d5aa8";
+import { dist, polyLength, segDist, segPolyDist, pointInPoly, segSegDist, rdp, rectPoly, resample, clamp, rng } from "./geom.js?v=80a70cba";
 
 export const W = 1280,
   H = 720;
@@ -11,6 +11,8 @@ export const WALKER_R = 25; // радиус жителя на карте «До�
 export const HOUSE_R = 46; // в эту окружность вокруг домика должен прийти путь
 export const BERRY_R = 20;
 export const NEST_R = 48;
+export const FLY_R = 26; // светлячок пойман, если линия прошла ближе этого
+export const MIST_R = 40; // лунный туман, из которого вылетают привидения
 
 // Углы куска земли
 function verts(p) {
@@ -47,7 +49,36 @@ export function compile(raw, index, chapter, n) {
   L.seed = raw.seed || index * 7919 + 13;
   L.plan = inkPlan(L);
   L.blockers = blockersOf(L);
+  if (index >= 0) L.fly = flySpot(L);
   return L;
+}
+
+// Светлячок уровня: рядом с эталоном (чуть в стороне), там, где перо может пройти.
+// Эталон его ловит — значит, поймать можно всегда, но не случайно, а если провести линию через него.
+function flySpot(L) {
+  const r = rng(L.seed * 3 + 7);
+  const line = L.sol.reduce((a, b) => (polyLength(b) > polyLength(a) ? b : a));
+  const pts = resample(line, 4);
+  const pen = new Pen(L, [], 1e9);
+  pen.margin += 8; // с запасом от земли и героев — чтобы светлячок было видно
+  for (let k = 0; k < 16; k++) {
+    const i = Math.round((0.3 + r() * 0.4) * (pts.length - 1));
+    const a = pts[Math.max(0, i - 2)],
+      b = pts[Math.min(pts.length - 1, i + 2)];
+    const l = dist(a, b) || 1;
+    const side = r() < 0.5 ? -1 : 1;
+    const p = [Math.round(pts[i][0] - ((b[1] - a[1]) / l) * 14 * side), Math.round(pts[i][1] + ((b[0] - a[0]) / l) * 14 * side)];
+    if (pen.freeSeg(p, p)) return p;
+  }
+  const mid = pts[Math.floor(pts.length / 2)];
+  return [Math.round(mid[0]), Math.round(mid[1])];
+}
+// Прошла ли ломаная через светлячка
+export function flyHit(L, pts) {
+  if (!L.fly) return false;
+  if (pts.length === 1) return dist(pts[0], L.fly) < FLY_R;
+  for (let i = 1; i < pts.length; i++) if (segDist(L.fly, pts[i - 1], pts[i]) < FLY_R) return true;
+  return false;
 }
 
 // Всё, сквозь что линию не провести
@@ -69,6 +100,7 @@ function blockersOf(L) {
   for (const i of L.icicles || []) polys.push(icicle(i));
   for (const b of L.balls || []) circles.push([b.x, b.y, b.r || 24]);
   for (const f of L.fans || []) polys.push(rectPoly(f.x - f.w / 2, f.y - 6, f.w, 26));
+  for (const m of L.ghosts || []) if (m.y < H - 20) circles.push([m.x, m.y, 18]);
   const t = L.target;
   if (t) {
     if (t.k === "berry") circles.push([t.x, t.y, BERRY_R]);

@@ -229,6 +229,42 @@ Object.assign(Sound, {
     if (!this.ready()) return;
     this.tone({ type: "square", f0: last ? 1320 : 880, dur: last ? 0.35 : 0.12, vol: 0.06 });
   },
+  // Бонус взят: волшебный перелив вверх
+  item() {
+    if (!this.ready()) return;
+    [659, 880, 1175, 1568, 2093].forEach((f, i) => this.tone({ type: "triangle", f0: f, dur: 0.16, vol: 0.14, at: i * 0.045 }));
+    this.noise({ f0: 6000, dur: 0.2, vol: 0.05, filter: "highpass" });
+  },
+  // Снежинка: звонкий ледяной перезвон вниз
+  freeze() {
+    if (!this.ready()) return;
+    [2637, 2349, 1976, 1760, 1568].forEach((f, i) => this.tone({ type: "sine", f0: f, dur: 0.25, vol: 0.1, at: i * 0.05 }));
+    this.noise({ f0: 7000, f1: 3000, dur: 0.35, vol: 0.06, filter: "highpass" });
+  },
+  // Монетка: «дзынь»
+  coin(k = 0) {
+    if (!this.ready()) return;
+    const f = 1319 * Math.pow(1.06, k % 12);
+    this.tone({ type: "square", f0: f, dur: 0.06, vol: 0.05 });
+    this.tone({ type: "triangle", f0: f * 1.5, dur: 0.16, vol: 0.12, at: 0.05 });
+  },
+  // Новый значок: колокольчики
+  badge() {
+    if (!this.ready()) return;
+    [1047, 1319, 1568, 2093, 1568, 2093].forEach((f, i) => this.tone({ type: "triangle", f0: f, dur: 0.2, vol: 0.13, at: i * 0.08 }));
+  },
+  // Салют: хлопок и шипение
+  boom() {
+    if (!this.ready()) return;
+    this.tone({ type: "sine", f0: 140, f1: 50, dur: 0.3, vol: 0.18 });
+    this.noise({ f0: 4000, f1: 800, dur: 0.6, vol: 0.08, filter: "bandpass" });
+  },
+  // Подающая машинка: «пуф»
+  launch() {
+    if (!this.ready()) return;
+    this.tone({ type: "sine", f0: 220, f1: 90, dur: 0.16, vol: 0.25 });
+    this.noise({ f0: 900, f1: 300, dur: 0.18, vol: 0.12 });
+  },
 });
 
 const Music = {

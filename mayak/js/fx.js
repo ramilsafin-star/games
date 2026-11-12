@@ -1,5 +1,5 @@
 // Частицы и значки «Маяка». Всё рисуется инстансами: один вызов на частицы, один на значки.
-import * as T from "../vendor/three/three.module.min.js?v=e4b14d4e";
+import * as T from "../vendor/three/three.module.min.js?v=092eaf93";
 
 // Виды частиц
 export const DOT = 0; // мягкая точка: ореолы, искры, брызги
@@ -7,6 +7,7 @@ export const BUBBLE = 1; // пузырёк с бликом
 export const SPARK = 2; // четырёхлучевая звёздочка
 export const PUFF = 3; // клуб пены, дыма или тумана
 export const STREAK = 4; // штрих ветра, вытянут по горизонтали экрана
+export const RAIN = 5; // капля дождя, вытянута по вертикали экрана
 
 export class Particles {
   constructor(max = 900) {
@@ -42,7 +43,8 @@ blending: T.CustomBlending,
           vKind = kind;
           vec4 mv = viewMatrix * vec4(place.xyz, 1.0);
           vec2 size = vec2(place.w);
-          if (kind > 3.5) size = vec2(place.w * 7.0, place.w * 0.16);
+          if (kind > 4.5) size = vec2(place.w * 0.09, place.w * 2.4);
+          else if (kind > 3.5) size = vec2(place.w * 7.0, place.w * 0.16);
           mv.xy += position.xy * size;
           gl_Position = projectionMatrix * mv;
         }
@@ -63,7 +65,8 @@ blending: T.CustomBlending,
             vec2 q = abs(vUv);
             a = max(0.0, 1.0 - (q.x * q.y * 26.0 + d * 1.1)) + pow(max(0.0, 1.0 - d), 3.0) * 0.6;
           } else if (vKind < 3.5) a = smoothstep(1.0, 0.25, d) * 0.6;
-          else a = pow(max(0.0, 1.0 - abs(vUv.x)), 1.5) * max(0.0, 1.0 - abs(vUv.y));
+          else if (vKind < 4.5) a = pow(max(0.0, 1.0 - abs(vUv.x)), 1.5) * max(0.0, 1.0 - abs(vUv.y));
+          else a = (1.0 - abs(vUv.x)) * smoothstep(-1.0, 0.6, vUv.y) * (1.0 - smoothstep(0.6, 1.0, vUv.y));
           gl_FragColor = vec4(vLook.rgb * a * vLook.a, 1.0);
         }
       `,

@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
   <meta name="theme-color" content="#081a36">
   <title>Маяк</title>
-  <meta name="description" content="Ночная бухта и один луч на всех: веди свет маяка пальцем, показывай лодкам дорогу в гавань и прогоняй морские тени. Десять ночей и шторм на рекорд.">
+  <meta name="description" content="Ночная бухта и один луч на всех: веди свет маяка пальцем, показывай лодкам дорогу в гавань и прогоняй морские тени. Четырнадцать ночей с грозами и китом-фонариком, задания, ракушки, «Ночь дня» и шторм на рекорд.">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./style.css?v=e4b14d4e">
+  <link rel="stylesheet" href="./style.css?v=092eaf93">
 </head>
 <body data-mode="menu">
   <canvas id="sea" aria-label="Ночная бухта с маяком"></canvas>
@@ -28,6 +28,7 @@
   <div id="announcement" aria-live="polite"></div>
   <div id="lesson" role="status" hidden></div>
   <div id="floats" aria-hidden="true"></div>
+  <div id="tasks" class="tasks" aria-label="Задания ночи" hidden></div>
   <div id="controls" hidden>
     <button id="flash" aria-label="Вспышка: осветить всю бухту">
       <span class="ring" aria-hidden="true"></span>
@@ -49,14 +50,16 @@
       <button id="start" class="primary" disabled>Зажечь маяк</button>
       <div id="nights" class="nights" hidden></div>
       <button id="storm" class="second" hidden>Шторм до рассвета</button>
+      <div id="extras" class="extras" hidden><button id="daily" class="third">Ночь дня</button><button id="shop" class="third">Мастерская</button></div>
       <p id="load" role="status">Зажигаем лампу…</p>
       <small class="desktop">Мышь: луч идёт за курсором · пробел — вспышка · Esc — пауза</small>
-      <button id="reset" class="tiny" hidden>Начать сначала</button>
+      <div class="tinies"><button id="quality" class="tiny">Графика</button><button id="reset" class="tiny" hidden>Начать сначала</button></div>
     </div>
   </main>
   <section id="panel" class="veil" hidden aria-labelledby="panel-title">
     <div class="sheet" id="panel-body" tabindex="-1"></div>
   </section>
-  <script type="module" src="./js/boot.js?v=e4b14d4e"></script>
+  <div id="confetti" aria-hidden="true"></div>
+  <script type="module" src="./js/boot.js?v=092eaf93"></script>
 </body>
 </html>

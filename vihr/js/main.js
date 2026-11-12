@@ -1,11 +1,12 @@
 // «Вихрь»: экраны, управление, раунд, магазин, звук и связь с VK.
-import { MAPS, Round, SKILL_NAMES } from "./rules.js?v=cb0a50f1";
-import { View } from "./view.js?v=cb0a50f1";
-import { Sound } from "./sound.js?v=cb0a50f1";
-import { readStorage, writeStorage } from "./kit.js?v=cb0a50f1";
+import { MAPS, Round, SKILL_NAMES, POWERS, BOSS_TIME, GOLD_TIME } from "./rules.js?v=ae43a6e1";
+import { View, QUALITY_NAMES } from "./view.js?v=ae43a6e1";
+import { Sound } from "./sound.js?v=ae43a6e1";
+import { readStorage, writeStorage } from "./kit.js?v=ae43a6e1";
 import {
   SAVE_KEY, cleanSave, UPGRADES, SKINS, TRAILS, BOTS, upgradeEffects, upgradePrice, buyUpgrade, buyItem, applyResult, progress,
-} from "./economy.js?v=cb0a50f1";
+  missionState, today, BOSS_COINS,
+} from "./economy.js?v=ae43a6e1";
 
 const id = (name) => document.getElementById(name);
 const host = () => window.vkGameHost;
@@ -27,6 +28,8 @@ Sound.set(!!save.sound);
 
 const canvas = id("stage");
 const view = new View(canvas);
+view.setPref(save.q);
+view.onThunder = () => screen === "play" && Sound.thunder();
 let round = null; // текущий раунд (или показ в меню)
 let looks = [];
 let screen = "load"; // load | menu | count | play | paused | ending | result
@@ -83,7 +86,7 @@ function makeRound(map, seed, demo) {
   const fx = upgradeEffects(save.up);
   const bots = pickBots(MAPS[map].bots.length, seed);
   const r = new Round({
-    map, seed, demo,
+    map, seed, demo, variant: !demo && stormOn() ? "storm" : "classic",
     player: { name: "Ты", look: 0, auto: demo, skill: "medium", speedMul: fx.speedMul, startR: fx.startR, pullMul: fx.pullMul, duration: fx.duration },
     bots: bots.map((b) => ({ name: b.name, look: b })),
   });
@@ -95,6 +98,59 @@ function useRound(r) {
   view.setRound(r, looks);
   view.mode = r.demo ? "menu" : "play";
 }
+
+// ---------- Режим, задания, качество ----------
+const stormOpen = () => save.rounds >= 1; // «Буря» — после первого раунда
+const stormOn = () => save.mode === 1 && stormOpen();
+function paintModes() {
+  for (const b of id("modes").children) {
+    const on = Number(b.dataset.mode) === (stormOn() ? 1 : 0);
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-checked", String(on));
+    if (b.dataset.mode === "1") b.classList.toggle("locked", !stormOpen());
+  }
+}
+id("modes").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-mode]");
+  if (!b) return;
+  const m = Number(b.dataset.mode);
+  if (m === 1 && !stormOpen()) {
+    Sound.nope();
+    return toast("<span><small>Скоро</small>«Буря» откроется после первого раунда</span>");
+  }
+  Sound.tap();
+  save.mode = m;
+  store();
+  paintModes();
+  paintMenu();
+});
+function paintQuests() {
+  const list = missionState(save, today());
+  const done = list.filter((m) => m.done).length;
+  text(id("quests-text"), `Задания ${done}/3`);
+  id("quests").classList.toggle("all", done === 3);
+  return list;
+}
+function openQuests() {
+  const list = paintQuests();
+  const rows = list.map((m) => `<div class="quest ${m.done ? "done" : ""}"><div class="what"><b>${m.text}</b><div class="qbar"><i style="transform:scaleX(${(m.have / m.goal).toFixed(3)})"></i></div><small>${m.done ? "Выполнено" : `${m.have} из ${m.goal}`}</small></div><span class="prize"><span class="coin"></span>${m.coins}</span></div>`).join("");
+  const streak = save.sday === today() ? save.streak : 0;
+  openPanel(`<div class="head"><div><div class="eyebrow">НА СЕГОДНЯ</div><h2>Задания дня</h2></div><div class="wallet"><span class="coin"></span><b data-coins>${coinsFmt(save.coins)}</b></div></div>
+    <div class="quests-list">${rows}</div>
+    <p class="note">За все три задания — ещё <b>+60</b>. Первый раунд каждого дня продолжает серию: <b>+10</b> монет за каждый день подряд (до 70).${streak ? ` Серия сейчас: <b>${streak}</b>.` : ""} Завтра — новые задания.</p>
+    <div class="stack solo"><button class="primary" data-act="close">Готово</button></div>`, "quests");
+}
+id("quests").onclick = () => (Sound.tap(), openQuests());
+function qualityRow() {
+  const opts = [[-1, "Авто"], [2, "Высокое"], [1, "Среднее"], [0, "Низкое"]];
+  const now = save.q < 0 ? ` · сейчас ${QUALITY_NAMES[view.quality].toLowerCase()}` : "";
+  return `<div class="qrow"><b>Графика${now}</b><div class="seg">${opts.map(([v, n]) => `<button data-q="${v}" class="${save.q === v ? "on" : ""}">${n}</button>`).join("")}</div><small>Высокое — свечение, мягкие тени и больше частиц. «Авто» снизит качество, если кадров мало.</small></div>`;
+}
+function openSettings() {
+  openPanel(`<div class="eyebrow">НАСТРОЙКИ</div><h2>Графика и звук</h2>${qualityRow()}
+    <div class="stack solo"><button class="primary" data-act="close">Готово</button></div>`, "settings");
+}
+id("settings").onclick = () => (Sound.tap(), openSettings());
 
 // ---------- Меню ----------
 function menu() {
@@ -117,6 +173,9 @@ function paintMenu() {
   id("prev-map").disabled = mapIndex === 0;
   id("next-map").disabled = mapIndex === MAPS.length - 1;
   id("play").disabled = !open;
+  paintModes();
+  paintQuests();
+  text(id("play"), stormOn() ? "Играть: Буря" : "Играть");
   const best = save.best[mapIndex];
   const cups = save.cups.filter((c) => c === 1).length;
   text(id("record"), best ? `Рекорд здесь: ${fmt(best / 10)} · Кубков ${cups} из ${MAPS.length}` : `Кубков ${cups} из ${MAPS.length} · рекорда на этой карте пока нет`);
@@ -171,7 +230,15 @@ function start(map, seed = (Math.random() * 1e9) >>> 0) {
   paintBoard(true);
   paintTimer();
   id("toast").classList.remove("show");
-  if (save.tips < 3) {
+  lastShrink = false;
+  pwKey = "";
+  id("pw").innerHTML = "";
+  document.body.classList.remove("outside");
+  if (round.storm) {
+    hintT = 5;
+    id("hint").hidden = false;
+    text(id("hint"), "«Буря»: держись в светлом круге — снаружи вихрь худеет. В финале втянутый выбывает!");
+  } else if (save.tips < 3) {
     hintT = 6;
     id("hint").hidden = false;
     text(id("hint"), save.tips === 0 ? (matchMedia("(pointer: coarse)").matches ? "Веди пальцем по экрану — вихрь поедет туда" : "Веди мышью с зажатой кнопкой или жми WASD") : save.tips === 1 ? "Втягивай всё, что меньше тебя, и расти" : "Вихрь крупнее тебя может втянуть — убегай!");
@@ -179,19 +246,22 @@ function start(map, seed = (Math.random() * 1e9) >>> 0) {
     store();
   } else id("hint").hidden = true;
 }
-function finish() {
+function finish(e = {}) {
   screen = "ending";
   endT = 1.5;
   input.x = input.z = 0;
   stick.on = false;
   paintStick();
-  say("Время вышло!", "", "big");
+  document.body.classList.remove("outside");
+  if (e.out) say("Ты выбыл из «Бури»", "ВТЯНУЛИ В ФИНАЛЕ", "bad");
+  else if (e.last) say("Ты последний в круге!", "ПОБЕДА В «БУРЕ»", "big good");
+  else say("Время вышло!", "", "big");
   Sound.beep(true);
 }
 function showResult() {
   screen = "result";
   const res = (lastResult = round.result());
-  const applied = applyResult(save, mapIndex, res);
+  const applied = applyResult(save, mapIndex, res, today());
   res.applied = applied;
   rewardUsed = false;
   store();
@@ -200,9 +270,13 @@ function showResult() {
   trialSkin = null; // примерка была на один раунд
   if (res.place <= 3) Sound.fanfare();
   else Sound.sad();
-  paintResult();
+  paintResult(true);
+  if (applied.missions.some((m) => m.paid)) setTimeout(() => screen === "result" && Sound.quest(), 900);
 }
-function paintResult() {
+// все монеты раунда: за раунд, задания, серию; ×2 за ролик удваивает всё
+const roundTotal = (a) => a.coins.total + a.missions.reduce((n, m) => n + m.paid, 0) + a.allBonus + a.streakBonus;
+let countFx = 0;
+function paintResult(animate = false) {
   const res = lastResult, a = res.applied;
   const place = res.place;
   const head = place === 1 ? "Первое место!" : place === 2 ? "Второе место!" : place === 3 ? "Третье место!" : `${place} место`;
@@ -212,18 +286,35 @@ function paintResult() {
   else if (place > 3 && mapIndex === save.open - 1 && save.open < MAPS.length) news.push(`<div class="news">Займи место в тройке, чтобы открыть карту «${MAPS[mapIndex + 1].name}»</div>`);
   if (a.firstWin) news.push(`<div class="news gold">Кубок карты «${MAPS[mapIndex].name}»!</div>`);
   else if (a.newBest) news.push(`<div class="news">Новый рекорд на этой карте</div>`);
-  const coins = a.coins.total * (rewardUsed ? 2 : 1);
+  if (res.bossWins) news.push(`<div class="news gold">Ураган-великан втянут! +${BOSS_COINS}</div>`);
+  if (a.streakBonus) news.push(`<div class="news good">Серия дней: ${a.streak} — +${a.streakBonus}</div>`);
+  const total = roundTotal(a);
+  const coins = total * (rewardUsed ? 2 : 1);
   const canDouble = canReward() && !rewardUsed;
+  const parts = [`за размер и добычу ${a.coins.size}`, `за место ${a.coins.bonus}`];
+  if (a.coins.hunt) parts.push("за охоту " + a.coins.hunt);
+  if (a.coins.extra) parts.push(`за события ${a.coins.extra}`);
+  const quests = a.missions.reduce((n, m) => n + m.paid, 0) + a.allBonus;
+  if (quests) parts.push(`за задания ${quests}`);
+  if (a.streakBonus) parts.push(`за серию ${a.streakBonus}`);
+  if (rewardUsed) parts.push("×2");
+  // задания: что сдвинулось в этом раунде
+  const qs = a.missions.map((m) => {
+    const moved = m.have > m.before;
+    return `<div class="qline ${m.done ? "done" : ""} ${m.paid ? "new" : moved ? "moved" : ""}"><span class="qt">${m.text}</span><span class="qbar"><i style="--from:${(m.before / m.goal).toFixed(3)};--to:${(m.have / m.goal).toFixed(3)}"></i></span><b>${m.paid ? "+" + m.paid : m.done ? "✓" : `${m.have}/${m.goal}`}</b></div>`;
+  }).join("");
+  const facts3 = res.variant === "storm" ? `<span><b>${res.inZone ? "да" : "нет"}</b>в круге до конца</span>` : `<span><b>${res.ate}</b>втянуто вихрей</span>`;
   id("result").innerHTML = `
-    <div class="eyebrow">ИТОГИ РАУНДА · ${MAPS[mapIndex].name.toUpperCase()}</div>
+    <div class="eyebrow">ИТОГИ РАУНДА · ${MAPS[mapIndex].name.toUpperCase()}${res.variant === "storm" ? " · БУРЯ" : ""}</div>
     <h2 class="${place <= 3 ? "win" : ""}">${head}</h2>
     <div class="facts">
       <span><b>${fmt(res.D)}</b>размер</span>
       <span><b>${res.lifted}</b>поднято</span>
-      <span><b>${res.ate}</b>втянуто вихрей</span>
+      ${facts3}
     </div>
-    <div class="earn"><span class="coin"></span><b id="earned">+${coins}</b>
-      <small>за размер и добычу ${a.coins.size} · за место ${a.coins.bonus}${a.coins.hunt ? " · за охоту " + a.coins.hunt : ""}${rewardUsed ? " · ×2" : ""}</small></div>
+    <div class="earn"><span class="coin"></span><b id="earned" class="${animate && !view.reduced ? "roll" : ""}" style="--to:${coins}"><span class="v">+${coins}</span></b>
+      <small>${parts.join(" · ")}</small></div>
+    <div class="qlines">${qs}${a.allBonus ? `<div class="qline done new"><span class="qt">Все задания дня</span><b>+${a.allBonus}</b></div>` : ""}</div>
     ${news.join("")}
     ${canDouble ? `<button class="reward" data-act="double"><span class="play-ico"></span>×2 монеты за рекламу</button>` : ""}
     <div class="row">
@@ -232,6 +323,12 @@ function paintResult() {
       <button class="ghost" data-act="menu">В меню</button>
     </div>`;
   paintCoins();
+  // монеты считаются вверх со звоном (счёт рисует CSS, в тексте сразу итог)
+  if (animate && !view.reduced) {
+    const my = ++countFx;
+    for (let k = 0; k < 10; k++) setTimeout(() => my === countFx && screen === "result" && Sound.coin(k), 380 + k * 95);
+    setTimeout(() => my === countFx && id("earned")?.classList.add("bump"), 1500);
+  }
 }
 id("result").addEventListener("click", async (event) => {
   const act = event.target.closest("[data-act]")?.dataset.act;
@@ -263,7 +360,7 @@ function pause() {
   paintStick();
   openPanel(`<div class="eyebrow">ПАУЗА</div><h2>Вихрь отдыхает</h2>
     <div class="stack"><button class="primary" data-act="resume">Продолжить</button>
-    <button class="ghost" data-act="restart">Заново</button><button class="ghost" data-act="menu">В меню</button></div>`, "pause");
+    <button class="ghost" data-act="restart">Заново</button><button class="ghost" data-act="menu">В меню</button></div>${qualityRow()}`, "pause");
 }
 let pausedFrom = "play";
 function resume() {
@@ -342,6 +439,16 @@ id("panel-body").addEventListener("click", async (event) => {
   if (d.act === "restart") return (Sound.tap(), start(mapIndex));
   if (d.act === "menu") return (Sound.tap(), menu());
   if (d.act === "close") return (Sound.tap(), closePanel(), paintMenu());
+  if (d.q !== undefined) {
+    // качество графики: сразу применяется и запоминается
+    save.q = Number(d.q);
+    store();
+    view.setPref(save.q);
+    Sound.tap();
+    const box = b.closest(".qrow");
+    if (box) box.outerHTML = qualityRow();
+    return;
+  }
   if (d.up) {
     if (buyUpgrade(save, d.up)) {
       store();
@@ -545,7 +652,7 @@ async function doubleCoins() {
   adBusy = false;
   if (ok && !rewardUsed && screen === "result") {
     rewardUsed = true;
-    const extra = lastResult.applied.coins.total;
+    const extra = roundTotal(lastResult.applied);
     save.coins += extra;
     save.earned += extra;
     store();
@@ -577,6 +684,31 @@ function paintBoard(force) {
   });
   const P = round.player, place = order.indexOf(P) + 1;
   text(id("me"), `${place} место · ${fmt(P.R * 2)}`);
+}
+// значки действующих бонусов с полоской времени
+let pwKey = "";
+function paintPowers() {
+  const P = round.player, box = id("pw");
+  const on = Object.keys(POWERS).filter((k) => round.has(P, k));
+  const key = on.join();
+  if (key !== pwKey) {
+    pwKey = key;
+    box.innerHTML = on.map((k) => `<span class="p ${k}"><i></i><b>${POWERS[k].name}</b><em></em></span>`).join("");
+  }
+  on.forEach((k, n) => {
+    const left = Math.max(0, P.pw[k] - round.t) / POWERS[k].time;
+    box.children[n].lastChild.style.transform = `scaleX(${left.toFixed(3)})`;
+  });
+}
+let lastShrink = false;
+function paintZone() {
+  const z = round.zone;
+  if (!z || screen !== "play") return;
+  if (z.shrinking && !lastShrink) {
+    say("Круг сужается!", round.final() ? "ФИНАЛ: ВТЯНУТЫЙ ВЫБЫВАЕТ" : "ДЕРЖИСЬ ВНУТРИ", "");
+    Sound.stormWarn();
+  }
+  lastShrink = z.shrinking;
 }
 function paintNext(force) {
   const P = round.player, kinds = round.kinds;
@@ -651,19 +783,57 @@ function handleEvents() {
         myLifts++;
         const kind = round.kinds[o.k];
         Sound.pop(kind.size);
+        if (e.gold) Sound.coin(myLifts);
         if (kind.voice && Math.random() < 0.45) Sound.voice(kind.voice);
       }
     } else if (e.type === "back") view.onBack(round.objs[e.o]);
     else if (e.type === "eat") {
       view.onEat(e);
       if (round.demo) continue;
-      const A = round.tornados[e.by], B = round.tornados[e.victim];
+      const B = round.tornados[e.victim];
+      const byName = e.by === -2 ? "Ураган-великан" : round.tornados[e.by].name;
       if (e.by === 0) {
         Sound.gulp();
-        say(`Втянут «${B.name}»!`, "ОХОТА", "good");
+        say(`Втянут «${B.name}»!`, e.elim ? "ОН ВЫБЫЛ ИЗ «БУРИ»" : "ОХОТА", "good");
       } else if (e.victim === 0) {
         Sound.swallowed();
-        say("Вернёшься через 3 секунды", `ТЕБЯ ВТЯНУЛ «${A.name.toUpperCase()}»`, "bad");
+        if (!e.elim) say("Вернёшься через 3 секунды", e.by === -2 ? "ТЕБЯ УНЁС УРАГАН-ВЕЛИКАН" : `ТЕБЯ ВТЯНУЛ «${byName.toUpperCase()}»`, "bad");
+      } else if (e.elim) toast(`<span><small>Буря</small>«${B.name}» выбыл</span>`);
+    } else if (e.type === "powerNew") view.onPowerNew(e);
+    else if (e.type === "powerGone") view.onPowerGone(e);
+    else if (e.type === "power") {
+      view.onPower(e);
+      if (e.by === 0 && !round.demo) {
+        Sound.power(e.kind);
+        const p = POWERS[e.kind];
+        say(p.name + "!", `${p.note.toUpperCase()} · ${p.time} С`, "power " + e.kind);
+      }
+    } else if (e.type === "gold") {
+      if (e.on) {
+        view.setGold(e.list);
+        Sound.goldHour();
+        say("Золотой час!", `${GOLD_TIME} СЕКУНД ЗОЛОТО РАСТИТ ВДВОЕ`, "gold");
+      } else {
+        view.setGold(null);
+        toast("<span><small>Золотой час</small>закончился</span>");
+      }
+    } else if (e.type === "boss") {
+      view.onBoss(e);
+      if (e.on) {
+        Sound.boss();
+        say("Ураган-великан!", "УБЕГАЙ — ИЛИ СТАНЬ ШИРЕ И ВТЯНИ ЕГО", "boss");
+      } else toast("<span><small>Ураган-великан</small>улетел дальше</span>");
+    } else if (e.type === "bossDown") {
+      view.onBossDown(e);
+      if (e.by === 0) {
+        Sound.fanfare();
+        say("Ураган-великан втянут!", `+${BOSS_COINS} МОНЕТ`, "good big");
+      } else toast(`<span><small>Ураган-великан</small>его втянул «${round.tornados[e.by].name}»</span>`);
+    } else if (e.type === "storm") {
+      document.body.classList.toggle("outside", e.out);
+      if (e.out) {
+        Sound.stormWarn();
+        say("Вернись в круг!", "БУРЯ ОТНИМАЕТ РАЗМЕР", "bad");
       }
     } else if (e.type === "respawn") {
       view.onRespawn(round.tornados[e.who]);
@@ -672,7 +842,7 @@ function handleEvents() {
       const kind = round.kinds[e.k];
       Sound.unlockKind();
       toast(`<img alt="" src="${thumbs[e.k]}"><span><small>Теперь по силам</small>${kind.name}</span>`);
-    } else if (e.type === "end") finish();
+    } else if (e.type === "end") finish(e);
   }
   ev.length = 0;
 }
@@ -725,6 +895,8 @@ function frame(now) {
       hudT = 0.15;
       paintBoard();
       paintNext();
+      paintPowers();
+      paintZone();
     }
     paintTimer();
     if (screen === "play") {
@@ -769,7 +941,7 @@ window.vihr = {
   get screen() {
     return screen;
   },
-  state: () => ({ screen, map: mapIndex, t: round?.t, place: round?.place(), D: round ? round.player.R * 2 : 0, coins: save.coins, quality: view.quality, adBusy }),
+  state: () => ({ screen, map: mapIndex, t: round?.t, place: round?.place(), D: round ? round.player.R * 2 : 0, coins: save.coins, quality: view.quality, pref: view.pref, variant: round?.variant, adBusy }),
   auto(on = true) {
     if (round) round.player.auto = on;
   },

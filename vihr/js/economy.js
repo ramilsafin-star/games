@@ -1,5 +1,5 @@
 // Монеты, улучшения, облики и сохранение «Вихря». Без DOM: тесты в Node считают экономику.
-import { MAPS } from "./rules.js?v=cb0a50f1";
+import { MAPS } from "./rules.js?v=ae43a6e1";
 
 export const SAVE_KEY = "vihr-v1";
 
@@ -53,16 +53,88 @@ export const BOTS = [
   { name: "Тайфунчик", a: "#1f8c60", b: "#b0f5d8", c: "#ffffff", mode: 0 },
   { name: "Мистраль", a: "#e0701c", b: "#ffd2a8", c: "#ffffff", mode: 0 },
   { name: "Сирокко", a: "#9a2f50", b: "#ffb8c8", c: "#ffffff", mode: 0 },
-  { name: "Ураган", a: "#4a5468", b: "#c8d0e0", c: "#ffffff", mode: 0 },
+  { name: "Циклон", a: "#4a5468", b: "#c8d0e0", c: "#ffffff", mode: 0 }, // не «Ураган»: так зовут Урагана-великана
 ];
 
 // ---------- Монеты за раунд ----------
 export const PLACE_BONUS = [45, 28, 18, 8, 4, 0];
-export function roundCoins({ place, D, ate = 0, lifted = 0 }) {
+export const GOLD_COINS = 2; // за каждый золотой предмет
+export const BOSS_COINS = 60; // за Урагана-великана
+export const ZONE_COINS = 20; // «Буря»: продержался в круге до конца
+export function roundCoins({ place, D, ate = 0, lifted = 0, golds = 0, bossWins = 0, inZone = false }) {
   const size = 10 + Math.round(D * 3) + Math.floor(lifted / 5);
   const bonus = PLACE_BONUS[place - 1] ?? 0;
   const hunt = ate * 6;
-  return { size, bonus, hunt, total: size + bonus + hunt };
+  // события: золото, Ураган-великан, выживание в «Буре»
+  const extra = golds * GOLD_COINS + bossWins * BOSS_COINS + (inZone ? ZONE_COINS : 0);
+  return { size, bonus, hunt, extra, total: size + bonus + hunt + extra };
+}
+
+// ---------- Задания дня ----------
+// Три задания на день выбираются по дате; прогресс копится между раундами этого дня.
+const plural = (n, one, few, many) => (n % 10 === 1 && n % 100 !== 11 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? few : many);
+export const MISSIONS = [
+  { id: "lift", goals: [40, 60, 90], coins: 40, text: (n) => `Подними ${n} предметов` },
+  { id: "eat", goals: [2, 3, 5], coins: 60, text: (n) => `Втяни соперников: ${n}` },
+  { id: "win", goals: [1], coins: 70, text: () => "Займи первое место" },
+  { id: "top3", goals: [2, 3], coins: 50, text: (n) => `Попади в тройку ${n} ${plural(n, "раз", "раза", "раз")}` },
+  { id: "power", goals: [3, 5], coins: 40, text: (n) => `Возьми ${n} ${plural(n, "бонус", "бонуса", "бонусов")}` },
+  { id: "gold", goals: [4, 7], coins: 50, text: (n) => `Втяни ${n} ${plural(n, "золотой предмет", "золотых предмета", "золотых предметов")}` },
+  { id: "storm", goals: [1], coins: 70, text: () => "Попади в тройку в «Буре»" },
+  { id: "size", goals: [12, 16], coins: 50, text: (n) => `Вырасти до ${n} м за один раунд`, max: true },
+  { id: "rounds", goals: [3, 4], coins: 30, text: (n) => `Сыграй ${n} ${plural(n, "раунд", "раунда", "раундов")}` },
+];
+export const ALL_DONE_COINS = 60; // за все три задания дня
+export const STREAK_COINS = 10; // за каждый день серии (до 7)
+const hashDay = (day) => {
+  let h = 2166136261;
+  for (let i = 0; i < day.length; i++) h = Math.imul(h ^ day.charCodeAt(i), 16777619) >>> 0;
+  return h;
+};
+// дата игрока «ГГГГ-ММ-ДД» по местному времени
+export function today(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function dayBefore(day) {
+  const [y, m, d] = day.split("-").map(Number);
+  return today(new Date(y, m - 1, d - 1));
+}
+// три разных задания дня: [{ id, goal, coins, text }]
+export function dailyMissions(day) {
+  let h = hashDay(day);
+  const next = () => ((h = (Math.imul(h, 1664525) + 1013904223) >>> 0), h);
+  const pool = MISSIONS.map((m, k) => k);
+  const out = [];
+  while (out.length < 3) {
+    const k = pool.splice(next() % pool.length, 1)[0];
+    const m = MISSIONS[k];
+    const goal = m.goals[next() % m.goals.length];
+    out.push({ id: m.id, goal, coins: m.coins + (goal > m.goals[0] ? 15 : 0), text: m.text(goal), max: !!m.max });
+  }
+  return out;
+}
+// сколько раунд прибавил к заданию
+function missionGain(id, r) {
+  if (id === "lift") return r.lifted;
+  if (id === "eat") return r.ate;
+  if (id === "win") return r.place === 1 ? 1 : 0;
+  if (id === "top3") return r.place <= 3 ? 1 : 0;
+  if (id === "power") return r.powers || 0;
+  if (id === "gold") return r.golds || 0;
+  if (id === "storm") return r.variant === "storm" && r.place <= 3 ? 1 : 0;
+  if (id === "size") return Math.floor(r.best || r.D);
+  if (id === "rounds") return 1;
+  return 0;
+}
+// новый день: задания заново, серия продолжается, если вчера играл
+export function rollDay(save, day) {
+  if (save.dm.day === day) return false;
+  save.dm = { day, p: [0, 0, 0], c: [0, 0, 0] };
+  return true;
+}
+export function missionState(save, day) {
+  rollDay(save, day);
+  return dailyMissions(day).map((m, k) => ({ ...m, have: Math.min(m.goal, save.dm.p[k]), done: !!save.dm.c[k] }));
 }
 
 // ---------- Сохранение ----------
@@ -83,6 +155,12 @@ export function freshSave() {
     earned: 0,
     sound: 1,
     tips: 0,
+    mode: 0, // 0 — «Классика», 1 — «Буря»
+    q: -1, // качество графики: -1 авто, 0 низкое, 1 среднее, 2 высокое
+    dm: { day: "", p: [0, 0, 0], c: [0, 0, 0] }, // задания дня: прогресс и выполненные
+    streak: 0, // серия дней подряд
+    sday: "", // последний день с раундом
+    boss: 0, // сколько раз втянут Ураган-великан
   };
 }
 const int = (v, lo, hi, d) => (Number.isFinite(v) ? Math.max(lo, Math.min(hi, Math.round(v))) : d);
@@ -105,6 +183,15 @@ export function cleanSave(raw) {
   s.earned = int(raw.earned, 0, 1e9, 0);
   s.sound = raw.sound === 0 ? 0 : 1;
   s.tips = int(raw.tips, 0, 1e7, 0);
+  // поля, которых в старых сохранениях нет
+  s.mode = raw.mode === 1 ? 1 : 0;
+  s.q = int(raw.q, -1, 2, -1);
+  const day = (v) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "");
+  const dm = raw.dm && typeof raw.dm === "object" ? raw.dm : {};
+  s.dm = { day: day(dm.day), p: [0, 1, 2].map((k) => int(dm.p?.[k], 0, 1e6, 0)), c: [0, 1, 2].map((k) => (dm.c?.[k] ? 1 : 0)) };
+  s.streak = int(raw.streak, 0, 1e5, 0);
+  s.sday = day(raw.sday);
+  s.boss = int(raw.boss, 0, 1e6, 0);
   return s;
 }
 
@@ -133,12 +220,44 @@ export function buyItem(save, kind, id) {
   return true;
 }
 
-// Итог раунда в сохранение: монеты, рекорд, кубок, новая карта
-export function applyResult(save, mapIndex, result) {
+// Итог раунда в сохранение: монеты, рекорд, кубок, новая карта, задания дня и серия
+export function applyResult(save, mapIndex, result, day = today()) {
   const coins = roundCoins(result);
   save.coins += coins.total;
   save.earned += coins.total;
   save.rounds++;
+  save.boss += result.bossWins || 0;
+  // серия дней: первый раунд нового дня
+  let streakBonus = 0;
+  if (save.sday !== day) {
+    save.streak = save.sday && save.sday === dayBefore(day) ? save.streak + 1 : 1;
+    save.sday = day;
+    streakBonus = STREAK_COINS * Math.min(7, save.streak);
+    save.coins += streakBonus;
+    save.earned += streakBonus;
+  }
+  // задания дня
+  rollDay(save, day);
+  const missions = dailyMissions(day).map((m, k) => {
+    const before = save.dm.p[k];
+    const gain = missionGain(m.id, result);
+    save.dm.p[k] = Math.min(1e6, m.max ? Math.max(before, gain) : before + gain);
+    const now = Math.min(m.goal, save.dm.p[k]);
+    let paid = 0;
+    if (!save.dm.c[k] && save.dm.p[k] >= m.goal) {
+      save.dm.c[k] = 1;
+      paid = m.coins;
+      save.coins += paid;
+      save.earned += paid;
+    }
+    return { ...m, before: Math.min(m.goal, before), have: now, paid, done: !!save.dm.c[k] };
+  });
+  let allBonus = 0;
+  if (missions.every((m) => m.done) && missions.some((m) => m.paid)) {
+    allBonus = ALL_DONE_COINS;
+    save.coins += allBonus;
+    save.earned += allBonus;
+  }
   const d10 = Math.round(result.D * 10);
   const newBest = d10 > save.best[mapIndex] && save.best[mapIndex] > 0;
   const better = d10 > save.best[mapIndex];
@@ -150,7 +269,7 @@ export function applyResult(save, mapIndex, result) {
     save.open++;
     unlocked = save.open - 1;
   }
-  return { coins, newBest, firstWin, unlocked };
+  return { coins, newBest, firstWin, unlocked, missions, allBonus, streakBonus, streak: save.streak };
 }
 
 // Всё ли собрано: карты, кубки, улучшения, облики и следы

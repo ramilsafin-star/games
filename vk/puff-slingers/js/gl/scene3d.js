@@ -1,14 +1,15 @@
 // Трёхмерная отрисовка игры. Физика и правила остаются прежними: здесь только картинка.
 // Мир устроен как сцена: всё действие в плоскости z = 0, поэтому координаты совпадают с физикой.
-import * as T from '../../vendor/three/three.module.min.js?v=d6bb936e';
-import { Post } from './post.js?v=d6bb936e';
-import { Puffs } from './puffs.js?v=d6bb936e';
-import { Bots } from './bots.js?v=d6bb936e';
-import { Blocks, LevelProps, Sling } from './blocks.js?v=d6bb936e';
-import { Shards } from './shards.js?v=d6bb936e';
-import { Fireballs } from './fireballs.js?v=d6bb936e';
-import { Particles } from './particles.js?v=d6bb936e';
-import { buildWorld, lookOf, makeSky, setSkyFor, windowsTexture } from './worlds.js?v=d6bb936e';
+import * as T from '../../vendor/three/three.module.min.js?v=7f585ca2';
+import { Post } from './post.js?v=7f585ca2';
+import { Puffs } from './puffs.js?v=7f585ca2';
+import { Bots } from './bots.js?v=7f585ca2';
+import { Blocks, LevelProps, Sling } from './blocks.js?v=7f585ca2';
+import { Shards } from './shards.js?v=7f585ca2';
+import { Fireballs } from './fireballs.js?v=7f585ca2';
+import { Particles } from './particles.js?v=7f585ca2';
+import { BalloonsGL } from './balloons.js?v=7f585ca2';
+import { buildWorld, lookOf, makeSky, setSkyFor, windowsTexture } from './worlds.js?v=7f585ca2';
 
 const TEXTURES = ['wood', 'wood_n', 'stone', 'stone_n', 'steel', 'steel_n', 'ice', 'ice_n', 'crate', 'crate_n', 'cracks', 'turf', 'turf_n', 'sand', 'sand_n', 'snow', 'snow_n', 'crag', 'crag_n', 'strata', 'strata_n', 'leaves', 'clouds', 'sprites'];
 const LINEAR = /(_n|cracks|leaves|clouds|sprites)$/;
@@ -136,6 +137,10 @@ class Scene3D {
     this.fireballs = new Fireballs(this.stage);
     this.props = new LevelProps(this.stage, tex);
     this.bots = new Bots(this.stage, tex.cracks);
+    this.balloons = new BalloonsGL(this.stage);
+    // Ударные волны на экране: центр в мире, возраст, сила
+    this.shocks = [];
+    this.shockV = new T.Vector3();
     this.sling = new Sling(this.stage, tex);
     this.quality = 2;
     this.puffs = new Puffs(this.stage, this.light, SHELLS[2]);
@@ -237,8 +242,9 @@ class Scene3D {
       this.size = [vw, vh, pr];
       this.renderer.setPixelRatio(pr);
       this.renderer.setSize(vw, vh, false);
-      const samples = quality >= 2 ? 4 : quality === 1 ? 2 : 0;
-      this.post.setSize(Math.round(vw * pr), Math.round(vh * pr), samples, quality >= 2 ? 4 : 3);
+      // Без MSAA: края сглаживает FXAA в последнем проходе
+      this.post.setSize(Math.round(vw * pr), Math.round(vh * pr), 0, quality >= 2 ? 4 : 3);
+      this.post.final.uniforms.uFxaa.value = quality >= 1 ? 1 : 0;
       this.applyQuality(quality);
     }
   }
@@ -259,6 +265,8 @@ class Scene3D {
     }
     if (this.world) this.world.grass.geometry.instanceCount = Math.round(this.world.grass.userData.full * [0.35, 0.65, 1][q]);
     this.usePost = this.post.enabled && q >= 1;
+    // Низкая ступень: без теней и без свечения (bloom), разрешение ниже — для слабых телефонов
+    this.sun.castShadow = q >= 1;
     this.renderer.toneMapping = this.usePost ? T.NoToneMapping : T.ACESFilmicToneMapping;
   }
 
@@ -308,6 +316,7 @@ class Scene3D {
       const hop = cheerT > 0 ? Math.abs(Math.sin(t * 11 + i)) * 15 : Math.abs(Math.sin(t * 2.2 + i * 1.3)) * 2.6;
       const blink = (t * 1000 + i * 941) % 3300 < 120;
       P.draw(q.type, q.x, r + hop + 2, r, { lookX: 0.8, lookY: -0.1, blink, mood: cheerT > 0 ? 'happy' : 'angry', squish: hop > 8 ? -0.05 : 0 });
+      if (q.bonus) this.particles.glow(q.x, r + hop + 2, -r, r * 4.2, '#ffd23f', 0.45 + Math.sin(t * 6) * 0.15, 1.8);
       if (q.type === 'dyna') this.fuseGlow(q.x, r + hop + 2, r, t);
     }
     // На рогатке
@@ -364,16 +373,66 @@ class Scene3D {
         vy: -v.y
       });
       // След за пуфом
-      const tr = h.trail;
-      const count = tr.length / 2;
-      if (count >= 2) {
-        const col = HEROES[h.heroType].trail;
-        const boost = h.dashT > 0 ? 1.6 : 1;
-        for (let i = 0; i < count; i += this.quality === 0 ? 2 : 1) {
-          const k = i / count;
-          const size = h.circleRadius * (0.8 + k * 2.6) * boost;
-          this.particles.glow(tr[i * 2], G - tr[i * 2 + 1], -4, size, col, k * k * 0.6, 1.5);
-        }
+      this.drawTrail(h, t);
+    }
+  }
+
+  // Ударная волна от точки мира (x, y — уже в координатах 3D, y вверх)
+  shock(x, y, k) {
+    if (this.quality < 1) return;
+    if (this.shocks.length >= 4) this.shocks.shift();
+    this.shocks.push({ x, y, age: 0, k });
+  }
+
+  updateShocks(dt) {
+    const u = this.post.final.uniforms.uShock.value;
+    for (let i = this.shocks.length - 1; i >= 0; i--) {
+      const s = this.shocks[i];
+      s.age += dt;
+      if (s.age > 0.55) this.shocks.splice(i, 1);
+    }
+    for (let i = 0; i < 4; i++) {
+      const s = this.shocks[i];
+      if (!s) {
+        u[i].set(0, 0, 0, 0);
+        continue;
+      }
+      const p = this.shockV.set(s.x, s.y, 0).project(this.camera);
+      const e = s.age / 0.55;
+      // Кольцо растёт от центра и гаснет; сила ограничена, чтобы не мутило
+      u[i].set((p.x + 1) / 2, (p.y + 1) / 2, (0.03 + e * 0.42) * Math.min(1.3, s.k), Math.min(1.2, s.k) * (1 - e) * (1 - e));
+    }
+  }
+
+  // След за пуфом: выбранный в «Следах» стиль (обычный, радуга, звёзды, пузыри, огонь, золото)
+  drawTrail(h, t) {
+    const tr = h.trail;
+    const count = tr.length / 2;
+    if (count < 2) return;
+    const G = GROUND_Y;
+    const style = trailStyle();
+    const col = HEROES[h.heroType].trail;
+    const boost = h.dashT > 0 ? 1.6 : 1;
+    const P = this.particles;
+    const step = this.quality === 0 ? 2 : 1;
+    for (let i = 0; i < count; i += step) {
+      const k = i / count;
+      const x = tr[i * 2];
+      const y = G - tr[i * 2 + 1];
+      const size = h.circleRadius * (0.8 + k * 2.6) * boost;
+      const a = k * k * 0.6;
+      if (style === 'basic') P.glow(x, y, -4, size, col, a, 1.5);
+      else if (style === 'rainbow') P.glow(x, y, -4, size, RAINBOW[(i + Math.floor(t * 20)) % RAINBOW.length], a * 1.15, 1.7);
+      else if (style === 'stars') {
+        P.glow(x, y, -4, size * 0.8, '#ffe14d', a * 0.6, 1.4);
+        if (i % 3 === 0) P.sprite(x, y, 4, size * 0.75, t * 3 + i, '#fff2a8', Math.min(1, a * 1.8), 10, 2.2);
+      } else if (style === 'bubbles') {
+        if (i % 2 === 0) P.sprite(x + Math.sin(i * 1.7 + t * 4) * 6, y + Math.cos(i * 1.3) * 5, 4, size * (0.4 + (i % 5) * 0.08), 0, '#9ff4ff', Math.min(1, a * 1.7), 8, 1.7);
+      } else if (style === 'fire') {
+        P.sprite(x, y, -2, size * 1.1, i * 0.7 + t * 2, i % 2 ? '#ff9a1f' : '#ffd23f', a * 1.1, 4 + (i % 3) + 0.6, 1.5);
+      } else if (style === 'gold') {
+        P.glow(x, y, -4, size, '#ffc21f', a * 1.1, 2.1);
+        if (i % 4 === 0) P.sprite(x, y, 4, size * 0.5, t * 4 + i, '#ffffff', Math.min(1, a * 1.8), 10, 2.6);
       }
     }
   }
@@ -431,10 +490,12 @@ class Scene3D {
     this.shards.update(t);
     this.fireballs.update(t);
     this.bots.draw(bots, t, this.particles);
+    this.balloons.draw(Balloons.list, t, this.particles);
     this.props.draw(t, this.particles, orbs);
     this.drawContacts();
     this.particles.drawFX(FX, GROUND_Y);
     this.particles.flush();
+    this.updateShocks(v.dt || 0);
     if (this.usePost) this.post.render(this.scene, this.camera);
     else {
       this.renderer.setRenderTarget(null);
@@ -442,7 +503,7 @@ class Scene3D {
     }
     // Карта теней появляется после первого кадра, тогда её получает и трава
     const map = this.sun.shadow.map;
-    this.light.hasShadow.value = map ? 1 : 0;
+    this.light.hasShadow.value = map && this.sun.castShadow ? 1 : 0;
     if (map) {
       this.light.shadowMap.value = map.texture;
       this.light.shadowTexel.value = 1 / map.width;

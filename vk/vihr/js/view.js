@@ -1,15 +1,18 @@
 // Сцена «Вихря»: игрушечная карта, предметы пачками, вихри, частицы, камера и пьедестал.
 // Правила (rules.js) ничего не знают о графике: сцена только читает их состояние.
-import { T, TAU, clamp, lerp, smooth, PRIM, Shape, canvasTexture } from "./kit.js?v=aa0c23d8";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=aa0c23d8";
-import { modelOf, PAINTS, decorTree } from "./models.js?v=aa0c23d8";
-import { Particles } from "./fx.js?v=aa0c23d8";
-import { MAPS } from "./rules.js?v=aa0c23d8";
-import { TRAILS } from "./economy.js?v=aa0c23d8";
+import { T, TAU, clamp, lerp, smooth, PRIM, Shape, canvasTexture } from "./kit.js?v=935ab875";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=935ab875";
+import { modelOf, PAINTS, decorTree } from "./models.js?v=935ab875";
+import { Particles } from "./fx.js?v=935ab875";
+import { MAPS, POWERS } from "./rules.js?v=935ab875";
+import { TRAILS } from "./economy.js?v=935ab875";
+import { Post, skyMaterial, cloudShadows, StormWall, PowerOrbs, Waves, Halos, bossFace } from "./extras.js?v=935ab875";
 
-// Сочность бледных цветов и мягкий контраст прямо в шейдерах (без отдельного прохода)
+// Сочность бледных цветов и мягкий контраст прямо в шейдерах (без отдельного прохода).
+// Только при выводе прямо на экран (TONE_MAPPING): с постобработкой то же делает последний проход.
 if (!T.ShaderChunk.colorspace_fragment.includes("vihrC")) {
   T.ShaderChunk.colorspace_fragment += `
+  #ifdef TONE_MAPPING
   {
     vec3 vihrC = gl_FragColor.rgb;
     float vihrMx = max(vihrC.r, max(vihrC.g, vihrC.b)), vihrMn = min(vihrC.r, min(vihrC.g, vihrC.b));
@@ -18,8 +21,15 @@ if (!T.ShaderChunk.colorspace_fragment.includes("vihrC")) {
     vec3 vihrS = clamp(vihrC, 0.0, 1.0);
     vihrC += (vihrS * vihrS * (3.0 - 2.0 * vihrS) - vihrS) * 0.18;
     gl_FragColor.rgb = vihrC;
-  }`;
+  }
+  #endif`;
 }
+
+const POWER_COL = Object.fromEntries(Object.entries(POWERS).map(([k, p]) => [k, p.color]));
+// Ураган-великан: серо-синий, со светлыми прожилками
+const BOSS_LOOK = { name: "Ураган-великан", a: "#3c4470", b: "#aeb8dc", c: "#f2f4ff", mode: 0 };
+// Уровни качества: 0 низкое, 1 среднее, 2 высокое
+export const QUALITY_NAMES = ["Низкое", "Среднее", "Высокое"];
 
 // Оформление карт
 const THEMES = {
@@ -78,7 +88,7 @@ void main() {
   gl_Position = projectionMatrix * mv;
 }`;
 const FUNNEL_FRAG = /* glsl */ `
-uniform float time, flow, alpha, mode;
+uniform float time, flow, alpha, mode, glow;
 uniform vec3 colA, colB, colC;
 varying vec2 vUv;
 varying float vFres;
@@ -100,7 +110,9 @@ void main() {
     vec2 cell = vec2(mod(floor(vUv.x * 48.0 + time * flow * 10.0), 48.0), floor(y * 30.0));
     col += step(0.975, hash(cell)) * 1.6;
   }
-  float a = 0.42 + 0.58 * band;
+  // «Великан»: яркие прожилки и светящийся край
+  col += glow * (band * 0.55 + (1.0 - vFres) * 0.9 + 0.25 * sin(time * 9.0 + y * 12.0)) * mix(colC, vec3(1.0, 0.85, 1.0), 0.5);
+  float a = 0.42 + 0.58 * band + glow * 0.15;
   a *= smoothstep(0.0, 0.08, y) * (1.0 - 0.85 * smoothstep(0.7, 1.0, y));
   a *= mix(1.0, 0.72, vFres);
   gl_FragColor = vec4(col, clamp(a * alpha, 0.0, 1.0));
@@ -162,7 +174,7 @@ class Funnel {
     this.uniforms = [];
     const make = (flow, k) => {
       const u = {
-        time: { value: 0 }, seed: { value: seed }, bend: { value: new T.Vector2() }, flow: { value: flow }, alpha: { value: 1 },
+        time: { value: 0 }, seed: { value: seed }, bend: { value: new T.Vector2() }, flow: { value: flow }, alpha: { value: 1 }, glow: { value: 0 },
         mode: { value: 0 }, colA: { value: new T.Color() }, colB: { value: new T.Color() }, colC: { value: new T.Color() },
       };
       this.uniforms.push(u);
@@ -187,6 +199,7 @@ class Funnel {
     this.shield.visible = false;
     this.group.add(this.shield);
     this.vr = 1;
+    this.glow = 0; // свечение «Великана»
     this.life = 1; // 0..1 — появление и исчезновение
     this.dead = false;
     this.lean = new T.Vector2();
@@ -212,7 +225,10 @@ class Funnel {
     c.width = 256;
     c.height = 64;
     const g = c.getContext("2d");
-    g.font = "800 30px Rubik, system-ui, sans-serif";
+    // длинное имя (Ураган-великан) — мельче, чтобы влезло в табличку
+    let fs = 30;
+    g.font = `800 ${fs}px Rubik, system-ui, sans-serif`;
+    while (g.measureText(text).width > 190 && fs > 18) g.font = `800 ${--fs}px Rubik, system-ui, sans-serif`;
     const w = Math.min(244, g.measureText(text).width + 50);
     g.fillStyle = player ? "rgba(255,255,255,.96)" : "rgba(28,30,48,.72)";
     g.beginPath();
@@ -254,6 +270,7 @@ class Funnel {
       u.time.value = t;
       u.bend.value.copy(this.lean);
       u.alpha.value = Math.min(1, this.life * 1.4);
+      u.glow.value = this.glow;
     }
     const ringR = Math.max(catchR, this.vr) * 1.25 * this.life;
     this.ring.scale.set(ringR, ringR, 1);
@@ -278,8 +295,13 @@ export class View {
     r.toneMappingExposure = 1.04;
     r.shadowMap.enabled = true;
     r.shadowMap.type = T.PCFSoftShadowMap;
-    this.quality = coarse ? 1 : 2;
-    this.perf = { sum: 0, n: 0, slow: 0 };
+    // качество: по умолчанию высокое; заметно слабое устройство — среднее; дальше решает частота кадров
+    this.pref = -1; // -1 — авто
+    const mem = navigator.deviceMemory, cores = navigator.hardwareConcurrency || 8;
+    this.autoStart = (mem && mem < 4) || (coarse && cores < 4) ? 1 : 2;
+    this.quality = this.autoStart;
+    this.perf = { sum: 0, n: 0, slow: 0, wait: 0, drops: 0 };
+    this.post = null;
     this.scene = new T.Scene();
     const pm = new T.PMREMGenerator(r);
     this.scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
@@ -306,21 +328,21 @@ export class View {
 
     // небо
     this.skyU = { top: { value: new T.Color() }, low: { value: new T.Color() } };
-    const sky = new T.Mesh(
-      new T.SphereGeometry(900, 24, 12),
-      new T.ShaderMaterial({
-        side: T.BackSide, depthWrite: false, fog: false, uniforms: this.skyU,
-        vertexShader: "varying vec3 vD; void main(){ vD = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
-        fragmentShader: "uniform vec3 top, low; varying vec3 vD; void main(){ vec3 d = normalize(vD); gl_FragColor = vec4(mix(low, top, smoothstep(-0.05, 0.5, d.y)), 1.0);\n#include <colorspace_fragment>\n}",
-      }),
-    );
+    const sky = new T.Mesh(new T.SphereGeometry(900, 32, 16), skyMaterial(this.skyU));
     sky.frustumCulled = false;
     sky.renderOrder = -10;
     this.sky = sky;
     this.scene.add(sky);
     this.scene.fog = new T.Fog("#cfeaff", 80, 260);
 
-    this.fx = new Particles(this.scene);
+    this.fx = new Particles(this.scene, 2600);
+    this.storm = new StormWall(this.scene);
+    this.orbs = new PowerOrbs(this.scene);
+    this.waves = new Waves(this.scene, 12);
+    this.halos = new Halos(this.scene);
+    this.haloList = [];
+    this.flashEl = document.getElementById("flash");
+    this.bossF = null;
     this.world = new T.Group(); // всё, что относится к карте
     this.scene.add(this.world);
     this.objMat = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.72, metalness: 0 });
@@ -337,10 +359,27 @@ export class View {
     this.applyQuality();
   }
 
+  // выбор игрока: -1 авто, 0..2 — вручную
+  setPref(pref) {
+    this.pref = pref;
+    this.quality = pref >= 0 ? pref : this.autoStart;
+    this.perf.sum = this.perf.n = 0;
+    this.perf.wait = 1.5;
+    this.applyQuality();
+  }
   applyQuality() {
     const q = this.quality;
     const ratio = Math.min(devicePixelRatio || 1, q >= 2 ? 2 : q === 1 ? 1.5 : 1);
     this.renderer.setPixelRatio(ratio);
+    // частиц меньше на слабых уровнях
+    this.fx.density = q >= 2 ? 1 : q === 1 ? 0.7 : 0.4;
+    // свечение и сглаживание — только на высоком (без MSAA)
+    if (q >= 2 && !this.post) this.post = new Post(this.renderer, this.scene, this.camera);
+    if (q < 2 && this.post) {
+      this.post.dispose();
+      this.post = null;
+    }
+    if (this.clouds) this.clouds.visible = q >= 1;
     const shadows = q >= 1;
     if (this.renderer.shadowMap.enabled !== shadows) {
       this.renderer.shadowMap.enabled = shadows;
@@ -350,6 +389,7 @@ export class View {
     }
     this.sun.castShadow = shadows;
     const size = q >= 2 ? 2048 : 1024;
+    this.renderer.shadowMap.type = q >= 2 ? T.PCFSoftShadowMap : T.PCFShadowMap;
     if (this.sun.shadow.mapSize.x !== size) {
       this.sun.shadow.mapSize.set(size, size);
       this.sun.shadow.map?.dispose();
@@ -361,6 +401,7 @@ export class View {
     const w = this.canvas.clientWidth || innerWidth, h = this.canvas.clientHeight || innerHeight;
     this.size = { w, h };
     this.renderer.setSize(w, h, false);
+    this.post?.setSize(w, h, this.renderer.getPixelRatio());
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     const px = this.renderer.getDrawingBufferSize(new T.Vector2()).y;
@@ -384,6 +425,42 @@ export class View {
     this.buildObjects(round);
     this.buildFunnels(round, looks);
     this.fx.clear();
+    this.waves.clear();
+    this.orbs.clear();
+    for (const p of round.powers) this.orbs.add(p.id, p.kind, p.x, p.z);
+    this.skyU.sunCol.value.set(theme.sun);
+    this.skyU.cloud.value = 1;
+    // тени облаков бегут по земле
+    this.clouds = cloudShadows(round.half);
+    this.clouds.visible = this.quality >= 1;
+    this.world.add(this.clouds);
+    this.goldOn = false;
+    if (this.bossF) this.bossF.group.visible = false;
+    this.bossT = 0;
+    this.warmUp();
+  }
+  // заранее собрать шейдеры бури, бонусов, волн и нимбов — без рывка, когда они впервые появятся
+  warmUp() {
+    const key = this.quality >= 2 ? "post" : "plain";
+    if (this.warmed === key) return;
+    this.warmed = key;
+    const hidden = [this.storm.group, this.storm.bolt, ...this.waves.items.flatMap((w) => [w.m, w.f])];
+    const was = hidden.map((o) => o.visible);
+    hidden.forEach((o) => (o.visible = true));
+    const ids = [-11, -12, -13];
+    ["magnet", "bolt", "giant"].forEach((k, n) => this.orbs.add(ids[n], k, 0, -500));
+    const hc = this.halos.mesh.count;
+    this.halos.mesh.count = 1;
+    try {
+      if (this.post) this.renderer.setRenderTarget(this.post.composer.readBuffer);
+      this.renderer.compile(this.scene, this.camera);
+    } catch {
+      // не беда: соберётся при первом показе
+    }
+    this.renderer.setRenderTarget(null);
+    hidden.forEach((o, n) => (o.visible = was[n]));
+    ids.forEach((id) => this.orbs.remove(id));
+    this.halos.mesh.count = hc;
   }
   clearWorld() {
     for (const child of [...this.world.children]) {
@@ -760,6 +837,11 @@ export class View {
         return m;
       };
       const km = { kind, base: make(model.base), paint: model.paint ? make(model.paint) : null, spin: model.spin ? make(model.spin.geo) : null, spinInfo: model.spin, dirty: true };
+      const white = new T.Color(1, 1, 1);
+      for (let n = 0; n < counts[k]; n++) {
+        km.base.setColorAt(n, white);
+        if (km.spin) km.spin.setColorAt(n, white);
+      }
       if (km.paint) {
         const palette = PAINTS[kind.id] || ["#ffffff"];
         const c = new T.Color();
@@ -824,6 +906,101 @@ export class View {
     this.setMatrix(o, o.x, 0, o.z, o.rot, o.scale);
   }
 
+  // «Золотой час»: предметы светятся золотом
+  setGold(list) {
+    const round = this.round;
+    const gold = new T.Color(1.7, 1.3, 0.42), white = new T.Color(1, 1, 1), c = new T.Color();
+    const on = new Set(list || []);
+    this.goldOn = !!list;
+    this.goldList = list ? [...on] : [];
+    for (const o of round.objs) {
+      const km = this.kindMeshes[o.k];
+      if (!km) continue;
+      const slot = this.slot[o.i];
+      const g = on.has(o.i);
+      km.base.setColorAt(slot, g ? gold : white);
+      if (km.spin) km.spin.setColorAt(slot, g ? gold : white);
+      if (km.paint) {
+        const palette = PAINTS[km.kind.id] || ["#ffffff"];
+        c.set(palette[o.tint % palette.length]);
+        km.paint.setColorAt(slot, g ? c.lerp(gold, 0.75) : c);
+      }
+    }
+    for (const km of this.kindMeshes) {
+      if (!km) continue;
+      km.base.instanceColor.needsUpdate = true;
+      if (km.spin) km.spin.instanceColor.needsUpdate = true;
+      if (km.paint) km.paint.instanceColor.needsUpdate = true;
+    }
+  }
+  // бонусы
+  onPowerNew(e) {
+    this.orbs.add(e.id, e.kind, e.x, e.z);
+    this.waves.add(e.x, e.z, 0.5, 3, POWER_COL[e.kind], 0.6);
+  }
+  onPowerGone(e) {
+    const g = this.orbs.list.get(e.id);
+    if (g) this.fx.sparkle(g.position.x, 1.6, g.position.z, "#ffffff", 6, 0.7);
+    this.orbs.remove(e.id);
+  }
+  onPower(e) {
+    this.orbs.remove(e.id);
+    const T0 = this.round.tornados[e.by];
+    const col = POWER_COL[e.kind];
+    const big = e.kind === "giant";
+    this.waves.add(e.x, e.z, 1, big ? T0.R * 6 + 6 : 6, col, big ? 0.9 : 0.6, big ? T0.R * 4 + 6 : 5, 1.6);
+    this.fx.sparkle(e.x, 1.6, e.z, col, 14, 1);
+    if (e.by === 0) {
+      if (big) this.shake = Math.max(this.shake, 0.55);
+      this.flash(col, big ? 0.55 : 0.3);
+    }
+  }
+  // вспышка на весь экран (CSS)
+  flash(color = "#ffffff", power = 0.4) {
+    const el = this.flashEl;
+    if (!el || this.reduced) return;
+    el.style.background = `radial-gradient(ellipse at 50% 55%, ${color}00 25%, ${color} 120%)`;
+    el.style.setProperty("--a", power);
+    el.classList.remove("on");
+    void el.offsetWidth;
+    el.classList.add("on");
+  }
+  // Ураган-великан
+  onBoss(e) {
+    if (e.on) {
+      if (!this.bossF) {
+        this.bossF = new Funnel(this, BOSS_LOOK, 9.1);
+        this.bossF.label("Ураган-великан", "#8a94c0", false);
+        this.bossF.ringU.line.value = 1;
+        this.bossF.ringU.col.value.set("#7a84b8");
+        this.bossFace = bossFace();
+        this.bossF.group.add(this.bossFace);
+        this.scene.add(this.bossF.group);
+      }
+      const f = this.bossF;
+      f.group.visible = true;
+      f.life = 0.02;
+      f.dead = false;
+      f.vr = e.R;
+      this.bossT = 0;
+      this.waves.add(e.x, e.z, 2, e.R * 6, "#c8d0ff", 1.1, e.R * 5, e.R * 2);
+    } else if (this.bossF) {
+      this.bossF.dead = true;
+      this.fx.sparkle(e.x, 3, e.z, "#dfe6ff", 16, 1.4);
+    }
+  }
+  onBossDown(e) {
+    if (this.bossF) {
+      this.bossF.dead = true;
+      this.bossF.to = e.by;
+    }
+    const A = this.round.tornados[e.by];
+    this.fx.burst(e.x, e.z, A.R * 1.4, "#c8d0ff");
+    this.fx.confetti(e.x, A.R * 2.5, e.z, A.R * 2, 50);
+    this.waves.add(e.x, e.z, A.R, A.R * 7, "#ffffff", 1.1, A.R * 6, A.R * 2);
+    if (e.by === 0) (this.shake = Math.max(this.shake, 0.9)), this.flash("#ffffff", 0.6);
+  }
+
   // события правил
   onLift(o) {
     const v = this.vis[o.i];
@@ -853,9 +1030,17 @@ export class View {
       f.deathT = this.time;
       f.to = e.by;
     }
-    const A = this.round.tornados[e.by];
-    this.fx.burst(e.x, e.z, A.R, this.funnels[e.victim]?.look.a || "#ffffff");
-    if (e.victim === 0 || e.by === 0) this.shake = Math.max(this.shake, 0.7);
+    // втянул Ураган-великан (by = -2) или соперник
+    const A = e.by === -2 ? this.round.boss : this.round.tornados[e.by];
+    const col = this.funnels[e.victim]?.look.a || "#ffffff";
+    this.fx.burst(e.x, e.z, A.R, col);
+    // ударная волна и вспышка
+    this.waves.add(e.x, e.z, A.R * 0.8, A.R * 4.5 + 4, "#ffffff", 0.8, A.R * 3 + 3, A.R * 1.5);
+    this.waves.add(e.x, e.z, A.R * 0.5, A.R * 3 + 2, col, 1.0);
+    if (e.victim === 0 || e.by === 0) {
+      this.shake = Math.max(this.shake, 0.75);
+      this.flash(e.by === 0 ? "#fff6c8" : "#ff8a7a", 0.4);
+    }
   }
   onRespawn(T0) {
     const f = this.funnels[T0.i];
@@ -1000,6 +1185,34 @@ export class View {
       this.scene.add(this.crown);
     }
   }
+  updateBoss(dt, labelScale) {
+    const f = this.bossF, B = this.round.boss;
+    if (!f || !f.group.visible || !B) return;
+    const t = this.time;
+    if (f.dead) {
+      f.life = Math.max(0, f.life - dt * 1.6);
+      const A = f.to >= 0 ? this.round.tornados[f.to] : null;
+      const x = A ? f.group.position.x + (A.x - f.group.position.x) * Math.min(1, dt * 5) : f.group.position.x;
+      const z = A ? f.group.position.z + (A.z - f.group.position.z) * Math.min(1, dt * 5) : f.group.position.z;
+      f.update(dt, t, x, z, f.vr, 0, 0, 0, labelScale);
+      if (f.life <= 0) f.group.visible = false;
+    } else {
+      f.life = Math.min(1, f.life + dt * 0.9);
+      f.glow = 0.25 + 0.15 * Math.sin(t * 3);
+      f.update(dt, t, B.x, B.z, B.R, B.R, B.vx, B.vz, labelScale);
+      // искры-молнии на верхушке
+      if (Math.random() < dt * 10 * this.fx.density) {
+        const a = Math.random() * TAU, h = 0.4 + Math.random() * 0.6, rr = f.vr * profile(h);
+        this.fx.emit({ x: B.x + Math.cos(a) * rr, y: h * f.vr * FUNNEL_H, z: B.z + Math.sin(a) * rr, vy: 0.5, ttl: 0.35, size: 0.7 + f.vr * 0.1, color: "#e8eeff", frame: 6, drag: 2 });
+      }
+      if (Math.random() < dt * (8 + B.R * 2)) this.fx.dust(B.x, B.z, f.vr, this.theme.dust);
+    }
+    // лицо — на середине воронки, смотрит в камеру
+    const fr = f.vr * f.life;
+    this.bossFace.position.set(f.lean.x * fr * 0.5, fr * FUNNEL_H * 0.42, f.lean.y * fr * 0.5);
+    this.bossFace.scale.set(fr * 2.1, fr * 1.31, 1);
+    this.bossFace.material.opacity = f.life;
+  }
   setPlayerLook(look) {
     this.funnels[0]?.setLook(look);
   }
@@ -1012,8 +1225,8 @@ export class View {
       const f = this.funnels[T0.i];
       if (!f) continue;
       if (f.dead) {
-        // втянут: съёживается и летит к победителю
-        const A = round.tornados[f.to];
+        // втянут: съёживается и летит к победителю (или к Урагану-великану)
+        const A = f.to === -2 ? round.boss : round.tornados[f.to];
         const u = (t - f.deathT) / 0.5;
         f.life = Math.max(0, 1 - u);
         const x = lerp(f.group.position.x, A.x, Math.min(1, dt * 6)), z = lerp(f.group.position.z, A.z, Math.min(1, dt * 6));
@@ -1027,7 +1240,43 @@ export class View {
       }
       f.group.visible = true;
       f.life = Math.min(1, f.life + dt * 1.8);
-      f.update(dt, t, T0.x, T0.z, T0.R, round.catchRadius(T0), T0.vx, T0.vz, labelScale);
+      // «Великан» — воронка шире и светится
+      const giant = round.has(T0, "giant");
+      f.glow += ((giant ? 1 : 0) - f.glow) * Math.min(1, dt * 5);
+      f.update(dt, t, T0.x, T0.z, round.effR(T0), round.catchRadius(T0), T0.vx, T0.vz, labelScale);
+      const dens = this.fx.density;
+      f.pulse = (f.pulse || 0) - dt;
+      if (f.pulse <= 0 && (giant || round.has(T0, "magnet"))) {
+        f.pulse = giant ? 0.5 : 0.42;
+        if (giant) this.waves.add(T0.x, T0.z, f.vr * 1.05, f.vr * 2.1, "#b06cff", 0.55);
+        else this.waves.add(T0.x, T0.z, round.catchRadius(T0) * 1.7, round.catchRadius(T0) * 0.7, "#ff5a7a", 0.42);
+      }
+      if (giant && Math.random() < dt * 30 * dens) {
+        const a = Math.random() * TAU, rr = f.vr * (0.6 + Math.random() * 0.7);
+        this.fx.emit({ x: T0.x + Math.cos(a) * rr, y: Math.random() * f.vr * 2.5, z: T0.z + Math.sin(a) * rr, vy: 2 + Math.random() * 3, ttl: 0.8, size: 0.5 + f.vr * 0.12, color: Math.random() < 0.5 ? "#e6c8ff" : "#ffffff", frame: 6, drag: 1.5, spin: 3 });
+      }
+      if (round.has(T0, "magnet") && Math.random() < dt * 22 * dens) {
+        // искры летят к вихрю со всех сторон
+        const a = Math.random() * TAU, rr = round.catchRadius(T0) * 1.3;
+        this.fx.emit({ x: T0.x + Math.cos(a) * rr, y: 0.4 + Math.random() * 1.2, z: T0.z + Math.sin(a) * rr, vx: -Math.cos(a) * rr * 1.6, vz: -Math.sin(a) * rr * 1.6, ttl: 0.55, size: 0.45, color: "#ff8a9a", frame: 6, drag: 0.5 });
+      }
+      if (round.has(T0, "bolt") && Math.random() < dt * 26 * dens) {
+        this.fx.emit({ x: T0.x + (Math.random() - 0.5) * f.vr, y: 0.3 + Math.random() * f.vr * 1.5, z: T0.z + (Math.random() - 0.5) * f.vr, vx: -T0.vx * 0.2, vz: -T0.vz * 0.2, vy: 0.5, ttl: 0.45, size: 0.5, color: Math.random() < 0.5 ? "#ffe25a" : "#ffffff", frame: 6, drag: 2 });
+      }
+      // мусор и искры в воронке: кружатся и поднимаются
+      if (Math.random() < dt * (6 + f.vr * 2) * dens) {
+        const h = Math.random(), a = Math.random() * TAU, rr = f.vr * profile(h) * 1.05;
+        const leaf = Math.random() < 0.6;
+        this.fx.emit({
+          x: T0.x + Math.cos(a) * rr, y: h * f.vr * FUNNEL_H * 0.8, z: T0.z + Math.sin(a) * rr, vy: 1 + f.vr * 0.5,
+          ttl: 0.9 + Math.random() * 0.6, size: (0.25 + Math.random() * 0.2) * (0.7 + f.vr * 0.35), color: leaf ? this.theme.grass2 : Math.random() < 0.5 ? "#ffffff" : this.theme.dust,
+          frame: leaf ? 3 : 7, drag: 0.6, spin: 8, swirl: { x: T0.x, z: T0.z, w: 1.4 / Math.max(0.8, Math.sqrt(f.vr)) },
+        });
+      }
+      if (this.quality >= 2 && Math.random() < dt * (4 + f.vr)) {
+        const a = Math.random() * TAU, rr = f.vr * 0.5;
+        this.fx.emit({ x: T0.x + Math.cos(a) * rr, y: 0.3, z: T0.z + Math.sin(a) * rr, vy: 2 + f.vr, ttl: 0.9, size: 0.3 + f.vr * 0.06, color: "#fff6c8", frame: 6, drag: 0.4, swirl: { x: T0.x, z: T0.z, w: 2 } });
+      }
       const shielded = round.t < T0.shield;
       f.shield.visible = shielded;
       if (shielded) {
@@ -1036,8 +1285,9 @@ export class View {
         f.shield.material.opacity = 0.12 + 0.1 * Math.sin(t * 12);
       }
       // пыль у основания
-      if (Math.random() < dt * (8 + T0.R * 2)) this.fx.dust(T0.x, T0.z, f.vr, this.theme.dust);
+      if (Math.random() < dt * (8 + T0.R * 2) * (0.5 + 0.5 * this.fx.density)) this.fx.dust(T0.x, T0.z, f.vr, this.theme.dust);
     }
+    this.updateBoss(dt, labelScale);
     if (leader && this.funnels[leader.i] && this.mode === "play" && !this.hideLabels) {
       const f = this.funnels[leader.i];
       this.crown.visible = true;
@@ -1241,7 +1491,39 @@ export class View {
   render(dt, opts = {}) {
     this.time += dt;
     this.waterU.time.value = this.time;
+    this.skyU.time.value = this.time;
+    if (this.clouds) this.clouds.userData.u.time.value = this.time;
     const round = this.round;
+    // стена «Бури» и молнии
+    const zone = round && this.mode !== "podium" ? round.zone : null;
+    if (this.storm.update(dt, this.time, zone) && zone && this.mode === "play") {
+      const at = this.storm.strike(zone, this.camera.position.x, this.camera.position.z);
+      this.fx.sparkle(at.x, 0.6, at.z, "#e8deff", 10, 1.2);
+      this.onThunder?.(at);
+    }
+    // пыль, которую буря несёт по кругу
+    if (zone && this.mode === "play" && Math.random() < dt * 30 * this.fx.density) {
+      const a = Math.random() * TAU, rr = zone.r * (0.97 + Math.random() * 0.1);
+      this.fx.emit({ x: zone.x + Math.cos(a) * rr, y: 0.5 + Math.random() * 6, z: zone.z + Math.sin(a) * rr, vx: -Math.sin(a) * 9, vz: Math.cos(a) * 9, vy: 1, ttl: 1.2, size: 1.2 + Math.random(), grow: 1.8, color: "#b8a8e8", frame: 0, drag: 0.4, alpha: 0.55 });
+    }
+    this.orbs.update(this.time);
+    this.waves.update(dt);
+    // золотые предметы: нимб над каждым и искры
+    const halos = this.haloList;
+    halos.length = 0;
+    if (this.goldOn && round && this.mode !== "podium") {
+      for (const i of this.goldList) {
+        const o = round.objs[i];
+        if (o.taken || !(o.gold > round.t)) continue;
+        const kind = round.kinds[o.k];
+        halos.push({ x: o.x, y: kind.h * o.scale + (this.vis[i].mode === 4 ? 0.4 : 0), z: o.z, r: Math.max(0.35, o.size * 0.55) });
+      }
+      if (halos.length && Math.random() < dt * 14 * this.fx.density) {
+        const q = halos[Math.floor(Math.random() * halos.length)];
+        this.fx.sparkle(q.x + (Math.random() - 0.5) * q.r * 2, q.y * (0.3 + Math.random() * 0.8), q.z + (Math.random() - 0.5) * q.r * 2, "#ffe27a", 2, 0.55);
+      }
+    }
+    this.halos.update(halos, this.time);
     if (round && this.mode !== "podium") {
       this.updateObjects(dt);
       this.updateFunnels(dt);
@@ -1253,21 +1535,25 @@ export class View {
     if (this.mode === "podium") this.updatePodium(dt);
     this.fx.update(dt);
     this.updateCamera(dt, opts);
-    // если устройство не тянет — снижаем качество
-    if (opts.frameMs !== undefined) {
-      const pf = this.perf;
-      pf.sum += opts.frameMs;
+    // «Авто»: если кадров меньше ~45 в секунду — снижаем качество (ручной выбор игрока не трогаем)
+    const pf = this.perf;
+    if (pf.wait > 0) pf.wait -= dt;
+    else if (opts.frameMs !== undefined && this.pref < 0) {
+      pf.sum += Math.min(opts.frameMs, 100);
       pf.n++;
-      if (pf.n >= 120) {
+      if (pf.n >= 90) {
         const avg = pf.sum / pf.n;
-        if (avg > 24 && this.quality > 0) {
+        if (avg > 22 && this.quality > 0) {
           this.quality--;
+          pf.drops++;
           this.applyQuality();
+          pf.wait = 2;
         }
         pf.sum = pf.n = 0;
       }
     }
-    this.renderer.render(this.scene, this.camera);
+    if (this.post && this.quality >= 2) this.post.render();
+    else this.renderer.render(this.scene, this.camera);
   }
 
   updateCamera(dt, opts) {

@@ -3,7 +3,7 @@
 // Препятствия ставятся только вне коридора, а движущиеся получают такую фазу, чтобы в миг,
 // когда ком едет коридором, они были в стороне. Поэтому любой уровень заведомо проходим;
 // validate() это перепроверяет. Никакой графики: этот же код гоняют проверки в Node.
-import { HALF, BRIDGE_HALF, AIR_TIME, JUMP, GRAVITY, START, radiusOf, applyGate, isGood, rng, hash, clamp, logX, crusherDown, geyserState, touches } from "./rules.js?v=8ae2940b";
+import { HALF, BRIDGE_HALF, AIR_TIME, JUMP, GRAVITY, START, radiusOf, applyGate, isGood, rng, hash, clamp, logX, crusherDown, geyserState, touches, crushGain, isMonster, isPickup, throwPos, MONSTER } from "./rules.js?v=51f23175";
 
 export const MOUNTAINS = [
   { id: "firs", name: "Ёлочный склон", boss: "Снеговик Сугробыч" },
@@ -37,6 +37,22 @@ export const INTRO = {
   slalom: "Змейка! Петляй между заборами",
   geysers: "Гейзеры! Пар растапливает снег",
 };
+
+// Монстры, подборы и лавина: с какого уровня появляются (на этом уровне — обязательно, с подсказкой)
+export const FOES = { imps: 2, yeti: 4, spike: 5, gun: 7, thrower: 11, bigyeti: 12, wave: 13, spirit: 21, chase: 24 };
+export const FOE_INTRO = {
+  imps: "Ледяные бесята! Каждый откусит своё число",
+  yeti: "Йети! Ком больше его числа — сомнёшь",
+  spike: "Ледяные шипы: сминают любого монстра",
+  gun: "Снежная пушка: Снежок стреляет сам",
+  thrower: "Страшила кидает снежки — увернись!",
+  bigyeti: "Большой йети отбросит ком — объезжай",
+  wave: "Снежная волна раскидает всех рядом",
+  spirit: "Метельный дух тянет снег — сбей пушкой!",
+  chase: "Лавина-йети! Лови стрелки-ускорения",
+};
+// Задание уровня: что раздавить или разбить ради награды
+export const QUEST_TEXT = { imp: "Раздави бесят", yeti: "Разбей йети", any: "Победи монстров" };
 
 export const mountainOf = (n) => Math.floor((n - 1) / PER_MOUNTAIN);
 export const isBoss = (n) => n % PER_MOUNTAIN === 0;
@@ -377,6 +393,7 @@ function generate(n) {
   const plan = mulPlan(n, rows, orng, boss);
   const goal = F * GOAL[m]; // к финишу лучший путь приходит примерно с таким комом
   const gates = [];
+  const segs = []; // участки между воротами: сюда потом садятся монстры
   for (let j = 0; j < rows; j++) {
     const type = chooseType(j);
     lastType = type;
@@ -399,6 +416,7 @@ function generate(n) {
       fill[type](a, b, j);
       point(b, nx);
     }
+    segs.push({ a, b, type, j });
     s = b + 15; // подъезд к воротам без препятствий
     point(s + 8, nx);
     // сколько ещё добавят сугробы до финиша (примерно)
@@ -430,15 +448,22 @@ function generate(n) {
     cx = nx;
     s += 9;
   }
-  // финишная прямая: снежинки и сугробики
+  // финишная прямая: снежинки и сугробики; перед снеговиком — ещё отрезок, где он атакует
+  const tail = s;
+  if (boss) point(tail + 26, 0);
   flakeLine(s + 2, s + 22, 2.4, 0);
   pileLine(s + 6, 3);
-  s += 30;
+  s += 30 + (boss ? BOSS_RUN : 0);
   const length = Math.round(s);
   point(length + 400, 0);
 
+  // ---------- Монстры, подборы, лавина: второй проход по готовой трассе со своим зерном ----------
+  const foes = placeFoes({ n, m, d, boss, items, segs, solid, roomFor, occupy, clearOf, cAt, lane, rMax, speed, tail, length });
+
   // ---------- Финал: крепость или босс, потом ступени ×1…×10 ----------
-  const best = S;
+  // лучший путь заново: сугробы и лучшие створки по порядку. Снег смятых слабых йети — подарок сверху:
+  // крепость и снеговик по нему не растут, поэтому кто йети пропустил, не проигрывает из-за них
+  const best = bestPath(items, Infinity, false);
   const finale = { kind: boss ? "boss" : "fortress", s0: length, walls: [], boss: null, bonus: null, end: 0 };
   let fs = length + 16;
   if (boss) {
@@ -457,6 +482,8 @@ function generate(n) {
 
   items.sort((p, q) => p.s - q.s);
   items.forEach((item, i) => (item.id = i));
+  // снежок страшилы помнит, чей он: разбита страшила — снежков больше нет
+  for (const it of items) if (it.t === "snowball") (it.owner = it.ownerRef.id), delete it.ownerRef;
   // изгибы трассы для сцены: сумма двух волн, у старта и у финала трасса прямая
   const bend = [
     { a: 0.32 + rnd() * 0.3, w: (2 * Math.PI) / (150 + rnd() * 90), p: rnd() * 6.3 },
@@ -481,6 +508,9 @@ function generate(n) {
     flakes,
     intro,
     introAt: intro ? (gates[0]?.s ?? 0) + 8 : 0,
+    intros: foes.intros,
+    chases: foes.chases,
+    quest: foes.quest,
     bend,
     rMax,
   };
@@ -488,6 +518,236 @@ function generate(n) {
 // Какая доля лучшего размера уходит на стены крепости и на босса
 export const WALL_SHARE = 0.42;
 export const BOSS_SHARE = 0.52;
+
+// Сколько снега у лучшего пути к точке upTo: сугробы, лучшие створки и смятые слабые йети по порядку
+export function bestPath(items, upTo = Infinity, yetis = true) {
+  let S = START;
+  const list = items.filter((it) => it.s <= upTo && (it.t === "pile" || it.t === "gate" || (yetis && it.t === "yeti" && it.weak))).sort((p, q) => p.s - q.s);
+  for (const it of list) {
+    if (it.t === "pile") S += it.v;
+    else if (it.t === "gate") S = applyGate(it.panels[it.best].op, S);
+    else S += crushGain(it.hp);
+  }
+  return S;
+}
+
+// Отрезок перед снеговиком, где он атакует: бесята, снежища, пушка на подъезде
+const BOSS_RUN = 36;
+// Какие монстры встречаются на горах и как часто
+const FOE_POOL = [
+  { imps: 3, yeti: 3 },
+  { imps: 2, yeti: 2, thrower: 3, bigyeti: 3 },
+  { imps: 2, yeti: 2, thrower: 2, bigyeti: 2, spirit: 3 },
+  { imps: 2, yeti: 2, thrower: 2, bigyeti: 2, spirit: 3 },
+];
+
+// Второй проход: монстры, подборы, лавина и атака снеговика. Своё зерно — трасса и ворота не меняются.
+// Всё, что опасно, стоит вне безопасного коридора (подвижное — с такой фазой, чтобы в миг проезда
+// быть в стороне); на коридоре — только слабые йети (их сминают) и подборы.
+function placeFoes(L) {
+  const { n, m, d, boss, items, segs, solid, roomFor, occupy, clearOf, cAt, lane, rMax, speed, tail } = L;
+  const R = rng(hash(n * 92821 + 5));
+  const out = { intros: [], chases: [], quest: null };
+  if (n < FOES.imps) return out;
+  const sizeAt = (s) => bestPath(items, s);
+  const first = {};
+  const mark = (key, s) => (first[key] = Math.min(first[key] ?? Infinity, s));
+  const passWindow = (s0, s1) => [(s0 - rMax - 0.8) / speed, (s1 + rMax + 0.8) / speed];
+  // фаза подвижного монстра: в окно проезда коридором он безопасен
+  const moving = (item, s0, s1, safe) => {
+    const [t0, t1] = passWindow(s0, s1);
+    const start = R();
+    for (let k = 0; k < 50; k++) {
+      item.phase = (start + k * 0.02) % 1;
+      let ok = true;
+      for (let t = t0; t <= t1 && ok; t += 0.02) ok = safe(item, t);
+      if (ok) return true;
+    }
+    return false;
+  };
+  const pickup = (t, s) => {
+    for (const ds of [0, 2, -2, 4, -4]) {
+      const ps = s + ds;
+      const x = cAt(ps);
+      if (!roomFor(ps - 0.8, ps + 0.8, x - 0.8, x + 0.8, 0.5)) continue;
+      items.push({ t, s: ps, x, y: 0.9 });
+      solid.push({ s0: ps - 0.8, s1: ps + 0.8, x0: x - 0.8, x1: x + 0.8 });
+      mark(t, ps);
+      return true;
+    }
+    return false;
+  };
+  const counts = { imp: 0, weak: 0, big: 0, thrower: 0, spirit: 0 };
+
+  // ---------- стычки ----------
+  const impPack = (s0, count, c0 = null, soft = 1) => {
+    const s1 = s0 + (count - 1) * 1.5;
+    if (!roomFor(s0 - 1, s1 + 1, -HALF, HALF, 0.6)) return false;
+    const S = sizeAt(s0);
+    const v = Math.max(1, nice(S * (0.02 + d * 0.03) * soft));
+    const period = 2.5 + R() * 0.8 - d * 0.4;
+    const pack = [];
+    for (let k = 0; k < count; k++) {
+      const ps = s0 + k * 1.5;
+      const it = { t: "imp", s: ps, xa: -HALF + 0.6, xb: HALF - 0.6, period, phase: 0, r: MONSTER.imp.r, hp: v, v };
+      const c = c0 ?? cAt(ps);
+      if (!moving(it, ps - 0.6, ps + 0.6, (q, t) => Math.abs(logX(q, t) - c) > lane + 0.5)) return false;
+      pack.push(it);
+    }
+    items.push(...pack);
+    solid.push({ s0: s0 - 1, s1: s1 + 1, x0: -HALF, x1: HALF });
+    counts.imp += count;
+    return true;
+  };
+  const spot = (a, b, lo = 6, hi = 6) => a + lo + R() * Math.max(1, b - a - lo - hi);
+  const build = {
+    imps(a, b) {
+      for (let tries = 0; tries < 8; tries++) {
+        const s0 = spot(a, b, 8, 14);
+        if (impPack(s0, 3 + Math.floor(R() * (m >= 2 ? 3 : m)))) return mark("imps", s0), s0;
+      }
+      return null;
+    },
+    yeti(a, b) {
+      const r = MONSTER.yeti.r;
+      for (let tries = 0; tries < 10; tries++) {
+        const s = spot(a, b);
+        const x = cAt(s);
+        if (!roomFor(s - r - 0.5, s + r + 0.5, x - r - 0.5, x + r + 0.5, 0.6)) continue;
+        const hp = Math.max(2, nice(sizeAt(s) * (0.3 + R() * 0.2)));
+        occupy({ t: "yeti", s, x, r, hp, weak: true }, s - r, s + r, x - r, x + r);
+        counts.weak++;
+        return mark("yeti", s), s;
+      }
+      return null;
+    },
+    bigyeti(a, b) {
+      const r = MONSTER.yeti.r;
+      for (let tries = 0; tries < 14; tries++) {
+        const s = spot(a, b);
+        const c = cAt(s);
+        let side = R() < 0.5 ? -1 : 1;
+        let x = c + side * (lane + r + 0.4 + R() * 1.4);
+        if (Math.abs(x) > HALF - r - 0.2) (side = -side), (x = c + side * (lane + r + 0.4 + R() * 1.4));
+        if (Math.abs(x) > HALF - r - 0.2) continue;
+        if (!clearOf(s - r, s + r, x - r, x + r) || !roomFor(s - r, s + r, x - r, x + r, 0.8)) continue;
+        const hp = nice(sizeAt(s) * (1.3 + R() * 0.6));
+        occupy({ t: "yeti", s, x, r, hp }, s - r, s + r, x - r, x + r);
+        counts.big++;
+        return mark("bigyeti", s), s;
+      }
+      return null;
+    },
+    thrower(a, b) {
+      for (let tries = 0; tries < 10; tries++) {
+        const s = spot(a, b, 8, 10);
+        const c = cAt(s);
+        const side = c > 0 ? -1 : 1; // встаёт с той стороны, где коридора нет
+        const x = side * (HALF - 1.0);
+        const ls = s + 1.8; // линия броска чуть впереди
+        if (!clearOf(s - 1, s + 1, x - 1, x + 1) || !roomFor(s - 1.3, ls + 0.8, -HALF, HALF, 0.5)) continue;
+        const ball = { t: "snowball", s: ls, x0: x - side * 0.6, x1: -side * (HALF - 0.2), period: 2.2 + R() * 0.6 - d * 0.3, fly: 0.36, phase: 0 };
+        const lc = cAt(ls);
+        if (!moving(ball, ls - 0.5, ls + 0.5, (q, t) => {
+          const p = throwPos(q, t);
+          return !p || Math.abs(p.x - lc) > lane + 0.5;
+        })) continue;
+        const body = { t: "thrower", s, x, r: MONSTER.thrower.r, hp: nice(sizeAt(s) * (0.6 + R() * 0.5)), side };
+        ball.ownerRef = body;
+        items.push(body, ball);
+        solid.push({ s0: s - 1.3, s1: ls + 0.8, x0: -HALF, x1: HALF });
+        counts.thrower++;
+        return mark("thrower", s), s;
+      }
+      return null;
+    },
+    spirit(a, b) {
+      if (b - a < 36 || counts.spirit) return null; // один дух на уровень
+      const s = a + (b - a) * (0.55 + R() * 0.15);
+      // перед духом всегда лежит пушка: внимательный её берёт и сбивает духа
+      if (!pickup("gun", s - 24)) return null;
+      items.push({ t: "spirit", s, x: 0, r: MONSTER.spirit.r, hp: Math.max(4, nice(sizeAt(s) * 0.3)), life: 4 });
+      counts.spirit++;
+      return mark("spirit", s), s;
+    },
+  };
+
+  // ---------- лавина-йети: участок погони со стрелками-ускорениями ----------
+  const usable = segs.filter((g) => g.j > 0 && g.type !== "bridge" && g.type !== "slalom");
+  const taken = new Set();
+  if (n >= FOES.chase && !boss && (n === FOES.chase || R() < 0.45)) {
+    const g = usable.filter((q) => q.b - q.a >= 40)[Math.floor(R() * 99) % Math.max(1, usable.length)];
+    if (g) {
+      let boosts = 0;
+      for (let s = g.a + 10; s <= g.b - 2; s += 13) if (pickup("boost", s)) boosts++;
+      if (boosts >= 2) {
+        out.chases.push({ s0: g.a + 2, s1: g.b + 12 });
+        mark("chase", g.a + 2);
+        taken.add(g);
+      }
+    }
+  }
+
+  // ---------- стычки по участкам ----------
+  const pool = Object.entries(FOE_POOL[m]).filter(([k]) => FOES[k] <= n);
+  const want = (m === 0 ? (n < 6 ? 1 : 2) : m === 1 ? 2 + (R() < 0.5 ? 1 : 0) : 3 + (R() < (m === 2 ? 0.4 : 0.6) ? 1 : 0)) - (boss ? 1 : 0);
+  const forced = Object.keys(FOE_POOL[m]).filter((k) => FOES[k] === n);
+  const order = usable.filter((g) => !taken.has(g)).map((g) => [R(), g]).sort((p, q) => p[0] - q[0]).map((e) => e[1]);
+  let placed = 0;
+  for (const g of order) {
+    if (placed >= Math.max(want, forced.length)) break;
+    let kind = forced.shift();
+    if (!kind) {
+      const bag = [];
+      for (const [k, w] of pool) for (let i = 0; i < w; i++) bag.push(k);
+      kind = bag[Math.floor(R() * bag.length)];
+    }
+    const at = build[kind](g.a, g.b);
+    if (at === null) {
+      if (FOES[kind] === n) forced.unshift(kind);
+      continue;
+    }
+    placed++;
+    // подбор перед стычкой: шипы — на йети и бесят, пушка — на страшилу и большого йети, волна — на бесят
+    const before = at - 13 - R() * 4;
+    if (kind !== "spirit") {
+      if (n >= FOES.gun && (kind === "thrower" || kind === "bigyeti") && R() < 0.55) pickup("gun", before);
+      else if (n >= FOES.wave && kind === "imps" && R() < 0.35) pickup("wave", before);
+      else if (n >= FOES.spike && kind !== "thrower" && R() < 0.4) pickup("spike", before);
+    }
+  }
+  // уровень, где подбор появляется впервые, обязательно его показывает
+  for (const key of ["spike", "gun", "wave"]) {
+    if (FOES[key] !== n || first[key] !== undefined) continue;
+    for (const g of order) if (pickup(key, g.a + (g.b - g.a) * 0.3)) break;
+  }
+
+  // ---------- снеговик атакует на подъезде ----------
+  if (boss) {
+    const z = tail + 30;
+    pickup("gun", z - 2);
+    impPack(z + 10, 3 + m, 0, 0.5);
+    if (m >= 1) {
+      for (let k = 0; k < 2 + m; k++) {
+        const vs = z + 18 + k * 4;
+        const side = k % 2 ? 1 : -1;
+        const x = side * clamp(lane + 1.6 + R() * 1.2, 0, HALF - 1.3);
+        items.push({ t: "volley", s: vs, x, r: 1.3, period: 2.2 + R() * 0.4, phase: R() });
+      }
+    }
+  }
+
+  // ---------- задание и подсказки ----------
+  const yetis = counts.weak + counts.big;
+  const total = counts.imp + yetis + counts.thrower + counts.spirit;
+  if (counts.imp >= 5) out.quest = { kind: "imp", need: Math.min(4, Math.ceil(counts.imp * 0.5)) };
+  else if (yetis >= 2) out.quest = { kind: "yeti", need: Math.max(1, counts.weak) };
+  else if (total >= 3) out.quest = { kind: "any", need: Math.ceil(total * 0.5) };
+  if (out.quest) out.quest.reward = 20 + 2 * n;
+  for (const [key, s] of Object.entries(first)) if (FOES[key] === n) out.intros.push({ key, at: Math.max(6, s - 32) });
+  out.intros.sort((p, q) => p.at - q.at);
+  return out;
+}
 
 // Во сколько раз больше targetSize лучший путь приносит к финишу — по горам
 const GOAL = [1.6, 1.7, 1.85, 2.0];
@@ -636,6 +896,8 @@ export function validate(level) {
   const rMax = level.rMax;
   for (const it of level.items) {
     if (it.t === "pile" || it.t === "flake" || it.t === "gate" || it.t === "ramp") continue;
+    // подборы и дух на пути — так задумано; слабый йети стоит на коридоре, чтобы его смять
+    if (isPickup(it) || it.t === "spirit" || (it.t === "yeti" && it.weak)) continue;
     if (it.jump) continue; // перепрыгивается с трамплина
     // ком любого размера до rMax на коридоре в момент проезда
     for (let ds = -4; ds <= 4; ds += 0.25) {

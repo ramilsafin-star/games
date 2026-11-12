@@ -1,7 +1,7 @@
 // Постройки и предметы уровня: материалы блоков, скалы, батуты, порталы, вихри, кристаллы и рогатка.
-import * as T from '../../vendor/three/three.module.min.js?v=d6bb936e';
-import { RoundedBoxGeometry } from '../../vendor/three/RoundedBoxGeometry.js?v=d6bb936e';
-import { boxUV, merge, paint, rockBox, seededRandom, tube, fbm3 } from './shapes.js?v=d6bb936e';
+import * as T from '../../vendor/three/three.module.min.js?v=7f585ca2';
+import { RoundedBoxGeometry } from '../../vendor/three/RoundedBoxGeometry.js?v=7f585ca2';
+import { boxUV, merge, paint, rockBox, seededRandom, tube, fbm3 } from './shapes.js?v=7f585ca2';
 
 export const BLOCK_DEPTH = 66;
 

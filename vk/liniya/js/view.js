@@ -1,8 +1,8 @@
 // Отрисовка уровня: фон главы, земля (кэш в отдельном холсте), линии, герои, опасности, частицы.
-import { W, H, LINE_VIEW, HERO_R, WALKER_R, BERRY_R, HOUSE_R } from "./world.js?v=b97d5aa8";
-import { patrolAt } from "./sim.js?v=b97d5aa8";
-import { rng, dist, cumLengths, pathAt } from "./geom.js?v=b97d5aa8";
-import * as A from "./art.js?v=b97d5aa8";
+import { W, H, LINE_VIEW, HERO_R, WALKER_R, BERRY_R, HOUSE_R } from "./world.js?v=80a70cba";
+import { patrolAt } from "./sim.js?v=80a70cba";
+import { rng, dist, cumLengths, pathAt } from "./geom.js?v=80a70cba";
+import * as A from "./art.js?v=80a70cba";
 
 const { ellipse, TAU } = A;
 
@@ -115,6 +115,26 @@ export const THEMES = [
     home: ["#3a3f72", "#343868"],
     obstacle: "chimney",
     mote: "rgba(255,240,140,.9)",
+    glow: "rgba(255,210,80,.8)",
+  },
+  {
+    // Лунная роща
+    sky: ["#0b1430", "#1d2c5a", "#3a4a80"],
+    sun: "#f6f4ff",
+    far: "#1b2a50",
+    mid: "#132040",
+    fill: "#3b4d48",
+    dots: "#4a5e56",
+    top: "#4f9a6a",
+    topHi: "#8fe0a0",
+    line: "#0a1018",
+    ink: "#3fdcc8",
+    inkHi: "#e2fff8",
+    inkEdge: "#0a4248",
+    home: ["#273a4c", "#22344a"],
+    obstacle: "grove",
+    mote: "rgba(210,255,150,.95)",
+    glow: "rgba(90,240,220,.85)",
   },
 ];
 
@@ -136,12 +156,24 @@ export class View {
     this.key = "";
     this.motes = [];
     const r = rng(7);
-    for (let i = 0; i < 26; i++) this.motes.push({ x: r() * W, y: r() * H, s: 1 + r() * 2.5, p: r() * 6, v: 6 + r() * 14 });
+    for (let i = 0; i < 44; i++) this.motes.push({ x: r() * W, y: r() * H, s: 1 + r() * 2.5, p: r() * 6, v: 6 + r() * 14 });
+    this.hq = true; // высокое качество: свечение, параллакс, облака и больше частиц
+    this.flashT = 0;
+    this.par = { x: 0, y: 0 }; // сдвиг фона (параллакс)
+    this.inkStyle = null; // линия из Мастерской
+    this.hat = null; // шапка Тоши
+    this.clouds = null;
+  }
+  setQuality(hq) {
+    if (this.hq === hq) return;
+    this.hq = hq;
+    this.key = "";
+    if (!hq) this.parts.length = Math.min(this.parts.length, 150);
   }
 
   // Размер окна → где мир и где кнопки (сбоку или сверху)
   resize(w, h, safe) {
-    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.dpr = Math.min(window.devicePixelRatio || 1, this.hq ? 2 : 1);
     this.w = w;
     this.h = h;
     this.cv.width = Math.round(w * this.dpr);
@@ -197,6 +229,8 @@ export class View {
     const home = L && L.type === "home";
     if (home) this.homeGround(this.bg.getContext("2d"), th, chapter);
     else this.backdrop(this.bg.getContext("2d"), th, chapter);
+    this.clouds = this.hq && chapter < 4 ? this.cloudSprites() : null;
+    this.grade = this.hq ? this.gradeLayer(th, chapter, L && L.type === "home") : null;
     this.terrain = this.layer();
     if (L) {
       const c = this.terrain.getContext("2d");
@@ -204,6 +238,52 @@ export class View {
       if (home) this.homeObstacles(c, L, th);
       else this.ground(c, L, th, chapter);
     }
+  }
+  // «Свет и виньетка» поверх мира: тёплый свет со стороны солнца (луны), мягкое затемнение краёв.
+  // Рисуется один раз на размер экрана, в кадре — одно наложение.
+  gradeLayer(th, ch, flat) {
+    const cv = this.layer();
+    const c = cv.getContext("2d");
+    const w = cv.width,
+      h = cv.height;
+    if (!flat) {
+      const [sx, sy] = this.toScreen(ch === 5 ? 1040 : ch === 6 ? 1010 : 980, ch === 4 ? 520 : 120);
+      const lg = c.createRadialGradient(sx * this.dpr, sy * this.dpr, 0, sx * this.dpr, sy * this.dpr, Math.max(w, h) * 0.9);
+      const warm = ch >= 4 ? (ch === 4 ? "255,150,80" : "190,210,255") : "255,236,190";
+      lg.addColorStop(0, `rgba(${warm},.55)`);
+      lg.addColorStop(0.45, `rgba(${warm},.18)`);
+      lg.addColorStop(1, `rgba(${warm},0)`);
+      c.fillStyle = lg;
+      c.fillRect(0, 0, w, h);
+    }
+    const vg = c.createRadialGradient(w / 2, h * 0.45, Math.min(w, h) * 0.35, w / 2, h * 0.5, Math.max(w, h) * 0.75);
+    vg.addColorStop(0, "rgba(0,0,0,0)");
+    vg.addColorStop(1, ch >= 4 ? "rgba(0,0,10,.62)" : "rgba(10,0,30,.42)");
+    c.fillStyle = vg;
+    c.fillRect(0, 0, w, h);
+    return cv;
+  }
+  // Облака плывут по небу отдельно от фона (только в высоком качестве)
+  cloudSprites() {
+    const out = [];
+    const r = rng(77);
+    for (let k = 0; k < 3; k++) {
+      const s = 34 * Math.max(this.s, 0.5) * this.dpr;
+      const cv = document.createElement("canvas");
+      cv.width = Math.ceil(s * (3.4 + (4 + k) * 0.85));
+      cv.height = Math.ceil(s * 2.8);
+      const c = cv.getContext("2d");
+      c.fillStyle = "rgba(255,255,255,.78)";
+      for (let j = 0; j < 4 + k; j++) {
+        c.beginPath();
+        c.arc(s * 1.1 + j * s * 0.85, s * 1.5 - (j % 2) * s * 0.3, s * (0.62 + r() * 0.35), 0, TAU);
+        c.fill();
+      }
+      c.fillStyle = "rgba(255,255,255,.35)";
+      c.fillRect(s * 0.6, s * 1.6, s * (3.4 + k * 0.6), s * 0.3);
+      out.push(cv);
+    }
+    return out;
   }
   layer() {
     const cv = document.createElement("canvas");
@@ -225,7 +305,7 @@ export class View {
     c.fillRect(0, 0, w, h);
     const r = rng(ch * 31 + 5);
     // солнце или луна
-    const [sx, sy] = this.toScreen(ch === 5 ? 1040 : 980, ch === 4 ? 520 : 120);
+    const [sx, sy] = this.toScreen(ch === 5 ? 1040 : ch === 6 ? 1010 : 980, ch === 4 ? 520 : ch === 6 ? 140 : 120);
     const sr = 46 * this.s;
     const glow = c.createRadialGradient(sx, sy, sr * 0.4, sx, sy, sr * 4);
     glow.addColorStop(0, ch === 4 ? "rgba(255,200,120,.55)" : "rgba(255,255,230,.6)");
@@ -236,6 +316,27 @@ export class View {
     c.beginPath();
     c.arc(sx, sy, sr, 0, TAU);
     c.fill();
+    if (ch === 6) {
+      // полная луна с кратерами и звёзды
+      c.fillStyle = "rgba(180,190,230,.45)";
+      for (const [dx, dy, rr] of [
+        [-0.3, -0.2, 0.22],
+        [0.25, 0.1, 0.16],
+        [-0.05, 0.4, 0.12],
+        [0.35, -0.35, 0.09],
+      ]) {
+        c.beginPath();
+        c.arc(sx + dx * sr, sy + dy * sr, rr * sr, 0, TAU);
+        c.fill();
+      }
+      for (let i = 0; i < 120; i++) {
+        c.fillStyle = `rgba(255,255,240,${0.25 + r() * 0.75})`;
+        const x = r() * w,
+          y = r() * h * 0.65,
+          s = 0.6 + r() * 1.8;
+        c.fillRect(x, y, s, s);
+      }
+    }
     if (ch === 5) {
       c.fillStyle = th.sky[0];
       c.beginPath();
@@ -249,8 +350,8 @@ export class View {
         c.fillRect(x, y, s, s);
       }
     }
-    // облака
-    if (ch !== 4 && ch !== 5) {
+    // облака (в высоком качестве они плывут отдельно)
+    if (ch < 4 && !this.hq) {
       c.fillStyle = "rgba(255,255,255,.75)";
       for (let i = 0; i < 6; i++) {
         const x = r() * w,
@@ -356,6 +457,57 @@ export class View {
       c.quadraticCurveTo(vx - 40 * this.s, vy + 120 * this.s, vx - 110 * this.s, vy + 210 * this.s);
       c.stroke();
       layer(th.mid, base - 10 * this.s, 30 * this.s, 1.4, 41, true);
+    } else if (ch === 6) {
+      // лунная роща: холмы, силуэты деревьев, светящиеся грибы и полосы тумана
+      layer(th.far, base - 110 * this.s, 34 * this.s, 0.8, 61);
+      const q = rng(63);
+      for (let i = 0; i < 16; i++) {
+        const x = q() * w,
+          y = base - (10 + q() * 50) * this.s,
+          s = (30 + q() * 34) * this.s;
+        c.fillStyle = i % 3 ? th.mid : "#0f1a34";
+        c.fillRect(x - s * 0.1, y, s * 0.2, s * 1.6);
+        if (i % 2) {
+          // ёлка
+          for (let j = 0; j < 3; j++) {
+            c.beginPath();
+            c.moveTo(x - s * (0.9 - j * 0.2), y + s * (0.4 - j * 0.55));
+            c.lineTo(x, y - s * (0.6 + j * 0.55));
+            c.lineTo(x + s * (0.9 - j * 0.2), y + s * (0.4 - j * 0.55));
+            c.fill();
+          }
+        } else {
+          c.beginPath();
+          c.arc(x, y - s * 0.3, s, 0, TAU);
+          c.arc(x - s * 0.7, y + s * 0.1, s * 0.7, 0, TAU);
+          c.arc(x + s * 0.7, y + s * 0.1, s * 0.7, 0, TAU);
+          c.fill();
+        }
+      }
+      layer(th.mid, base - 20 * this.s, 22 * this.s, 1.2, 64);
+      // светящиеся грибочки
+      for (let i = 0; i < 14; i++) {
+        const x = q() * w,
+          y = base - (8 + q() * 20) * this.s,
+          s = (5 + q() * 6) * this.s;
+        const gl = c.createRadialGradient(x, y, 1, x, y, s * 4);
+        gl.addColorStop(0, "rgba(120,255,220,.5)");
+        gl.addColorStop(1, "rgba(120,255,220,0)");
+        c.fillStyle = gl;
+        c.fillRect(x - s * 4, y - s * 4, s * 8, s * 8);
+        c.fillStyle = i % 2 ? "#7ff5d6" : "#c9a6ff";
+        c.beginPath();
+        c.ellipse(x, y, s, s * 0.6, 0, Math.PI, 0);
+        c.fill();
+        c.fillStyle = "#e8f0ff";
+        c.fillRect(x - s * 0.18, y, s * 0.36, s * 0.8);
+      }
+      // туман
+      for (let i = 0; i < 5; i++) {
+        c.fillStyle = "rgba(170,190,255,.07)";
+        ellipse(c, q() * w, base - (40 + q() * 160) * this.s, (200 + q() * 260) * this.s, (16 + q() * 18) * this.s);
+        c.fill();
+      }
     } else {
       // ночной город
       const q = rng(51);
@@ -399,6 +551,7 @@ export class View {
       ["#ffffff", "#d0e0ff", "#c0d4f8"],
       ["#ff8a3a", "#7a5a5a", "#ffb060"],
       ["#ffe9a0", "#8a90c8", "#6a70b0"],
+      ["#9ff5c8", "#c8b8ff", "#5a7a8a"],
     ][ch];
     for (let i = 0; i < 110; i++) {
       c.fillStyle = deco[i % 3];
@@ -443,6 +596,18 @@ export class View {
       c.fillStyle = this.matFill(c, p, th);
       c.fill();
       this.matDetail(c, p, th, path);
+      // объём: верх куска чуть светлее, низ темнее
+      const b = bounds(p);
+      c.save();
+      path(p);
+      c.clip();
+      const vg = c.createLinearGradient(0, b.y0, 0, Math.min(b.y1, b.y0 + 260));
+      vg.addColorStop(0, "rgba(255,255,255,.14)");
+      vg.addColorStop(0.35, "rgba(255,255,255,0)");
+      vg.addColorStop(1, "rgba(10,0,30,.16)");
+      c.fillStyle = vg;
+      c.fillRect(b.x0 - 2, b.y0 - 2, b.x1 - b.x0 + 4, b.y1 - b.y0 + 4);
+      c.restore();
     }
     // верхняя кромка (трава, песок, снег) по рёбрам, смотрящим вверх
     const isGround = (p) => p.m === "ground";
@@ -621,6 +786,7 @@ export class View {
           drift: ["#fbfdff", "#6f88c0"],
           basalt: ["#3a2c30", "#120a0e"],
           chimney: ["#a8564a", "#3a1a1a"],
+          grove: ["#6a5a8a", "#221a3a"],
         }[th.obstacle];
         c.fillStyle = p.m === "stone" ? "#a39a92" : style[0];
         c.strokeStyle = p.m === "stone" ? "#4a3e36" : style[1];
@@ -664,19 +830,65 @@ export class View {
     const L = g.L;
     this.prepare(L, g.chapter);
     const t = now / 1000;
+    const dt = g.dt || 0.016;
     c.setTransform(1, 0, 0, 1, 0, 0);
-    c.drawImage(this.bg, 0, 0);
-    // пылинки, снежинки, искры — фоновая жизнь
+    // Параллакс: фон чуть сдвигается за пальцем (или героем) — земля стоит на месте
+    const ch = g.chapter;
+    if (this.hq && L?.type !== "home") {
+      let fx = W / 2,
+        fy = H / 2;
+      const tip = g.pen?.pts?.length ? g.pen.pts[g.pen.pts.length - 1] : null;
+      const hero = g.sim?.heroes?.[0]?.b.position;
+      if (tip) (fx = tip[0]), (fy = tip[1]);
+      else if (hero) (fx = hero.x), (fy = hero.y);
+      const tx = ((W / 2 - fx) / W) * 22 + Math.sin(t * 0.21) * 5,
+        ty = ((H / 2 - fy) / H) * 10 + Math.sin(t * 0.17) * 3;
+      const k = Math.min(1, dt * 2.5);
+      this.par.x += (tx - this.par.x) * k;
+      this.par.y += (ty - this.par.y) * k;
+      const m = 18 * this.dpr,
+        cw = this.cv.width,
+        chh = this.cv.height;
+      c.drawImage(this.bg, -m + this.par.x * this.dpr, -m + this.par.y * this.dpr, cw + 2 * m, chh + 2 * m);
+      // облака плывут и сдвигаются сильнее фона — глубина
+      if (this.clouds) {
+        const r = rng(ch * 17 + 3);
+        for (let i = 0; i < 6; i++) {
+          const img = this.clouds[i % 3];
+          const span = cw + img.width;
+          const x = ((r() * span + t * (6 + r() * 8) * this.dpr + this.par.x * 1.8 * this.dpr) % span) - img.width;
+          const y = (0.04 + r() * 0.3) * chh + this.par.y * 1.5 * this.dpr;
+          c.drawImage(img, x, y);
+        }
+      }
+    } else c.drawImage(this.bg, 0, 0);
+    // пылинки, снежинки, искры, светлячки — фоновая жизнь
     this.worldTransform(c, false);
     c.fillStyle = this.th.mote;
-    for (const m of this.motes) {
-      const ch = g.chapter;
+    const motes = this.hq ? this.motes.length : 20;
+    for (let i = 0; i < motes; i++) {
+      const m = this.motes[i];
       let x = m.x + Math.sin(t * 0.5 + m.p) * 30,
         y = m.y;
       if (ch === 3) y = (m.y + t * m.v * 3) % H;
       else if (ch === 4) y = H - ((m.y + t * m.v * 2.5) % H);
       else y = m.y + Math.sin(t * 0.7 + m.p) * 20;
-      c.globalAlpha = ch === 5 ? 0.4 + 0.6 * Math.abs(Math.sin(t * 2 + m.p)) : 0.55;
+      if (ch === 6) {
+        // светлячки рощи мигают и тепло светятся
+        const a = Math.max(0, Math.sin(t * 1.6 + m.p * 3));
+        if (a < 0.05) continue;
+        if (this.hq) {
+          const gl = c.createRadialGradient(x, y, 0, x, y, 10 + m.s * 3);
+          gl.addColorStop(0, `rgba(220,255,140,${0.5 * a})`);
+          gl.addColorStop(1, "rgba(220,255,140,0)");
+          c.fillStyle = gl;
+          c.globalAlpha = 1;
+          ellipse(c, x, y, 10 + m.s * 3, 10 + m.s * 3);
+          c.fill();
+          c.fillStyle = this.th.mote;
+        }
+        c.globalAlpha = a;
+      } else c.globalAlpha = ch === 5 ? 0.4 + 0.6 * Math.abs(Math.sin(t * 2 + m.p)) : 0.55;
       ellipse(c, x, y, m.s, m.s);
       c.fill();
     }
@@ -690,12 +902,43 @@ export class View {
     this.worldTransform(c);
     if (L.type === "home") this.drawHome(c, g, t);
     else this.drawPhys(c, g, t);
+    if (this.grade) {
+      // «мягкий свет»: тёплое прибавляет сочности, края — глубины, картинка не бледнеет
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      c.globalCompositeOperation = "soft-light";
+      c.drawImage(this.grade, 0, 0);
+      c.globalCompositeOperation = "source-over";
+      this.worldTransform(c);
+    }
     this.drawParts(c, g.dt || 0.016);
     this.shakeT = Math.max(0, this.shakeT - (g.dt || 0.016) * 2.2);
+    // вспышка победы: мягкий свет от героя на весь экран
+    if (this.flashT > 0) {
+      const k = this.flashT;
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      const [fx, fy] = this.toScreen(this.flashAt?.[0] ?? W / 2, this.flashAt?.[1] ?? H / 2);
+      const R = Math.max(this.w, this.h) * this.dpr;
+      const gr = c.createRadialGradient(fx * this.dpr, fy * this.dpr, 0, fx * this.dpr, fy * this.dpr, R);
+      gr.addColorStop(0, `rgba(255,252,220,${0.75 * k})`);
+      gr.addColorStop(0.35, `rgba(255,245,200,${0.35 * k})`);
+      gr.addColorStop(1, "rgba(255,245,200,0)");
+      c.fillStyle = gr;
+      c.fillRect(0, 0, this.cv.width, this.cv.height);
+      this.flashT = Math.max(0, this.flashT - (g.dt || 0.016) * 2.2);
+    }
+  }
+  flash(x, y) {
+    this.flashT = 1;
+    this.flashAt = [x, y];
   }
 
-  drawInk(c, pts, th, alpha = 1, live = false) {
+  drawInk(c, pts, th, alpha = 1, live = false, burn = 0) {
     if (pts.length < 2) return;
+    const st = this.inkStyle && this.inkStyle.ink ? this.inkStyle : null;
+    const ink = st ? st.ink : th.ink,
+      hi = st ? st.hi : th.inkHi,
+      edge = st ? st.edge : th.inkEdge,
+      glow = st ? st.glow : th.glow;
     c.save();
     c.globalAlpha = alpha;
     c.lineCap = c.lineJoin = "round";
@@ -703,26 +946,56 @@ export class View {
       c.beginPath();
       pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
     };
-    if (th === THEMES[5]) {
-      c.shadowColor = "rgba(255,210,80,.8)";
-      c.shadowBlur = 16 * this.s * this.dpr;
+    // мягкая тень линии на фоне — объём (только в высоком качестве)
+    if (this.hq && !live) {
+      c.save();
+      c.translate(3, 7);
+      line();
+      c.strokeStyle = "rgba(20,10,40,.16)";
+      c.lineWidth = LINE_VIEW + 6;
+      c.stroke();
+      c.restore();
+    }
+    // свечение: у светящихся линий всегда, у остальных — пока линию рисуют (только в высоком качестве)
+    if (this.hq && (glow || live || burn)) {
+      c.shadowColor = burn ? "rgba(255,140,40,.95)" : glow || "rgba(255,255,255,.7)";
+      c.shadowBlur = (burn ? 22 : live ? 18 : 16) * this.s * this.dpr;
     }
     line();
-    c.strokeStyle = th.inkEdge;
+    c.strokeStyle = burn ? "#5a1a06" : edge;
     c.lineWidth = LINE_VIEW + 5;
     c.stroke();
     c.shadowBlur = 0;
     line();
-    c.strokeStyle = th.ink;
+    if (burn) {
+      // горит: от тёмно-оранжевого к жёлтому, мерцает
+      const f = 0.5 + 0.5 * Math.sin(performance.now() / 60);
+      c.strokeStyle = `rgb(255,${Math.round(90 + 90 * f * burn)},${Math.round(30 * f)})`;
+    } else if (st?.rainbow) {
+      let x0 = Infinity,
+        x1 = -Infinity;
+      for (const p of pts) (x0 = Math.min(x0, p[0])), (x1 = Math.max(x1, p[0]));
+      const gr = c.createLinearGradient(x0 - 1, 0, x1 + 1, 0);
+      ["#ff4a6a", "#ff9a3a", "#ffe04a", "#4fd27a", "#4ab0ff", "#9a6aff"].forEach((col, i) => gr.addColorStop(i / 5, col));
+      c.strokeStyle = gr;
+    } else c.strokeStyle = ink;
     c.lineWidth = LINE_VIEW;
     c.stroke();
     c.translate(-1.2, -2);
     line();
-    c.strokeStyle = th.inkHi;
+    c.strokeStyle = burn ? "#fff2a0" : hi;
     c.globalAlpha = alpha * 0.8;
     c.lineWidth = 3;
     c.stroke();
     c.restore();
+    if (st?.dots && pts.length > 2) {
+      // звёздная линия: искорки вдоль
+      const t = performance.now() / 1000;
+      for (let i = 1; i < pts.length; i += 3) {
+        const k = 0.5 + 0.5 * Math.sin(t * 5 + i);
+        sparkleDot(c, pts[i][0], pts[i][1] - 1, 3 + 3 * k, "#ffffff", alpha * k);
+      }
+    }
   }
 
   linePts(line) {
@@ -785,6 +1058,12 @@ export class View {
     for (const s of sim.statics) {
       if (s.k === "fan") A.fan(c, s, t);
       else if (s.k === "pipe") A.pipe(c, s, s.lava);
+      else if (s.k === "mist") A.mist(c, s.x, s.y, t, s.fire, sim.state === "draw" ? 0.4 : s.made < (s.n || 6) ? 1 : 0.2);
+    }
+    // светлячок уровня
+    if (g.fly) {
+      if (g.fly.state === "free") A.firefly(c, g.fly.x, g.fly.y, t, false, this.hq);
+      else if (g.fly.state === "old") A.firefly(c, g.fly.x, g.fly.y, t, true);
     }
     // цель «Достань»: домик, клетка
     if (L.house) A.house(c, L.house[0], L.house[1], 0, sim.state === "won" ? 1 : 0);
@@ -792,7 +1071,16 @@ export class View {
     if (g.hint) this.drawHint(c, L, t);
     if (g.demo && sim.state === "draw" && !sim.lines.length && !g.pen) this.drawDemo(c, L, t);
     // линии
-    for (const line of sim.lines) this.drawInk(c, this.linePts(line), th);
+    for (const line of sim.lines) {
+      if (line.gone) continue;
+      const burn = line.burn ? Math.min(1, 1 - (line.burn - sim.t) / 0.8) : 0;
+      const pts = this.linePts(line);
+      this.drawInk(c, pts, th, 1, false, burn);
+      if (burn && Math.random() < (this.hq ? 0.8 : 0.3)) {
+        const q = pts[Math.floor(Math.random() * pts.length)];
+        this.burst("ember", q[0], q[1]);
+      }
+    }
     for (const n of L.nails) A.nail(c, n[0], n[1], sim.lines.some((l) => l.pins.includes(n)), t);
     // герои
     for (const h of sim.heroes) {
@@ -800,13 +1088,16 @@ export class View {
       if (h === sim.target) continue;
       A.groundShadow(c, p.x, p.y + HERO_R, HERO_R);
       const mood = this.moodOf(h, g, t);
-      const jump = g.won && sim.state === "won" ? Math.abs(Math.sin((t - g.wonAt) * 7)) * 16 : 0;
-      A.critter(c, p.x, p.y - jump, HERO_R, h.c, {
+      const jump = sim.state === "won" ? Math.abs(Math.sin((t - g.wonAt) * 7)) * 16 : 0;
+      // пока рисуют — иногда подпрыгивает и переминается (живой, а не картинка)
+      const idle = sim.state === "draw" ? idleHop(t, h.c) : 0;
+      A.critter(c, p.x, p.y - jump - idle * 10, HERO_R, h.c, {
         t,
         mood,
         look: this.lookOf(h, g),
         blink: blink(t, h.c),
-        squash: h.hurt ? -0.08 : jump ? -0.04 : 0,
+        squash: h.hurt ? -0.08 : jump ? -0.04 : idle ? -0.05 * Math.sin(idle * Math.PI) : 0,
+        hat: h.c === 0 ? this.hat : null,
       });
     }
     // клетка с другом поверх друга
@@ -819,7 +1110,7 @@ export class View {
       else if (tg.k === "roll") {
         if (sim.state === "won") {
           // докатился: разворачивается у двери
-          A.critter(c, p.x, p.y, HERO_R, 0, { t, mood: "joy" });
+          A.critter(c, p.x, p.y, HERO_R, 0, { t, mood: "joy", hat: this.hat });
         } else A.critter(c, p.x, p.y, HERO_R, 0, { t, angle: tg.b.angle });
       }
     }
@@ -844,6 +1135,13 @@ export class View {
       const p = bug.b.position,
         v = bug.b.velocity;
       A.bug(c, p.x, p.y, 10, t, bug.phase, v.x >= 0 ? 1 : -1);
+    }
+    for (const gh of sim.ghosts || []) {
+      const fade = sim.state === "run" || sim.state === "draw" ? Math.min(1, (sim.t - gh.born) * 3) : Math.max(0, 1 - (sim.t - sim.endT) * 0.8);
+      if (gh.fire) {
+        A.wisp(c, gh.x, gh.y, gh.r * 1.3, t, gh.phase, this.hq);
+        if (this.hq && Math.random() < 0.35) this.burst("wispTrail", gh.x, gh.y + 6);
+      } else A.ghost(c, gh.x, gh.y, gh.r, t, gh.phase, gh.vx >= 0 ? 1 : -1, fade, this.hq);
     }
     // текущий штрих
     if (g.pen && g.pen.pts.length) {
@@ -914,6 +1212,7 @@ export class View {
     for (const b of sim.bugs) scan(b.b);
     for (const z of sim.hazards) if (!z.held) scan(z.b);
     for (const d of sim.drops) scan(d.b);
+    for (const gh of sim.ghosts || []) scan(gh.b);
     return best;
   }
   lookOf(h, g) {
@@ -1032,7 +1331,12 @@ export class View {
     // дозорные жуки
     for (const p of sim.patrols) {
       const nx = patrolAt(p, sim.t + 0.05);
-      A.beetle(c, p.x, p.y, p.r, Math.atan2(nx[1] - p.y, nx[0] - p.x), t);
+      if (p.ghost) A.ghost(c, p.x, p.y, p.r * 0.95, t, p.r, nx[0] >= p.x ? 1 : -1, 0.9, this.hq);
+      else A.beetle(c, p.x, p.y, p.r, Math.atan2(nx[1] - p.y, nx[0] - p.x), t);
+    }
+    if (g.fly) {
+      if (g.fly.state === "free") A.firefly(c, g.fly.x, g.fly.y, t, false, this.hq);
+      else if (g.fly.state === "old") A.firefly(c, g.fly.x, g.fly.y, t, true);
     }
     // жители
     for (const w of sim.walkers) {
@@ -1043,7 +1347,7 @@ export class View {
       c.fill();
       const hop = moving ? Math.abs(Math.sin(sim.t * 9 + w.c)) * 6 : 0;
       const mood = w.hurt ? "hurt" : sim.state === "won" ? "joy" : !w.path && g.pen?.walker !== sim.walkers.indexOf(w) ? "idle" : "idle";
-      A.critter(c, w.x, w.y - hop, WALKER_R, w.c, { t, mood, step: moving ? sim.t * 12 : null, blink: blink(t, w.c), look: [w.dir * 0.6, 0.2] });
+      A.critter(c, w.x, w.y - hop, WALKER_R, w.c, { t, mood, step: moving ? sim.t * 12 : null, blink: blink(t, w.c), look: [w.dir * 0.6, 0.2], hat: w.c === 0 ? this.hat : null });
       if (!w.path && sim.state === "draw" && !g.pen?.pts.length) {
         // мягкое кольцо: «начни отсюда»
         c.strokeStyle = A.FOLK[w.c].col;
@@ -1075,7 +1379,7 @@ export class View {
   // ---------- Частицы ----------
   burst(kind, x, y, o = {}) {
     const r = Math.random;
-    const add = (p) => this.parts.length < 400 && this.parts.push({ life: 0, ...p });
+    const add = (p) => this.parts.length < (this.hq ? 600 : 160) && this.parts.push({ life: 0, ...p });
     if (kind === "dust") for (let i = 0; i < 6; i++) add({ x, y, vx: (r() - 0.5) * 120, vy: -r() * 60, ttl: 0.5, s: 6 + r() * 6, col: "rgba(240,230,210,.8)", k: "dot", g: 60 });
     else if (kind === "spark") for (let i = 0; i < 4; i++) add({ x, y, vx: (r() - 0.5) * 220, vy: (r() - 0.5) * 220, ttl: 0.3, s: 4, col: "#fff6a0", k: "star", g: 0 });
     else if (kind === "splash") for (let i = 0; i < 7; i++) add({ x, y, vx: (r() - 0.5) * 200, vy: -80 - r() * 160, ttl: 0.6, s: 3 + r() * 3, col: o.lava ? "#ffb04a" : "#8fd4ff", k: "dot", g: 700 });
@@ -1100,6 +1404,17 @@ export class View {
     else if (kind === "smoke") for (let i = 0; i < 8; i++) add({ x, y, vx: (r() - 0.5) * 90, vy: -30 - r() * 60, ttl: 0.9, s: 14 + r() * 12, col: o.fire ? "rgba(255,150,60,.5)" : "rgba(230,230,240,.7)", k: "puff", g: -20 });
     else if (kind === "ink") add({ x, y, vx: (r() - 0.5) * 60, vy: (r() - 0.5) * 60, ttl: 0.4, s: 5, col: this.th?.inkHi || "#fff", k: "star", g: 0 });
     else if (kind === "poof") for (let i = 0; i < 12; i++) add({ x, y, vx: Math.cos(i) * 140, vy: Math.sin(i) * 140, ttl: 0.6, s: 12, col: o.col || "#fff", k: "puff", g: 0 });
+    else if (kind === "ghostpoof") {
+      for (let i = 0; i < 8; i++) add({ x, y, vx: Math.cos(i * 0.8) * 110, vy: Math.sin(i * 0.8) * 110 - 30, ttl: 0.55, s: 13, col: "rgba(235,240,255,.85)", k: "puff", g: -40 });
+      for (let i = 0; i < 6; i++) add({ x, y, vx: (r() - 0.5) * 240, vy: (r() - 0.5) * 240, ttl: 0.5, s: 7, col: "#cfe0ff", k: "star", g: 0 });
+    } else if (kind === "fizz") for (let i = 0; i < 10; i++) add({ x, y, vx: (r() - 0.5) * 200, vy: -60 - r() * 120, ttl: 0.5, s: 6, col: i % 2 ? "#7fe0ff" : "#ffffff", k: "star", g: 120 });
+    else if (kind === "ember") add({ x: x + (r() - 0.5) * 8, y, vx: (r() - 0.5) * 40, vy: -60 - r() * 60, ttl: 0.6, s: 4 + r() * 4, col: r() < 0.5 ? "#ffb03a" : "#ffe27a", k: "dot", g: -80 });
+    else if (kind === "wispTrail") add({ x: x + (r() - 0.5) * 8, y, vx: (r() - 0.5) * 30, vy: 20 + r() * 30, ttl: 0.4, s: 3 + r() * 3, col: "#9fe6ff", k: "dot", g: 0 });
+    else if (kind === "smokeLine") add({ x, y, vx: (r() - 0.5) * 50, vy: -40 - r() * 50, ttl: 0.9, s: 10 + r() * 8, col: "rgba(80,70,80,.45)", k: "puff", g: -20 });
+    else if (kind === "flyget") {
+      for (let i = 0; i < 14; i++) add({ x, y, vx: Math.cos(i * 0.45) * (90 + r() * 90), vy: Math.sin(i * 0.45) * (90 + r() * 90), ttl: 0.8, s: 6 + r() * 5, col: i % 2 ? "#fff36a" : "#ffffff", k: "star", g: 60 });
+      add({ x, y, vx: 0, vy: 0, ttl: 0.5, s: 46, col: "rgba(255,245,150,.95)", k: "ring", g: 0 });
+    } else if (kind === "stars") for (let i = 0; i < 16; i++) add({ x, y, vx: Math.cos(i * 0.39) * (160 + r() * 140), vy: Math.sin(i * 0.39) * (160 + r() * 140) - 80, ttl: 1, s: 9 + r() * 6, col: ["#ffe14a", "#ffffff", "#ffb8d0"][i % 3], k: "star", g: 260 });
   }
   drawParts(c, dt) {
     for (let i = this.parts.length - 1; i >= 0; i--) {
@@ -1184,4 +1499,16 @@ function topEdge(v) {
     if (b[0] > a[0] && my < by) (by = my), (best = [a, b]);
   }
   return best || [v[0], v[1]];
+}
+
+// Короткий прыжок раз в несколько секунд (0..1 — фаза прыжка)
+function idleHop(t, seed) {
+  const p = (t + seed * 1.37) % 5.2;
+  return p < 0.36 ? Math.sin((p / 0.36) * Math.PI) : 0;
+}
+function sparkleDot(c, x, y, r, col, a) {
+  c.save();
+  c.globalAlpha = a;
+  A.sparkle(c, x, y, r, col);
+  c.restore();
 }

@@ -20,6 +20,11 @@
       <div class="chip chip-level"><span data-i18n="level"></span> <b id="hud-level">1</b></div>
       <div class="chip chip-score"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l3 6.6 7.2.8-5.4 4.8 1.5 7.1L12 17.7l-6.3 3.6 1.5-7.1L1.800 9.400 9 8.600z" fill="currentColor"/></svg><b id="hud-score">0</b></div>
       <div id="hud-gems-wrap" class="chip chip-gems hidden"><i class="gem-ico"></i><b id="hud-gems">0/0</b></div>
+      <!-- Медаль уровня и разрушомер (бонусный пуф) -->
+      <div class="hud-sub">
+        <div id="hud-goal" class="pill pill-goal"><i class="medal-ico"></i><span id="hud-goal-text"></span></div>
+        <div id="hud-meter" class="pill pill-meter"><i class="boom-ico"></i><span class="bar"><i id="hud-meter-fill"></i></span></div>
+      </div>
     </div>
     <div class="hud-right"><a class="icon-btn" href="../" aria-label="Все игры" style="display:grid;place-items:center;padding:0;font-size:26px;line-height:1;text-decoration:none">🎮</a>
       <button id="btn-restart" class="icon-btn" type="button" aria-label="Restart">
@@ -41,9 +46,13 @@
     </div>
     <p class="tagline" data-i18n="tagline"></p>
     <button id="btn-play" class="btn primary huge" type="button"></button>
-    <button id="btn-title-levels" class="btn secondary" type="button" data-i18n="levels"></button>
+    <div class="title-row">
+      <button id="btn-title-levels" class="btn secondary" type="button" data-i18n="levels"></button>
+      <button id="btn-title-trails" class="btn secondary" type="button"><span data-i18n="trails"></span><i id="trails-dot" class="dot hidden"></i></button>
+    </div>
     <div id="title-best-wrap" class="title-best hidden">
-      <span><i class="star-ico"></i> <b id="title-stars">0/18</b></span>
+      <span><i class="star-ico"></i> <b id="title-stars">0/72</b></span>
+      <span id="title-medals-wrap" class="hidden"><i class="medal-ico"></i> <b id="title-medals">0/24</b></span>
       <span id="title-gems-wrap" class="hidden"><i class="gem-ico"></i> <b id="title-gems">0/0</b></span>
       <span><span data-i18n="totalBest"></span>: <b id="title-best">0</b></span>
     </div>
@@ -62,6 +71,7 @@
         <button id="tgl-music" class="toggle" type="button"><span data-i18n="music"></span><span class="state"></span></button>
         <button id="tgl-sfx" class="toggle" type="button"><span data-i18n="sfx"></span><span class="state"></span></button>
         <button id="tgl-shake" class="toggle" type="button"><span data-i18n="shake"></span><span class="state"></span></button>
+        <button id="tgl-gfx" class="toggle" type="button"><span data-i18n="graphics"></span><span class="state"></span></button>
       </div>
       <p class="keys" data-i18n="keys"></p>
     </div>
@@ -71,6 +81,7 @@
   <section id="screen-levels" class="screen"><a href="../" aria-label="Все игры" style="position:fixed;left:calc(12px + env(safe-area-inset-left,0px));top:calc(12px + env(safe-area-inset-top,0px));z-index:50;width:52px;height:52px;border-radius:50%;background:#fffffff0;box-shadow:0 4px 0 #0003;display:grid;place-items:center;font-size:27px;text-decoration:none">🎮</a>
     <div class="card card-wide">
       <h2 class="card-title" data-i18n="selectLevel"></h2>
+      <div id="chapter-tabs" class="tabs" role="tablist"></div>
       <div id="levels-grid" class="levels-grid"></div>
       <p class="total-line"><span data-i18n="totalBest"></span>: <b id="levels-total">0</b></p>
       <button id="btn-levels-back" class="btn secondary" type="button" data-i18n="back"></button>
@@ -91,11 +102,15 @@
         <div id="result-bonus-wrap" class="score-sub hidden"><span data-i18n="bonus"></span>: <b id="result-bonus">0</b></div>
         <div id="result-gems-wrap" class="score-sub hidden"><span data-i18n="gems"></span>: <b id="result-gems">0</b></div>
       </div>
+      <div id="result-medal" class="medal-row hidden"><i class="medal-ico"></i><span id="result-medal-text"></span></div>
+      <p id="result-trail" class="new-trail hidden"></p>
       <p id="result-tip" class="tip hidden" data-i18n="loseTip"></p>
-      <button id="btn-next" class="btn primary" type="button"></button>
-      <div class="row">
-        <button id="btn-retry" class="btn secondary" type="button" data-i18n="retry"></button>
-        <button id="btn-result-levels" class="btn secondary" type="button" data-i18n="levels"></button>
+      <div class="result-actions">
+        <button id="btn-next" class="btn primary" type="button"></button>
+        <div class="row">
+          <button id="btn-retry" class="btn secondary" type="button" data-i18n="retry"></button>
+          <button id="btn-result-levels" class="btn secondary" type="button" data-i18n="levels"></button>
+        </div>
       </div>
     </div>
   </section>
@@ -106,12 +121,23 @@
       <h2 class="card-title gold" data-i18n="finalTitle"></h2>
       <p class="final-text" data-i18n="finalText"></p>
       <div class="score-box">
-        <div class="score-main"><span data-i18n="finalStars"></span> <b id="final-stars">0/18</b></div>
+        <div class="score-main"><span data-i18n="finalStars"></span> <b id="final-stars">0/72</b></div>
+        <div id="final-medals-wrap" class="score-sub"><span data-i18n="medals"></span>: <b id="final-medals">0/24</b></div>
         <div class="score-sub"><span data-i18n="totalBest"></span>: <b id="final-best">0</b></div>
       </div>
       <p id="final-note" class="tip"></p>
       <button id="btn-final-replay" class="btn primary" type="button" data-i18n="playAgain"></button>
       <button id="btn-final-levels" class="btn secondary" type="button" data-i18n="levels"></button>
+    </div>
+  </section>
+
+  <!-- Следы за пуфом: открываются за звёзды и медали -->
+  <section id="screen-trails" class="screen">
+    <div class="card card-wide">
+      <h2 class="card-title" data-i18n="trailsTitle"></h2>
+      <p id="trails-note" class="trails-note"></p>
+      <div id="trails-grid" class="trails-grid"></div>
+      <button id="btn-trails-back" class="btn secondary" type="button" data-i18n="back"></button>
     </div>
   </section>
 
@@ -122,6 +148,8 @@
   <script src="./js/art.js"></script>
   <script src="./js/background.js"></script>
   <script src="./js/fx.js"></script>
+  <script src="./js/balloons.js"></script>
+  <script src="./js/goals.js"></script>
   <script src="./js/game.js"></script>
   <script src="./js/ui.js"></script>
 </body>

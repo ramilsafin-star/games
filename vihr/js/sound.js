@@ -197,6 +197,25 @@ export const Sound = {
     for (const f of [523, 659, 784, 1047]) tone(f, 1.2, "triangle", 0.06, 1, 0.8, 0.05);
   },
   sad: () => [392, 349, 311].forEach((f, i) => tone(f, 0.35, "triangle", 0.09, 0.97, i * 0.22)),
+  // бонус: магнит — «вжух» вверх, молния — треск, великан — низкий рост
+  power(kind) {
+    if (kind === "magnet") [440, 660, 990].forEach((f, i) => tone(f, 0.18, "sine", 0.1, 1.5, i * 0.05));
+    else if (kind === "bolt") (noise(0.25, 0.22, 4000, 900, 0, "highpass", 0.7), [880, 1320, 1760].forEach((f, i) => tone(f, 0.12, "square", 0.04, 1, i * 0.04)));
+    else (tone(110, 0.7, "sawtooth", 0.08, 2.2), tone(220, 0.6, "triangle", 0.1, 2, 0.05), noise(0.6, 0.18, 200, 1800));
+  },
+  // гром: далёкий раскат шумом
+  thunder() {
+    noise(1.4, 0.22, 900, 60, 0, "lowpass", 0.8);
+    noise(0.15, 0.12, 3000, 800, 0, "bandpass", 1);
+  },
+  stormWarn: () => [520, 390].forEach((f, i) => tone(f, 0.22, "triangle", 0.09, 0.9, i * 0.16)),
+  goldHour: () => [784, 988, 1175, 1568, 1976].forEach((f, i) => (tone(f, 0.3, "triangle", 0.08, 1, i * 0.07), tone(f * 2, 0.12, "sine", 0.03, 1, i * 0.07 + 0.02))),
+  // Ураган-великан: ворчливое «у-у-ух» и ветер
+  boss() {
+    noise(1.6, 0.3, 200, 1400, 0, "bandpass", 1.1);
+    voice(150, 95, 1.1, "sawtooth", 0.07, 420, 0.15, 5);
+  },
+  quest: () => [659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.2, "triangle", 0.09, 1, i * 0.08)),
   beep: (go) => tone(go ? 990 : 660, go ? 0.3 : 0.12, "sine", 0.12),
   tick: () => tone(1180, 0.05, "square", 0.03),
   tap: () => tone(560, 0.06, "sine", 0.08, 1.4),

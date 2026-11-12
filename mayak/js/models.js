@@ -1,7 +1,7 @@
 // Модели «Маяка»: всё собирается из простых фигур и сливается в одну геометрию с цветами в вершинах.
 // У вершины есть ещё «свечение» (glow): окна, гирлянды и стёкла горят сами, без света сцены.
 // Нос лодки смотрит в −Z, как принято в three.js.
-import * as T from "../vendor/three/three.module.min.js?v=e4b14d4e";
+import * as T from "../vendor/three/three.module.min.js?v=092eaf93";
 
 const TAU = Math.PI * 2;
 const M = new T.Matrix4();
@@ -320,7 +320,10 @@ export function reefGeometry(rocks, seed = 1) {
 // ---------- Маяк ----------
 // Стоит в начале координат своей группы; lampY — высота лампы.
 export const LAMP_Y = 4.72;
-export function lighthouseGeometry() {
+// paint — краска из мастерской: { stripe, roof }
+export function lighthouseGeometry(paint = {}) {
+  const stripe = paint.stripe || "#e2483e";
+  const roof = paint.roof || "#d8443b";
   const kit = new Kit();
   const random = rnd(77);
   const warp = (v) => {
@@ -341,7 +344,7 @@ export function lighthouseGeometry() {
     const r0 = 0.62 - (0.2 * i) / rings;
     const r1 = 0.62 - (0.2 * (i + 1)) / rings;
     const slice = new T.CylinderGeometry(r1, r0, tall / rings, 12);
-    kit.add(slice, i % 2 ? "#e2483e" : "#f6f3ea", { p: [0, base + (i + 0.5) * (tall / rings), 0] });
+    kit.add(slice, i % 2 ? stripe : "#f6f3ea", { p: [0, base + (i + 0.5) * (tall / rings), 0] });
     slice.dispose();
   }
   kit.add(GEO.cyl, "#39435a", { p: [0, base + 0.05, 0], s: [1.42, 0.14, 1.42] });
@@ -363,7 +366,7 @@ export function lighthouseGeometry() {
     const a = (i / 6) * TAU;
     kit.add(GEO.box, "#39435a", { p: [Math.cos(a) * 0.36, top + 0.42, Math.sin(a) * 0.36], r: [0, -a, 0], s: [0.04, 0.62, 0.05] });
   }
-  kit.add(GEO.cone, "#d8443b", { p: [0, top + 0.98, 0], s: [1.0, 0.52, 1.0] });
+  kit.add(GEO.cone, roof, { p: [0, top + 0.98, 0], s: [1.0, 0.52, 1.0] });
   kit.add(GEO.ball, "#f4c531", { p: [0, top + 1.28, 0], s: 0.13 });
   // домик смотрителя
   kit.add(GEO.box, "#f1ead9", { p: [1.25, 0.78, 0.35], s: [0.95, 0.62, 0.8] });
@@ -579,6 +582,79 @@ export function shadeMaterial() {
     `,
   });
   return material;
+}
+
+// ---------- Вторая глава: кит-фонарик и находки ----------
+// Кит смотрит носом в +X: так он плывёт поперёк бухты. Добрый: большие глаза, улыбка, светлячки на спине.
+let whaleGeo = null;
+export function whaleGeometry() {
+  if (whaleGeo) return whaleGeo;
+  const kit = new Kit();
+  const body = (v) => {
+    // к хвосту тело сужается
+    const k = 1 - Math.max(0, -v.x) * 0.42;
+    v.y *= k;
+    v.z *= k;
+  };
+  kit.add(GEO.blob, "#2f7fc4", { p: [0, 0.35, 0], s: [1.5, 0.62, 0.72], top: "#5ab4ec", warp: body });
+  kit.add(GEO.blob, "#e8f4ff", { p: [0.25, 0.08, 0], s: [1.15, 0.32, 0.58] }); // светлое брюшко
+  // хвост
+  kit.add(GEO.ball, "#3a8ad0", { p: [-1.55, 0.42, 0], s: [0.5, 0.26, 0.3] });
+  for (const side of [-1, 1]) {
+    kit.add(GEO.ball, "#4a9ad8", { p: [-1.95, 0.62, side * 0.32], r: [side * 0.5, 0, 0.5], s: [0.5, 0.12, 0.42] });
+    // плавники
+    kit.add(GEO.ball, "#3a8ad0", { p: [0.45, 0.05, side * 0.68], r: [side * 0.6, 0.4 * side, -0.3], s: [0.5, 0.1, 0.26] });
+    // глаза: белок, зрачок, блик
+    kit.add(GEO.ball, "#ffffff", { p: [0.95, 0.52, side * 0.5], s: [0.26, 0.28, 0.12] });
+    kit.add(GEO.ball, "#1d2340", { p: [1.02, 0.52, side * 0.55], s: [0.15, 0.17, 0.06] });
+    kit.add(GEO.ball, "#ffffff", { p: [1.06, 0.58, side * 0.58], s: 0.05, glow: 1.5 });
+    // румянец
+    kit.add(GEO.ball, "#ff9fbf", { p: [1.08, 0.3, side * 0.5], s: [0.16, 0.08, 0.05] });
+  }
+  // улыбка
+  kit.add(GEO.torus, "#173a6a", { p: [1.38, 0.3, 0], r: [Math.PI / 2, 0, Math.PI / 2], s: [0.46, 0.46, 0.2] });
+  // светлячки-фонарики на спине
+  for (let i = 0; i < 5; i++) kit.add(GEO.ball, "#ffe9a6", { p: [0.8 - i * 0.48, 0.92 - Math.abs(i - 1.5) * 0.06, (i % 2 ? 1 : -1) * 0.18], s: 0.13, glow: 3 });
+  whaleGeo = kit.build();
+  return whaleGeo;
+}
+
+// Находки: письмо в бутылке, светобуй, звёздочка
+const findCache = new Map();
+export function findGeometry(kind) {
+  if (findCache.has(kind)) return findCache.get(kind);
+  const kit = new Kit();
+  if (kind === "bottle") {
+    kit.add(GEO.cyl, "#7fd6c8", { p: [0, 0.18, 0], r: [0, 0, Math.PI / 2 - 0.25], s: [0.32, 0.62, 0.32] });
+    kit.add(GEO.cyl, "#7fd6c8", { p: [0.36, 0.28, 0], r: [0, 0, Math.PI / 2 - 0.25], s: [0.14, 0.26, 0.14] });
+    kit.add(GEO.cyl, "#b07a4a", { p: [0.5, 0.31, 0], r: [0, 0, Math.PI / 2 - 0.25], s: [0.16, 0.1, 0.16] });
+    kit.add(GEO.box, "#fff3d0", { p: [-0.02, 0.18, 0], r: [0, 0, -0.25], s: [0.38, 0.16, 0.16], glow: 1.6 });
+    kit.add(GEO.ring, "#d84a4a", { p: [-0.02, 0.18, 0], r: [0, Math.PI / 2, -0.25], s: 0.19 });
+  } else if (kind === "buoy") {
+    kit.add(GEO.cone6, "#e2483e", { p: [0, 0.18, 0], s: [0.62, 0.42, 0.62] });
+    kit.add(GEO.cyl6, "#f6f3ea", { p: [0, 0.48, 0], s: [0.22, 0.2, 0.22] });
+    kit.add(GEO.cyl6, "#e2483e", { p: [0, 0.66, 0], s: [0.2, 0.16, 0.2] });
+    kit.add(GEO.ball, "#fff0b8", { p: [0, 0.84, 0], s: 0.2, glow: 3 });
+    kit.add(GEO.cone6, "#39435a", { p: [0, 0.98, 0], s: [0.2, 0.1, 0.2] });
+  } else {
+    // звёздочка: пятиконечная, толстенькая, золотая
+    const pts = [];
+    const R = 0.42;
+    const r = 0.19;
+    const h = 0.09;
+    const at = (k, rad, y) => [Math.cos((k * Math.PI) / 5 - Math.PI / 2) * rad, y, Math.sin((k * Math.PI) / 5 - Math.PI / 2) * rad];
+    for (let k = 0; k < 10; k++) {
+      const a = at(k, k % 2 ? r : R, 0);
+      const b = at(k + 1, (k + 1) % 2 ? r : R, 0);
+      // лицевая и задняя стороны, бок
+      pts.push([0, 0, h], [a[0], a[2], 0], [b[0], b[2], 0]);
+      pts.push([0, 0, -h], [b[0], b[2], 0], [a[0], a[2], 0]);
+    }
+    kit.tris(pts, "#ffd23f", 1.4);
+  }
+  const g = kit.build();
+  findCache.set(kind, g);
+  return g;
 }
 
 export const SHARED = GEO;

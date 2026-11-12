@@ -157,7 +157,9 @@ h1 em { font-style: normal; color: #bfeaff; }
 }
 .primary:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 2px 0 #b05a00; }
 .primary:disabled { filter: grayscale(.6); opacity: .65; }
-.row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.row { display: grid; grid-template-columns: 1fr 1fr 46px; gap: 10px; margin-top: 10px; }
+.gearbtn { display: grid; place-items: center; padding: 0; }
+.gearbtn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
 .ghost, .choice {
   min-height: 46px; border-radius: 15px; border: 2px solid #ffffff4d; background: #ffffff1c; color: #fff;
   font-size: 16px; font-weight: 850; box-shadow: 0 3px 0 #0b1d4480;
@@ -287,4 +289,85 @@ body[data-panel="finish"] .veil, body[data-panel="fail"] .veil { background: lin
   .float { font-size: 24px; }
   .float.big { font-size: 34px; }
   .hint { font-size: 14px; padding: 8px 14px; }
+}
+
+/* ---------- монстры и оружие: плашки, подсказки с картинкой, конфетти ---------- */
+.gear {
+  position: fixed; z-index: 4; left: var(--inset-left); bottom: var(--inset-bottom); display: flex; flex-direction: column-reverse; align-items: flex-start; gap: 6px; pointer-events: none;
+}
+.gp {
+  display: flex; align-items: center; gap: 7px; height: 38px; padding: 0 12px 0 5px; border-radius: 14px;
+  background: #163a7ae6; border: 2px solid #ffffff55; box-shadow: 0 3px 0 #0b1d44b0; font-size: 14px; font-weight: 900; white-space: nowrap;
+  animation: gp-in .25s ease both;
+}
+.gp .ico { width: 30px; height: 30px; flex: none; display: block; }
+.gp .ico svg { width: 100%; height: 100%; display: block; }
+.gp em { font-style: normal; color: #ffe27a; font-variant-numeric: tabular-nums; }
+.gp .bar { width: 52px; height: 8px; flex: none; border-radius: 4px; background: #0b1d44; overflow: hidden; border: 1px solid #ffffff30; }
+.gp .bar i { display: block; height: 100%; width: 100%; transform-origin: left; background: linear-gradient(90deg, #7fd0ff, #ffffff); }
+.gp.spike .bar i { background: linear-gradient(90deg, #5fd8ff, #e6fbff); }
+.gp.chase { border-color: #ff9aa6; }
+.gp.chase .bar i { background: linear-gradient(90deg, #ff5a6a, #ffd23a); }
+.gp.chase.close { animation: gp-warn .4s ease-in-out infinite alternate; }
+.gp.quest.done { border-color: #7ce06a; background: #1d6a3ae6; }
+.gp.quest.done em { color: #c8ff9a; }
+@keyframes gp-in { from { opacity: 0; transform: translateX(-12px); } }
+@keyframes gp-warn { to { background: #8a1424e6; } }
+#banner .ico { display: inline-block; width: 34px; height: 34px; flex: none; }
+#banner .ico svg { width: 100%; height: 100%; display: block; }
+#banner:not(.tip) .ico { width: 1.1em; height: 1.1em; vertical-align: -0.15em; margin-right: 6px; }
+.float.coin { color: #ffe27a; font-size: 24px; }
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; padding: 4px; border-radius: 14px; background: #0b1d4480; }
+.tab { min-height: 36px; border: 0; border-radius: 11px; background: transparent; color: var(--soft); font-size: 15px; font-weight: 900; }
+.tab.on { background: #ffffff26; color: #fff; box-shadow: inset 0 0 0 2px #ffffff40; }
+.buy.hunt { font-size: 11px; line-height: 1.1; padding: 0 4px; }
+.facts span.done { background: #1d6a3acc; color: #c8ff9a; }
+.reward.pop { animation: reward-pop .5s cubic-bezier(.3, 1.8, .5, 1); }
+@keyframes reward-pop { 40% { transform: scale(1.35); } }
+.opts { display: grid; gap: 8px; margin-top: 10px; }
+.opt { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 9px 14px; border-radius: 14px; border: 2px solid #ffffff30; background: #0b1d4480; color: #fff; text-align: left; }
+.opt b { font-size: 16px; }
+.opt small { color: var(--soft); font-size: 12px; }
+.opt.on { border-color: var(--gold); background: #ffcf3a24; }
+.ad.gun { background: linear-gradient(170deg, #3a8cff, #1f5ad8); border-color: #bfe0ff; box-shadow: 0 4px 0 #123a8a; }
+#confetti { position: fixed; inset: 0; z-index: 8; pointer-events: none; overflow: hidden; }
+#confetti i { position: absolute; top: -30px; width: 18px; height: 18px; animation: confetti-fall linear forwards; }
+#confetti i svg { width: 100%; height: 100%; display: block; }
+@keyframes confetti-fall {
+  0% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+  85% { opacity: 1; }
+  100% { transform: translate(var(--dx), 105vh) rotate(var(--r)); opacity: 0; }
+}
+@media (max-width: 700px) {
+  .gp { height: 34px; font-size: 13px; padding: 0 10px 0 4px; }
+  .gp .ico { width: 26px; height: 26px; }
+  .gp .bar { width: 40px; }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  .gp { height: 32px; font-size: 12px; border-radius: 12px; }
+  .gp .ico { width: 24px; height: 24px; }
+  .tabs { margin-top: 6px; }
+  .tab { min-height: 30px; font-size: 13px; }
+  .skins { grid-template-columns: repeat(4, 1fr); }
+  .opts { grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+  .opt { padding: 6px 10px; }
+  .opt b { font-size: 14px; }
+  .row { grid-template-columns: 1fr 1fr 40px; }
+}
+@media (max-width: 560px) and (orientation: portrait) {
+  .skins { grid-template-columns: repeat(2, 1fr); }
+}
+/* на панелях плашки оружия прячутся; облики — по четыре в ряд; в низком окне всё плотнее */
+body[data-panel] .gear { visibility: hidden; }
+@media (min-width: 700px) { .skins { grid-template-columns: repeat(4, 1fr); } }
+@media (orientation: landscape) and (max-height: 520px) {
+  .facts { gap: 4px; }
+  .facts span { min-width: 52px; padding: 2px 5px; font-size: 10px; }
+  .facts b { font-size: 14px; }
+  .card .ico { width: 30px; height: 30px; }
+  .card .ico svg { width: 22px; height: 22px; }
+  .card .buy { min-height: 34px; }
+  .card small { line-height: 1.2; }
+  .tab { min-height: 28px; }
+  .sheet .bank { padding: 2px 10px; font-size: 16px; }
 }

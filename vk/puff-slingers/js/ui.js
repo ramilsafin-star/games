@@ -12,6 +12,24 @@ const Save = {
   sfx: true,
   shake: true,
   seen: {},
+  medals: 0,        // битовая маска: медаль уровня i — бит i
+  trail: 0,         // выбранный след за пуфом (индекс в TRAILS)
+  newTrail: false,  // открыт след, который игрок ещё не видел
+  gfx: 'auto',      // графика: 'auto' или постоянная ступень 0–2
+
+  hasMedal(i) {
+    return (this.medals & (1 << i)) !== 0;
+  },
+
+  setMedal(i) {
+    this.medals |= 1 << i;
+  },
+
+  totalMedals() {
+    let n = 0;
+    for (let i = 0; i < LEVEL_COUNT; i++) if (this.hasMedal(i)) n++;
+    return n;
+  },
 
   total() {
     return this.best.reduce((a, b) => a + b, 0);
@@ -43,8 +61,9 @@ const Save = {
 
   serialize() {
     return JSON.stringify({
-      v: 2, stars: this.stars, best: this.best, gems: this.gems, unlocked: this.unlocked,
-      music: this.music, sfx: this.sfx, shake: this.shake, seen: this.seen
+      v: 3, stars: this.stars, best: this.best, gems: this.gems, unlocked: this.unlocked,
+      music: this.music, sfx: this.sfx, shake: this.shake, seen: this.seen,
+      md: this.medals, tr: this.trail, nt: this.newTrail ? 1 : 0, gfx: this.gfx
     });
   },
 
@@ -74,6 +93,11 @@ const Save = {
     if (typeof d.sfx === 'boolean') this.sfx = d.sfx;
     if (typeof d.shake === 'boolean') this.shake = d.shake;
     if (d.seen && typeof d.seen === 'object') Object.assign(this.seen, d.seen);
+    // Версия 3: медали, след, графика. В старых сохранениях их нет — остаются как есть
+    if (Number.isSafeInteger(d.md) && d.md > 0) this.medals |= d.md & ((1 << LEVEL_COUNT) - 1);
+    if (Number.isInteger(d.tr) && d.tr >= 0 && d.tr < TRAILS.length) this.trail = d.tr;
+    if (d.nt === 1) this.newTrail = true;
+    if (d.gfx === 'auto' || d.gfx === 0 || d.gfx === 1 || d.gfx === 2) this.gfx = d.gfx;
   }
 };
 
@@ -222,6 +246,17 @@ const UI = {
       this.startLevel(Save.nextLevel());
     });
     $('btn-title-levels').addEventListener('click', () => this.show('levels', 'title'));
+    $('btn-title-trails').addEventListener('click', () => this.show('trails', 'title'));
+    $('btn-trails-back').addEventListener('click', () => this.handleEsc());
+    // Графика: Авто → Высокая → Средняя → Низкая → Авто
+    $('tgl-gfx').addEventListener('click', () => {
+      const order = ['auto', 2, 1, 0];
+      Save.gfx = order[(order.indexOf(Save.gfx) + 1) % order.length];
+      applyGfx();
+      this.syncSettings();
+      Sound.ui();
+      Platform.requestSave();
+    });
     $('btn-pause').addEventListener('click', () => this.show('pause'));
     $('btn-restart').addEventListener('click', () => this.restart());
     $('btn-resume').addEventListener('click', () => this.show(null));
@@ -291,6 +326,9 @@ const UI = {
       el.setAttribute('aria-pressed', on ? 'true' : 'false');
       el.querySelector('.state').textContent = on ? t('on') : t('off');
     });
+    const gfx = $('tgl-gfx');
+    gfx.classList.add('on');
+    gfx.querySelector('.state').textContent = Save.gfx === 'auto' ? `${t('gfxAuto')} · ${t('gfx')[quality]}` : t('gfx')[Save.gfx];
   },
 
   show(name, back) {
@@ -304,6 +342,7 @@ const UI = {
     $('hud').classList.toggle('hidden', !inGame || phase === 'attract');
     if (name === 'levels') this.buildLevels();
     if (name === 'title') this.buildTitle();
+    if (name === 'trails') this.buildTrails();
     if (name) {
       // Фокус переводим только тем, кто играет с клавиатуры
       const primaryBtn = document.querySelector(`#screen-${name} .primary, #screen-${name} button`);
@@ -322,6 +361,7 @@ const UI = {
   handleEsc() {
     if (this.current === 'pause') this.show(null);
     else if (this.current === 'levels') this.show(this.backTarget || 'title');
+    else if (this.current === 'trails') this.show('title');
     else if (this.current === 'result' || this.current === 'final') this.show('levels', this.current);
   },
 
@@ -359,7 +399,7 @@ const UI = {
     el.classList.toggle('visible', !!text);
   },
 
-  banner(title, sub, big) {
+  banner(title, sub, big, goal) {
     const el = $('banner');
     el.innerHTML = '';
     const a = document.createElement('div');
@@ -372,6 +412,14 @@ const UI = {
       b.textContent = sub;
       el.appendChild(b);
     }
+    // Задание на медаль — третьей строкой при начале уровня
+    if (goal) {
+      const c = document.createElement('div');
+      c.className = 'banner-goal' + (Save.hasMedal(level) ? ' had' : '');
+      c.innerHTML = '<i class="medal-ico"></i>';
+      c.appendChild(document.createTextNode(goal));
+      el.appendChild(c);
+    }
     el.classList.remove('play');
     void el.offsetWidth;
     el.classList.add('play');
@@ -382,9 +430,10 @@ const UI = {
   },
 
   // Вспышка не чаще 2 раз в секунду: безопасно для людей со светочувствительностью
-  screenFlash() {
+  screenFlash(big) {
     const now = performance.now();
     if (!Save.shake || now - this.flashAt < 500) return;
+    $('flash').classList.toggle('big', !!big);
     this.flashAt = now;
     const el = $('flash');
     el.classList.remove('play');
@@ -401,12 +450,118 @@ const UI = {
     const allGems = LEVELS.reduce((a, lv) => a + (lv.gems || 0), 0);
     $('title-gems').textContent = `${Save.totalGems()}/${allGems}`;
     $('title-gems-wrap').classList.toggle('hidden', Save.totalGems() === 0);
+    $('title-medals').textContent = `${Save.totalMedals()}/${LEVEL_COUNT}`;
+    $('title-medals-wrap').classList.toggle('hidden', Save.totalMedals() === 0);
+    $('trails-dot').classList.toggle('hidden', !Save.newTrail);
   },
 
-  buildLevels() {
+  // ---------- Следы за пуфом ----------
+  buildTrails() {
+    if (Save.newTrail) {
+      Save.newTrail = false;
+      Platform.requestSave();
+    }
+    $('trails-note').textContent = t('trailsNote').replace('{n}', trailPoints());
+    const grid = $('trails-grid');
+    grid.innerHTML = '';
+    TRAILS.forEach((tr, i) => {
+      const open = trailOpen(i);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `trail-card trail-${tr.id}` + (open ? '' : ' locked') + (Save.trail === i ? ' on' : '');
+      btn.disabled = !open;
+      const sw = document.createElement('span');
+      sw.className = 'swatch';
+      for (let k = 0; k < 5; k++) sw.appendChild(document.createElement('i'));
+      btn.appendChild(sw);
+      const name = document.createElement('b');
+      name.textContent = t('trailNames')[i];
+      btn.appendChild(name);
+      const sub = document.createElement('small');
+      sub.textContent = !open ? t('trailNeed').replace('{n}', tr.need) : Save.trail === i ? t('trailOn') : '';
+      btn.appendChild(sub);
+      if (open) {
+        btn.addEventListener('click', () => {
+          Save.trail = i;
+          Sound.ui();
+          Platform.requestSave();
+          this.buildTrails();
+        });
+      }
+      grid.appendChild(btn);
+    });
+  },
+
+  // ---------- Медаль уровня и разрушомер в HUD ----------
+  updateGoal(fresh) {
+    const el = $('hud-goal');
+    if (!el || !Goals.kind) return;
+    $('hud-goal-text').textContent = `${t('goalShort_' + Goals.kind)} ${Goals.short()}`;
+    el.classList.toggle('done', Goals.done);
+    el.classList.toggle('failed', Goals.failed);
+    el.classList.toggle('had', Save.hasMedal(level) && !Goals.done);
+    if (fresh) {
+      el.classList.remove('pop');
+      void el.offsetWidth;
+      el.classList.add('pop');
+    }
+  },
+
+  // Разрушомер в HUD: стиль меняется, только когда полоска заметно сдвинулась
+  tickMeter(dt) {
+    const want = Goals.meterShare();
+    Goals.shownMeter += (want - Goals.shownMeter) * Math.min(1, dt * 6);
+    const v = Goals.bonusGiven ? 1 : Math.round(Goals.shownMeter * 200) / 200;
+    const state = `${v}|${Goals.meterMax > 0}|${Goals.bonusGiven}`;
+    if (state === this.meterState) return;
+    this.meterState = state;
+    $('hud-meter-fill').style.transform = `scaleX(${v})`;
+    $('hud-meter').classList.toggle('hidden', Goals.meterMax <= 0);
+    $('hud-meter').classList.toggle('used', Goals.bonusGiven);
+  },
+
+  meterFull() {
+    const el = $('hud-meter');
+    el.classList.remove('pop');
+    void el.offsetWidth;
+    el.classList.add('pop');
+  },
+
+  buildLevels(chapter) {
+    if (chapter === undefined) chapter = CHAPTERS.findIndex(([a, b]) => level >= a && level <= b);
+    this.chapter = chapter;
+    const tabs = $('chapter-tabs');
+    tabs.innerHTML = '';
+    CHAPTERS.forEach(([a, b], c) => {
+      const tab = document.createElement('button');
+      tab.type = 'button';
+      tab.setAttribute('role', 'tab');
+      const open = a < Save.unlocked;
+      tab.className = 'tab' + (c === chapter ? ' on' : '') + (open ? '' : ' locked') + (c === CHAPTERS.length - 1 ? ' new' : '');
+      tab.setAttribute('aria-selected', c === chapter ? 'true' : 'false');
+      let stars = 0;
+      let medals = 0;
+      for (let i = a; i <= b; i++) {
+        stars += Save.stars[i];
+        if (Save.hasMedal(i)) medals++;
+      }
+      const name = document.createElement('b');
+      name.textContent = t('chapters')[c];
+      tab.appendChild(name);
+      const sub = document.createElement('small');
+      sub.innerHTML = `<i class="star-ico"></i>${stars}/${(b - a + 1) * 3} <i class="medal-ico"></i>${medals}/${b - a + 1}`;
+      tab.appendChild(sub);
+      tab.addEventListener('click', () => {
+        Sound.ui();
+        this.buildLevels(c);
+      });
+      tabs.appendChild(tab);
+    });
     const grid = $('levels-grid');
     grid.innerHTML = '';
+    const [from, to] = CHAPTERS[chapter];
     LEVELS.forEach((lv, i) => {
+      if (i < from || i > to) return;
       const open = i < Save.unlocked;
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -429,6 +584,11 @@ const UI = {
         stars.appendChild(st);
       }
       btn.appendChild(stars);
+      if (open) {
+        const md = document.createElement('i');
+        md.className = 'medal-ico mini-medal' + (Save.hasMedal(i) ? ' lit' : '');
+        btn.appendChild(md);
+      }
       if (lv.gems) {
         const row = document.createElement('span');
         row.className = 'mini-gems';
@@ -466,6 +626,21 @@ const UI = {
     $('btn-next').textContent = r.level >= LEVEL_COUNT - 1 ? t('finish') : t('next');
     $('btn-retry').classList.toggle('primary', !r.win);
     $('result-score-wrap').classList.toggle('hidden', !r.win);
+    // Медаль уровня: получена сейчас, была раньше или нет
+    const medal = r.medal || { earned: false };
+    const had = Save.hasMedal(r.level);
+    const mrow = $('result-medal');
+    mrow.classList.toggle('hidden', !r.win);
+    mrow.classList.toggle('got', medal.earned);
+    mrow.classList.toggle('had', !medal.earned && had);
+    mrow.classList.remove('pop');
+    $('result-medal-text').textContent = medal.earned ? t('medalGot') : (had ? t('medalHad') + ' ✓ · ' : t('medalMissed') + ' · ') + (medal.earned ? '' : Goals.text().replace(/^[^:]*:\s*/, ''));
+    const trail = $('result-trail');
+    const fresh = (r.trails || []).map((i) => t('trailNames')[i]);
+    trail.classList.toggle('hidden', !fresh.length);
+    trail.textContent = fresh.length ? t('newTrail').replace('{name}', fresh.join(', ')) : '';
+    // Очки набегают с подпрыгиванием цифр
+    this.countUp($('result-score'), r.score);
 
     const stars = $('result-stars');
     stars.classList.toggle('hidden', !r.win);
@@ -474,18 +649,68 @@ const UI = {
     if (r.win) {
       for (let i = 0; i < r.stars; i++) {
         later(280 + i * 340, () => {
-          stars.querySelectorAll('.star')[i].classList.add('lit');
+          const st = stars.querySelectorAll('.star')[i];
+          st.classList.add('lit');
+          this.sparkle(st, i === 1 ? 14 : 10);
           Sound.star(i);
         });
       }
+      if (medal.earned) {
+        later(280 + r.stars * 340 + 200, () => {
+          mrow.classList.add('pop');
+          this.sparkle(mrow.querySelector('.medal-ico'), 12);
+          Sound.medal();
+        });
+      }
+    }
+  },
+
+  // Счёт набегает за ~0,9 с, цифры подпрыгивают
+  countUp(el, value) {
+    const t0 = performance.now();
+    const dur = Save.shake ? 900 : 1;
+    clearInterval(this.countTimer);
+    el.classList.add('counting');
+    this.countTimer = setInterval(() => {
+      const k = Math.min(1, (performance.now() - t0) / dur);
+      el.textContent = formatNumber(Math.round(value * (1 - Math.pow(1 - k, 3))));
+      if (k >= 1) {
+        clearInterval(this.countTimer);
+        el.classList.remove('counting');
+        el.classList.remove('bump');
+        void el.offsetWidth;
+        el.classList.add('bump');
+      }
+    }, 40);
+  },
+
+  // Искры вокруг элемента интерфейса (звёзды и медаль на экране итога)
+  sparkle(el, count) {
+    if (!el || !Save.shake) return;
+    const box = el.getBoundingClientRect();
+    const cx = box.left + box.width / 2;
+    const cy = box.top + box.height / 2;
+    for (let i = 0; i < count; i++) {
+      const s = document.createElement('i');
+      s.className = 'ui-spark';
+      const a = (i / count) * TAU + Math.random() * 0.4;
+      const d = 40 + Math.random() * 46;
+      s.style.left = `${cx}px`;
+      s.style.top = `${cy}px`;
+      s.style.setProperty('--dx', `${Math.cos(a) * d}px`);
+      s.style.setProperty('--dy', `${Math.sin(a) * d}px`);
+      s.style.background = i % 3 ? '#ffd23f' : '#ffffff';
+      document.body.appendChild(s);
+      setTimeout(() => s.remove(), 700);
     }
   },
 
   showFinal() {
     const total = Save.totalStars();
     $('final-stars').textContent = `${total}/${LEVEL_COUNT * 3}`;
+    $('final-medals').textContent = `${Save.totalMedals()}/${LEVEL_COUNT}`;
     $('final-best').textContent = formatNumber(Save.total());
-    $('final-note').textContent = total >= LEVEL_COUNT * 3 ? t('finalAllStars') : t('finalMoreStars');
+    $('final-note').textContent = total >= LEVEL_COUNT * 3 && Save.totalMedals() >= LEVEL_COUNT ? t('finalAllStars') : t('finalMoreStars');
     this.show('final');
     Sound.win();
     for (let i = 0; i < 4; i++) {
@@ -507,7 +732,7 @@ async function start3D() {
   if (m && m[1] === '0') return;
   try {
     const gl = document.getElementById('gl');
-    const mod = await withTimeout(import('./gl/scene3d.js?v=d6bb936e').then((x) => x.createScene3D(gl, !!m)), 15000);
+    const mod = await withTimeout(import('./gl/scene3d.js?v=7f585ca2').then((x) => x.createScene3D(gl, !!m)), 15000);
     if (!mod) return;
     scene3d = mod;
     gl.addEventListener('webglcontextlost', () => disable3D('потерян контекст WebGL'));
@@ -538,6 +763,7 @@ async function boot() {
     : Promise.resolve();
   await Promise.all([Platform.loadLanguage(), Platform.loadSave(), withTimeout(fonts, 1500)]);
 
+  applyGfx();
   UI.init();
   document.body.classList.add('booted');
   UI.show('title');

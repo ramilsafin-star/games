@@ -1,7 +1,7 @@
 // «Маяк»: управление, приборы, подсказки, панели и сохранение. Правила — в rules.js, картинка — в view.js.
-import { NIGHTS, UPGRADES, Bay } from "./rules.js?v=e4b14d4e";
-import { BayView } from "./view.js?v=e4b14d4e";
-import { Sound } from "./sound.js?v=e4b14d4e";
+import { NIGHTS, UPGRADES, Bay, STORM_AT, FINDS } from "./rules.js?v=092eaf93";
+import { BayView } from "./view.js?v=092eaf93";
+import { Sound } from "./sound.js?v=092eaf93";
 
 const id = (name) => document.getElementById(name);
 const canvas = id("sea");
@@ -14,7 +14,12 @@ const coarse = window.matchMedia("(pointer: coarse)").matches;
 // ---------- сохранение ----------
 // night — следующая непройденная ночь (11 — кампания пройдена); ups — улучшения маяка;
 // stars и best — звёзды и очки по ночам; storm — рекорд бесконечного режима; seen — какие подсказки уже были.
-const profile = { night: 1, ups: {}, stars: [], best: [], storm: 0, muted: false, seen: {} };
+// Вторая глава (ноябрь 2026): tasks — выполненные задания по ночам (биты 0–2); shells — ракушки;
+// owned — купленное в мастерской (биты 0–7 — цвета луча, 8–15 — краски маяка); beam, paint — что надето;
+// daily — дата пройденной «Ночи дня» (ГГГГММДД); hour — лучший час шторма; q — графика (0 авто, 1–3 низкая–высокая).
+// Старые сохранения (без этих полей) грузятся как есть: недостающее берётся по умолчанию.
+const profile = { night: 1, ups: {}, stars: [], best: [], storm: 0, muted: false, seen: {}, tasks: [], shells: 0, owned: 257, beam: 0, paint: 0, daily: 0, hour: 0, q: 0 };
+const int = (v, lo, hi, d) => (Number.isInteger(v) ? Math.max(lo, Math.min(hi, v)) : d);
 function load() {
   let saved = {};
   try {
@@ -32,6 +37,16 @@ function load() {
   }
   profile.storm = Number.isFinite(saved.storm) ? Math.max(0, saved.storm) : 0;
   profile.muted = saved.muted === true;
+  for (let i = 0; i < count; i++) profile.tasks[i] = int(saved.tasks && saved.tasks[i], 0, 7, 0);
+  profile.shells = int(saved.shells, 0, 99999, 0);
+  profile.owned = int(saved.owned, 0, 65535, 257) | 257; // тёплый луч и красная полоска есть всегда
+  profile.beam = int(saved.beam, 0, BEAMS.length - 1, 0);
+  profile.paint = int(saved.paint, 0, PAINTS.length - 1, 0);
+  if (!(profile.owned & (1 << profile.beam))) profile.beam = 0;
+  if (!(profile.owned & (1 << (8 + profile.paint)))) profile.paint = 0;
+  profile.daily = int(saved.daily, 0, 99999999, 0);
+  profile.hour = int(saved.hour, 0, 999, 0);
+  profile.q = int(saved.q, 0, 3, 0);
   profile.seen = saved.seen && typeof saved.seen === "object" ? saved.seen : {};
 }
 function save() {
@@ -41,8 +56,119 @@ function save() {
     // игра работает и там, где сохранять нельзя
   }
 }
+// Мастерская: цвета луча и краски маяка за ракушки
+const BEAMS = [
+  { name: "Тёплый", price: 0, color: [1.0, 0.84, 0.52] },
+  { name: "Лунный", price: 15, color: [0.72, 0.86, 1.0] },
+  { name: "Мятный", price: 20, color: [0.6, 1.0, 0.78] },
+  { name: "Розовый", price: 25, color: [1.0, 0.66, 0.82] },
+  { name: "Сиреневый", price: 30, color: [0.82, 0.7, 1.0] },
+  { name: "Радужный", price: 60, color: null },
+];
+const PAINTS = [
+  { name: "Красная полоска", price: 0, stripe: "#e2483e", roof: "#d8443b" },
+  { name: "Синяя полоска", price: 20, stripe: "#3f7fe0", roof: "#2f5fb8" },
+  { name: "Зелёная полоска", price: 25, stripe: "#3fb56a", roof: "#2e8a54" },
+  { name: "Золотая полоска", price: 40, stripe: "#f2b632", roof: "#e08a1e" },
+];
+const DAILY_SHELLS = 15;
+const today = () => {
+  const d = new Date();
+  return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+};
+const MEDALS = [
+  [15, "🥇", "золотая медаль"],
+  [10, "🥈", "серебряная медаль"],
+  [5, "🥉", "бронзовая медаль"],
+];
+const medalOf = (hour) => MEDALS.find(([h]) => hour >= h) || null;
+
 load();
 Sound.set(!profile.muted);
+
+function applyLook() {
+  view.setLook(BEAMS[profile.beam].color, PAINTS[profile.paint]);
+}
+applyLook();
+view.setLevel(profile.q);
+
+// Задания ночи: значок и как назвать
+// третье — короткое название для строки с ходом «3/5» во время ночи
+function taskText(task) {
+  switch (task.kind) {
+    case "stars3": return ["⭐", "Все лодки дома"];
+    case "noflash": return ["🌙", "Без вспышки"];
+    case "pop": return ["🫧", `Лопни ${task.n} теней`, "Тени"];
+    case "streak": return ["⛵", `${task.n} лодок подряд`, "Подряд"];
+    case "finds": return ["🍾", `Находок: ${task.n}`, "Находки"];
+    case "whale": return ["🐋", "Разбуди кита"];
+    case "score": return ["✦", `${task.n} очков`, "Очки"];
+  }
+  return ["•", task.kind];
+}
+// Строка задания: в игре — с ходом «3/5»
+function taskLine(task, live = false) {
+  const [icon, full, short] = taskText(task);
+  const progress = live && !task.done && task.n ? ` <em>${game.taskProgress(task)}/${task.n}</em>` : "";
+  const label = progress && short ? short : full;
+  return `<span class="task${task.done ? " done" : ""}${task.old ? " old" : ""}"><i aria-hidden="true">${task.done ? "✓" : icon}</i>${label}${progress}</span>`;
+}
+let lastTasks = "";
+function paintTasks() {
+  const box = id("tasks");
+  const show = playing() && !paused && game.tasks.length > 0;
+  box.hidden = !show;
+  if (!show) return;
+  const html = game.tasks.map((task) => taskLine(task, true)).join("");
+  if (html !== lastTasks) {
+    lastTasks = html;
+    box.innerHTML = html;
+  }
+}
+// Подсчёт цифр вверх в панели итога («подпрыгивающие» награды)
+function countUp(root) {
+  for (const el of root.querySelectorAll("[data-count]")) {
+    const to = Number(el.dataset.count) || 0;
+    const prefix = el.dataset.prefix || "";
+    const start = performance.now();
+    const dur = Math.min(1100, 350 + to * 4);
+    const tick = (now) => {
+      const k = Math.min(1, (now - start) / dur);
+      el.textContent = prefix + Math.round(to * (1 - (1 - k) ** 3));
+      if (k < 1) requestAnimationFrame(tick);
+      else el.classList.add("bump");
+    };
+    el.textContent = prefix + "0";
+    setTimeout(() => requestAnimationFrame(tick), 250);
+  }
+}
+// Конфетти поверх панели итога: лёгкие CSS-полоски, без холста
+function confetti(n = 46) {
+  const box = id("confetti");
+  box.textContent = "";
+  const colors = ["#ffd98a", "#ff8fb1", "#8fd8ff", "#b9f59a", "#d4a8ff", "#fff3c8"];
+  for (let i = 0; i < n; i++) {
+    const piece = document.createElement("i");
+    piece.style.left = Math.random() * 100 + "%";
+    piece.style.background = colors[i % colors.length];
+    piece.style.animationDelay = (Math.random() * 0.6).toFixed(2) + "s";
+    piece.style.animationDuration = (1.8 + Math.random() * 1.4).toFixed(2) + "s";
+    piece.style.setProperty("--x", (Math.random() * 120 - 60).toFixed(0) + "px");
+    piece.style.setProperty("--r", (Math.random() * 720 - 360).toFixed(0) + "deg");
+    box.append(piece);
+  }
+  setTimeout(() => (box.textContent = ""), 3600);
+}
+// Ракушки: прибавить и сохранить
+function addShells(n) {
+  if (!n) return;
+  profile.shells += n;
+  save();
+}
+// Хук для наград за ролик в VK-версии: на портале кнопки нет
+function bonusRow(gain) {
+  return "";
+}
 
 // Улучшения: значок, название, что даёт
 const UP_INFO = {
@@ -74,6 +200,7 @@ let sizzleIn = 0;
 let lastHud = "";
 let nudgeFlash = false;
 let floatStep = 0;
+let slow = 0; // сколько ещё длится замедление на победе ночи
 
 const playing = () => game.mode === "play" || game.mode === "dawn";
 const aspect = () => window.innerWidth / Math.max(1, window.innerHeight);
@@ -83,7 +210,27 @@ function text(element, value) {
   if (element.textContent !== value) element.textContent = value;
 }
 
+// Надписи не перебивают друг друга: следующая ждёт, пока прочитают предыдущую
+let announceFree = 0;
+const announceQueue = [];
 function announce(message, above = "") {
+  const now = performance.now();
+  if (now < announceFree) {
+    if (announceQueue.length < 3) announceQueue.push([message, above]);
+    if (announceQueue.length === 1) setTimeout(nextAnnounce, announceFree - now);
+    return;
+  }
+  announceFree = now + 1300;
+  showAnnounce(message, above);
+}
+function nextAnnounce() {
+  const item = announceQueue.shift();
+  if (!item) return;
+  announceFree = 0;
+  announce(...item);
+  if (announceQueue.length) setTimeout(nextAnnounce, 1300);
+}
+function showAnnounce(message, above) {
   const banner = id("announcement");
   banner.classList.remove("show");
   banner.textContent = "";
@@ -184,6 +331,7 @@ function menu() {
   game.ups = { ...profile.ups };
   game.startDemo({ aspect: aspect() });
   game.events.length = 0;
+  Sound.rain(false); // ушли из грозовой ночи в меню — дождь стихает
   paintMenu();
   paintMode();
   view.setBay(game);
@@ -198,7 +346,18 @@ function begin(night) {
   game.restoreUps();
   game.ups = { ...profile.ups };
   if (night === 1 && profile.night <= 1) for (const key of ["beam", "astray", "shade", "grab"]) delete profile.seen[key];
-  game.startNight(night, { aspect: aspect(), grant: night === profile.night });
+  game.startNight(night, { aspect: aspect(), grant: night === profile.night, done: profile.tasks[night - 1] || 0 });
+  afterStart();
+}
+
+// «Ночь дня»: одна на всех в этот день; награда — раз в день
+function beginDaily() {
+  paused = false;
+  clearHints();
+  aim = finger = null;
+  game.restoreUps();
+  game.ups = { ...profile.ups };
+  game.startDaily({ aspect: aspect(), seed: today() });
   afterStart();
 }
 
@@ -222,6 +381,8 @@ function again() {
 
 function afterStart() {
   acc = 0;
+  slow = 0;
+  lastTasks = "";
   id("floats").textContent = "";
   paintMode();
   view.setBay(game);
@@ -234,6 +395,8 @@ function afterStart() {
   }
   if (game.night === 2 && !game.endless) hint("flash", "Кнопка «Вспышка» на миг освещает всю бухту", 6);
   if (game.helper) hint("helper", "Малый луч сам ищет тусклые лодки", 4);
+  if (game.tasks.length && game.night >= 2 && !profile.seen.task) hint("task", "Внизу слева — задания ночи. За каждое — ракушки 🐚", 5);
+  if (game.rain) hint("rain", "Гроза! В дождь фонарики гаснут быстрее, а молния на миг освещает всю бухту", 5.5);
 }
 
 // ---------- события правил: звук, надписи, подсказки ----------
@@ -243,14 +406,55 @@ function onEvent(e, now) {
   switch (e.type) {
     case "night":
       Sound.night();
+      Sound.rain(game.rain);
       if (game.endless) announce("Шторм до рассвета", "ДЕРЖИСЬ, СМОТРИТЕЛЬ");
+      else if (game.daily) announce("Ночь дня", (profile.daily === today() ? "НАГРАДА УЖЕ ПОЛУЧЕНА" : `НАГРАДА ${DAILY_SHELLS} 🐚`) + " · " + game.dailyEvents.map((k) => ({ rain: "ГРОЗА", fog: "ТУМАН", gusts: "ВЕТЕР", whale: "КИТ", finds: "НАХОДКИ" })[k]).join(" + "));
       else announce(e.name, `НОЧЬ ${e.night} ИЗ ${NIGHTS.length}` + (game.ease ? " · МОРЕ СПОКОЙНЕЕ" : ""));
       break;
     case "hour":
       if (e.hour > 1) {
-        announce(`Час ${e.hour}`, "ШТОРМ КРЕПЧАЕТ");
+        const medal = MEDALS.find(([h]) => h === e.hour);
+        announce(medal ? `${medal[1]} Час ${e.hour}` : `Час ${e.hour}`, medal ? medal[2].toUpperCase() : "ШТОРМ КРЕПЧАЕТ");
         Sound.night();
       }
+      Sound.rain(game.rain);
+      break;
+    case "hour-shell":
+      addShells(e.shells);
+      break;
+    case "task": {
+      const task = game.tasks[e.i];
+      if (!game.daily && game.night) {
+        profile.tasks[game.night - 1] = (profile.tasks[game.night - 1] || 0) | (1 << e.i);
+      }
+      addShells(e.shells);
+      Sound.task();
+      announce(`+${e.shells} 🐚`, "ЗАДАНИЕ: " + taskText(task)[1].toUpperCase());
+      lastTasks = "";
+      break;
+    }
+    case "find-up":
+      Sound.findUp();
+      hint("find", "В море находка! Подержи её в луче — и она твоя", 5);
+      break;
+    case "find": {
+      Sound.find(e.kind);
+      addShells(e.shells);
+      const word = e.kind === "bottle" ? `+${e.shells} 🐚` : e.kind === "buoy" ? "Светобуй!" : "Вспышка скорее!";
+      float(e.x, e.z, word, "gold");
+      break;
+    }
+    case "whale":
+      Sound.whale();
+      hint("whale", "Кит-фонарик! Посвети на него — он поможет лодкам", 5, true);
+      break;
+    case "spout":
+      Sound.spout();
+      addShells(e.shells);
+      announce("Кит проснулся!", `+${e.points} · +${e.shells} 🐚`);
+      break;
+    case "bolt":
+      Sound.thunder();
       break;
     case "spawn":
       if (now - lastHorn > 350) {
@@ -320,14 +524,10 @@ function onEvent(e, now) {
       Sound.bell(e.streak);
       float(e.x, e.z + 0.6, "+" + e.points + (e.streak > 2 ? "  ×" + e.streak : ""));
       break;
-    case "flash": {
+    case "flash":
       Sound.flash();
-      const glare = id("glare");
-      glare.classList.remove("go");
-      void glare.offsetWidth;
-      glare.classList.add("go");
+      glare();
       break;
-    }
     case "flash-ready":
       if (game.mode === "play" && game.time > 1) Sound.flashReady();
       break;
@@ -339,16 +539,29 @@ function onEvent(e, now) {
     case "dawn":
       clearHints();
       Sound.dawn();
+      Sound.rain(false);
+      // победа ночи: на миг всё замедляется, вспышка и салют над деревней
+      slow = 1.1;
+      glare();
+      if (!game.wrecks) Sound.fireworks();
       announce("Рассвет!", game.wrecks ? "НОЧЬ ПОЗАДИ" : "ВСЕ ЛОДКИ ДОМА");
       break;
     case "fail":
       Sound.fail();
+      Sound.rain(false);
       panelAt = now + 1300;
       break;
     case "won":
       Sound.win();
       break;
   }
+}
+
+function glare() {
+  const el = id("glare");
+  el.classList.remove("go");
+  void el.offsetWidth;
+  el.classList.add("go");
 }
 
 // ---------- управление лучом ----------
@@ -518,14 +731,20 @@ function paintMode() {
   id("flash").hidden = game.night === 1 && !game.endless && profile.night <= 1;
 
   if (paused) {
-    showPanel(`<div class="eyebrow"><i></i> МАЯК ЖДЁТ</div><h2 id="panel-title">Пауза</h2>
+    const tasks = game.tasks.length ? `<div class="task-list">${game.tasks.map((task) => taskLine(task, true)).join("")}</div>` : "";
+    showPanel(`<div class="eyebrow"><i></i> МАЯК ЖДЁТ</div><h2 id="panel-title">Пауза</h2>${tasks}
       <button class="primary" data-action="resume">Продолжить</button>
-      <div class="row"><button class="plain" data-action="sound">Звук: ${profile.muted ? "выключен" : "включён"}</button><button class="plain" data-action="menu">В меню</button></div>`);
+      <div class="row"><button class="plain" data-action="sound">Звук: ${profile.muted ? "выключен" : "включён"}</button><button class="plain" data-action="menu">В меню</button></div>
+      <div class="row solo"><button class="plain" data-action="quality">${qualityLabel()}</button></div>`);
     return;
   }
   if (mode === "upgrade" && game.endless) {
     showPanel(`<div class="eyebrow"><i></i> ЧАС ${game.hour - 1} ПОЗАДИ</div><h2 id="panel-title">Подмога в шторм</h2>
       <p>Выбери улучшение — оно с тобой до конца шторма.</p><div class="choices">${cards()}</div>`);
+    return;
+  }
+  if ((mode === "upgrade" || mode === "won") && game.result && game.result.daily) {
+    paintDaily();
     return;
   }
   if (mode === "upgrade" || mode === "won") {
@@ -537,20 +756,27 @@ function paintMode() {
     if (mode === "won" && profile.night <= NIGHTS.length) profile.night = NIGHTS.length + 1;
     save();
     [0, 1, 2].slice(0, r.stars).forEach((i) => setTimeout(() => Sound.star(i), 250 + i * 220));
-    const facts = `<div class="facts"><span><b>${r.saved} из ${r.total}</b>лодок дома</span><span><b>${r.popped}</b>теней лопнуло</span><span><b>${r.score}</b>очков${record ? " · рекорд" : ""}</span></div>`;
+    const facts = `<div class="facts"><span><b>${r.saved} из ${r.total}</b>лодок дома</span><span><b data-count="${r.popped}">${r.popped}</b>теней лопнуло</span><span><b data-count="${r.score}">${r.score}</b>очков${record ? " · рекорд" : ""}</span></div>`;
     const word = r.stars === 3 ? "Все лодки дома!" : r.stars === 2 ? "Почти все дома" : "Ночь позади";
+    // задания ночи и ракушки
+    const tasks = r.tasks.length ? `<div class="task-list">${r.tasks.map((task) => taskLine(task)).join("")}</div>` : "";
+    const gain = r.shells ? `<p class="gain">Ракушек за ночь: <b data-count="${r.shells}" data-prefix="+">+${r.shells}</b> 🐚 · всего ${profile.shells}</p>${bonusRow(r.shells)}` : "";
+    const unlock = n === STORM_AT && profile.night <= STORM_AT + 1 ? `<p class="note gold">Открыт «Шторм до рассвета» — бесконечный режим на рекорд. А впереди — вторая глава: Грозовой берег!</p>` : "";
+    const extra = tasks + gain + unlock;
+    if (r.stars === 3 || mode === "won") setTimeout(() => confetti(), 300);
+    setTimeout(() => countUp(id("panel-body")), 0);
     if (mode === "won") {
       const total = profile.stars.reduce((a, b) => a + b, 0);
-      showPanel(`<div class="eyebrow"><i></i> ДЕСЯТАЯ НОЧЬ ПОЗАДИ</div><h2 id="panel-title">Рассвет над бухтой!</h2>${starsRow(r.stars)}${facts}
-        <p>Маяк выстоял большой шторм. Всего звёзд: ${total} из ${NIGHTS.length * 3}. Теперь открыт «Шторм до рассвета» — на рекорд.</p>
+      showPanel(`<div class="eyebrow"><i></i> ПОСЛЕДНЯЯ НОЧЬ ПОЗАДИ</div><h2 id="panel-title">Рассвет над бухтой!</h2>${starsRow(r.stars)}${facts}${extra}
+        <p>Маяк выстоял все грозы. Всего звёзд: ${total} из ${NIGHTS.length * 3}. Дальше — «Шторм до рассвета» на рекорд и «Ночь дня» каждый день.</p>
         <button class="primary" data-action="storm">Шторм до рассвета</button>
         <div class="row solo"><button class="plain" data-action="menu">В меню</button></div>`);
     } else if (game.offer.length) {
-      showPanel(`<div class="eyebrow"><i></i> НОЧЬ ${n} ПОЗАДИ</div><h2 id="panel-title">${word}</h2>${starsRow(r.stars)}${facts}
+      showPanel(`<div class="eyebrow"><i></i> НОЧЬ ${n} ПОЗАДИ</div><h2 id="panel-title">${word}</h2>${starsRow(r.stars)}${facts}${extra}
         <p>Выбери улучшение для маяка:</p><div class="choices">${cards()}</div>`);
     } else {
       const next = n + 1 <= Math.min(profile.night, NIGHTS.length);
-      showPanel(`<div class="eyebrow"><i></i> НОЧЬ ${n} ПОЗАДИ</div><h2 id="panel-title">${word}</h2>${starsRow(r.stars)}${facts}
+      showPanel(`<div class="eyebrow"><i></i> НОЧЬ ${n} ПОЗАДИ</div><h2 id="panel-title">${word}</h2>${starsRow(r.stars)}${facts}${extra}
         ${next ? `<button class="primary" data-action="next">Следующая ночь</button>` : ""}
         <div class="row"><button class="plain" data-action="replay">Ещё раз</button><button class="plain" data-action="menu">В меню</button></div>`);
     }
@@ -565,10 +791,17 @@ function paintLost() {
   if (game.endless) {
     const record = game.score > profile.storm;
     profile.storm = Math.max(profile.storm, game.score);
+    const medalBefore = medalOf(profile.hour);
+    profile.hour = Math.max(profile.hour, game.hour);
+    const medal = medalOf(profile.hour);
     save();
+    const nextMedal = [...MEDALS].reverse().find(([h]) => h > profile.hour);
+    const medalLine = medal && medal !== medalBefore ? `<p class="gain">${medal[1]} Новая награда: ${medal[2]}!</p>` : nextMedal ? `<p class="note">Следующая награда ${nextMedal[1]} — продержаться до ${nextMedal[0]}-го часа.</p>` : `<p class="note">У тебя все медали шторма ${medal ? medal[1] : ""}</p>`;
+    if (record || (medal && medal !== medalBefore)) setTimeout(() => confetti(), 300);
     showPanel(`<div class="eyebrow"><i></i> ШТОРМ СТИХ НА ${game.hour}-М ЧАСУ</div><h2 id="panel-title">${record ? "Новый рекорд!" : "Шторм позади"}</h2>
       <p class="big-score">✦ ${game.score}</p>
       <div class="facts"><span><b>${game.saved}</b>лодок дома</span><span><b>${game.popped}</b>теней лопнуло</span><span><b>${profile.storm}</b>рекорд</span></div>
+      ${game.shells ? `<p class="gain">Ракушек за шторм: +${game.shells} 🐚</p>` : ""}${medalLine}
       <button class="primary" data-action="storm">Ещё раз</button>
       <div class="row solo"><button class="plain" data-action="menu">В меню</button></div>`);
     return;
@@ -578,12 +811,56 @@ function paintLost() {
     : game.gustQueue.length || game.gust
       ? "В ветер фонарики гаснут быстрее — береги вспышку для порыва."
       : "Лодке со знаком «!» свет нужен первой. А вспышка выручит, когда бед сразу несколько.";
-  showPanel(`<div class="eyebrow"><i></i> НОЧЬ ${game.night} ИЗ ${NIGHTS.length}</div><h2 id="panel-title">Ночь не удалась</h2>
+  showPanel(`<div class="eyebrow"><i></i> ${game.daily ? "НОЧЬ ДНЯ" : `НОЧЬ ${game.night} ИЗ ${NIGHTS.length}`}</div><h2 id="panel-title">Ночь не удалась</h2>
     <p>Дома ${game.saved} из ${game.total}. Экипажи спаслись на кругах — а лодки попробуем провести ещё раз.</p>
     <p class="note">${tip}</p>
     <button class="primary" data-action="again">Ещё раз</button>
     <p class="note">Море станет чуть спокойнее: меньше теней, фонарики горят дольше.</p>
     <div class="row solo"><button class="plain" data-action="menu">В меню</button></div>`);
+}
+
+// Итог «Ночи дня»: награда раз в день
+function paintDaily() {
+  const r = game.result;
+  const first = profile.daily !== today();
+  if (first) {
+    profile.daily = today();
+    addShells(DAILY_SHELLS);
+  }
+  const total = r.shells + (first ? DAILY_SHELLS : 0);
+  if (first) setTimeout(() => confetti(), 300);
+  showPanel(`<div class="eyebrow"><i></i> НОЧЬ ДНЯ ПОЗАДИ</div><h2 id="panel-title">${first ? "Награда дня!" : "Отличная ночь!"}</h2>${starsRow(r.stars)}
+    <div class="facts"><span><b>${r.saved} из ${r.total}</b>лодок дома</span><span><b data-count="${r.popped}">${r.popped}</b>теней лопнуло</span><span><b data-count="${r.score}">${r.score}</b>очков</span></div>
+    <p class="gain">Ракушек: <b data-count="${total}" data-prefix="+">+${total}</b> 🐚 · всего ${profile.shells}</p>${bonusRow(total)}
+    <p class="note">${first ? "Завтра будет новая «Ночь дня» — с другими событиями." : "Награду за сегодня ты уже получил. Завтра — новая ночь!"}</p>
+    <div class="row solo"><button class="plain" data-action="menu">В меню</button></div>`);
+  setTimeout(() => countUp(id("panel-body")), 0);
+}
+
+// Мастерская маяка: цвета луча и краски
+function swatch(color) {
+  if (!color) return "conic-gradient(#ff8a8a, #ffd27a, #b9f59a, #8fd8ff, #d4a8ff, #ff8a8a)";
+  return `rgb(${color.map((c) => Math.round(c * 255)).join(",")})`;
+}
+function paintShop() {
+  const item = (group, i, look, name, price) => {
+    const bit = group === "beam" ? i : 8 + i;
+    const has = profile.owned & (1 << bit);
+    const worn = group === "beam" ? profile.beam === i : profile.paint === i;
+    const label = worn ? "✓ Надето" : has ? "Надеть" : `${price} 🐚`;
+    const can = worn ? false : has || profile.shells >= price;
+    return `<button class="shop-item${worn ? " worn" : ""}" data-action="${has ? "wear" : "buy"}" data-group="${group}" data-i="${i}" ${can ? "" : "disabled"}><i style="background:${look}"></i><b>${name}</b><small>${label}</small></button>`;
+  };
+  showPanel(`<div class="eyebrow"><i></i> ЗА РАКУШКИ</div><h2 id="panel-title">Мастерская маяка</h2>
+    <p class="gain">У тебя <b>${profile.shells}</b> 🐚 <small>— ракушки дают задания ночей, письма в бутылках, кит и «Ночь дня»</small></p>
+    <h3>Цвет луча</h3><div class="shop">${BEAMS.map((b, i) => item("beam", i, swatch(b.color), b.name, b.price)).join("")}</div>
+    <h3>Краска маяка</h3><div class="shop paints">${PAINTS.map((p, i) => item("paint", i, `repeating-linear-gradient(180deg, ${p.stripe} 0 8px, #f6f3ea 8px 16px)`, p.name, p.price)).join("")}</div>
+    <div class="row solo"><button class="plain" data-action="close">Готово</button></div>`);
+}
+
+const QUALITY = ["Авто", "Низкая", "Средняя", "Высокая"];
+function qualityLabel() {
+  return `Графика: ${QUALITY[profile.q]}${profile.q === 0 ? " (" + QUALITY[view.level + 1].toLowerCase() + ")" : ""}`;
 }
 
 id("panel-body").addEventListener("click", (event) => {
@@ -631,11 +908,47 @@ id("panel-body").addEventListener("click", (event) => {
     profile.stars.fill(0);
     profile.best.fill(0);
     profile.storm = 0;
+    profile.tasks.fill(0);
+    profile.shells = 0;
+    profile.owned = 257;
+    profile.beam = 0;
+    profile.paint = 0;
+    profile.daily = 0;
+    profile.hour = 0;
+    applyLook();
     profile.seen = {};
     save();
     menu();
-  } else if (action === "reset-no") {
+  } else if (action === "reset-no" || action === "close") {
     id("panel").hidden = true;
+    if (game.mode === "demo") paintMenu();
+  } else if (action === "quality") {
+    profile.q = (profile.q + 1) % 4;
+    save();
+    view.setLevel(profile.q);
+    Sound.tap();
+    button.textContent = qualityLabel();
+    if (game.mode === "demo") text(id("quality"), qualityLabel());
+  } else if (action === "daily") {
+    Sound.pick();
+    beginDaily();
+  } else if (action === "buy" || action === "wear") {
+    const group = button.dataset.group;
+    const i = Number(button.dataset.i);
+    const list = group === "beam" ? BEAMS : PAINTS;
+    const bit = 1 << (group === "beam" ? i : 8 + i);
+    if (!list[i]) return;
+    if (action === "buy") {
+      if (profile.owned & bit || profile.shells < list[i].price) return;
+      profile.shells -= list[i].price;
+      profile.owned |= bit;
+      Sound.buy();
+    } else Sound.pick();
+    if (group === "beam") profile.beam = i;
+    else profile.paint = i;
+    save();
+    applyLook();
+    paintShop();
   }
 });
 
@@ -661,9 +974,18 @@ function paintMenu() {
     box.append(button);
   }
   const storm = id("storm");
-  storm.hidden = profile.night <= count;
-  storm.innerHTML = `Шторм до рассвета<small>${profile.storm ? "рекорд ✦ " + profile.storm : "бесконечный режим на рекорд"}</small>`;
+  storm.hidden = profile.night <= STORM_AT;
+  const medal = medalOf(profile.hour);
+  storm.innerHTML = `Шторм до рассвета<small>${profile.storm ? (medal ? medal[1] + " " : "") + "рекорд ✦ " + profile.storm : "бесконечный режим на рекорд"}</small>`;
   id("reset").hidden = profile.night === 1;
+  // ракушки, мастерская и «Ночь дня» — с третьей ночи
+  const extras = profile.night >= 3 || profile.shells > 0;
+  id("extras").hidden = !extras;
+  const done = profile.daily === today();
+  id("daily").innerHTML = `🌟 Ночь дня<small>${done ? "✓ сегодня пройдена" : `+${DAILY_SHELLS} 🐚 сегодня`}</small>`;
+  id("daily").classList.toggle("done", done);
+  id("shop").innerHTML = `🐚 Мастерская<small>ракушек: ${profile.shells}</small>`;
+  text(id("quality"), qualityLabel());
 }
 id("start").addEventListener("click", () => {
   Sound.unlock();
@@ -682,9 +1004,27 @@ id("storm").addEventListener("click", () => {
   Sound.pick();
   beginStorm();
 });
+id("daily").addEventListener("click", () => {
+  Sound.unlock();
+  Sound.pick();
+  beginDaily();
+});
+id("shop").addEventListener("click", () => {
+  Sound.unlock();
+  Sound.tap();
+  paintShop();
+});
+id("quality").addEventListener("click", () => {
+  profile.q = (profile.q + 1) % 4;
+  save();
+  view.setLevel(profile.q);
+  Sound.unlock();
+  Sound.tap();
+  text(id("quality"), qualityLabel());
+});
 id("reset").addEventListener("click", () => {
   showPanel(`<div class="eyebrow"><i></i> НОВЫЙ СМОТРИТЕЛЬ</div><h2 id="panel-title">Начать сначала?</h2>
-    <p>Звёзды, улучшения маяка и рекорд шторма сотрутся.</p>
+    <p>Звёзды, улучшения маяка, ракушки, мастерская и рекорд шторма сотрутся.</p>
     <div class="row"><button class="plain" data-action="reset-no">Нет, оставить</button><button class="plain" data-action="reset-yes">Да, сначала</button></div>`);
 });
 
@@ -740,7 +1080,9 @@ function frame(now) {
   let sim = 0;
   const active = game.mode === "play" || game.mode === "dawn" || game.mode === "demo";
   if (active && !paused) {
-    acc += real * rate;
+    // замедление на победе ночи
+    slow = Math.max(0, slow - real);
+    acc += real * rate * (slow > 0 ? 0.3 + 0.7 * (1 - Math.min(1, slow / 1.1)) ** 2 : 1);
     let guard = 0;
     while (acc >= STEP && guard++ < 400) {
       acc -= STEP;
@@ -774,6 +1116,7 @@ function frame(now) {
   showHint(now);
   view.frame(game, sim, real);
   paintHud();
+  paintTasks();
   watchSpeed(real);
 }
 
@@ -787,9 +1130,13 @@ function watchSpeed(real) {
   if (slowFrames < 120) return;
   const average = slowTime / slowFrames;
   slowTime = slowFrames = 0;
-  if (average > 1 / 43 && view.quality > 0.56) {
-    view.quality = Math.max(0.55, view.quality - 0.15);
-    view.resize();
+  // сначала ниже уровень графики (если выбрано «Авто»), потом мельче картинка
+  if (average > 1 / 45) {
+    if (profile.q === 0 && view.level > 0) view.setLevel(0, view.level - 1);
+    else if (view.quality > 0.56) {
+      view.quality = Math.max(0.55, view.quality - 0.15);
+      view.resize();
+    }
   }
 }
 
@@ -817,12 +1164,20 @@ window.mayak = {
       boats: game.boats.map((b) => ({ id: b.id, kind: b.kind, x: +b.x.toFixed(2), z: +b.z.toFixed(2), lantern: +b.lantern.toFixed(2), lost: b.lost, held: !!b.held, peril: Number.isFinite(b.peril) ? +b.peril.toFixed(1) : null })),
       shades: game.shades.map((s) => ({ id: s.id, kind: s.kind, x: +s.x.toFixed(2), z: +s.z.toFixed(2), hp: +s.hp.toFixed(2), state: s.state })),
       ups: { ...game.ups },
-      profile: { night: profile.night, stars: [...profile.stars], storm: profile.storm },
+      finds: game.finds.map((f) => ({ id: f.id, kind: f.kind, x: +f.x.toFixed(2), z: +f.z.toFixed(2), glow: +f.glow.toFixed(2) })),
+      whales: game.whales.map((w) => ({ id: w.id, x: +w.x.toFixed(2), z: +w.z.toFixed(2), state: w.state, woke: +w.woke.toFixed(2) })),
+      rain: game.rain,
+      tasks: game.tasks.map((t) => ({ ...t })),
+      shells: game.shells,
+      daily: game.daily,
+      level: view.level,
+      profile: { night: profile.night, stars: [...profile.stars], storm: profile.storm, shells: profile.shells, tasks: [...profile.tasks], daily: profile.daily, hour: profile.hour },
     };
   },
   // сразу начать ночь n (0 — шторм); прогресс открывается до неё
   jump(n) {
     if (n === 0) return beginStorm();
+    if (n === "daily") return beginDaily();
     profile.night = Math.max(profile.night, Math.min(n, NIGHTS.length));
     begin(Math.min(n, NIGHTS.length));
   },
@@ -834,6 +1189,8 @@ window.mayak = {
     return view.project(x, z, 0);
   },
   menu,
+  today,
+  save,
 };
 
 menu();

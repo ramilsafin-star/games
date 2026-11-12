@@ -140,7 +140,7 @@ function fort(addB, addP) {
 const LEVELS = [
   // 1. Знакомство: большой деревянный дом и ящик-бум посередине
   {
-    biome: 0, par: 2, heroes: ['rocky', 'rocky', 'zip', 'rocky'],
+    biome: 0, par: 2, goal: ['collapse', 25], heroes: ['rocky', 'rocky', 'zip', 'rocky'],
     build(addB, addP) {
       const F = fort(addB, addP);
       const x = 930;
@@ -156,7 +156,7 @@ const LEVELS = [
   },
   // 2. Ледяная башня и деревянная крепость с первым Мегаботом
   {
-    biome: 1, par: 3, heroes: ['trio', 'nimbus', 'zip', 'rocky', 'rocky'],
+    biome: 1, par: 3, goal: ['boom'], heroes: ['trio', 'nimbus', 'zip', 'rocky', 'rocky'],
     build(addB, addP) {
       const F = fort(addB, addP);
       const a = 725;
@@ -176,7 +176,7 @@ const LEVELS = [
   },
   // 3. Каньон: цепная реакция, знакомство с Динамитом
   {
-    biome: 2, par: 3, heroes: ['dyna', 'zip', 'nimbus', 'rocky', 'rocky'],
+    biome: 2, par: 3, goal: ['boom'], heroes: ['dyna', 'zip', 'nimbus', 'rocky', 'rocky'],
     build(addB, addP) {
       const F = fort(addB, addP);
       const x = 945;
@@ -193,7 +193,7 @@ const LEVELS = [
   },
   // 4. Ледник: две высокие башни и мост между ними
   {
-    biome: 3, par: 4, heroes: ['nimbus', 'trio', 'dyna', 'zip', 'rocky', 'dyna', 'rocky'],
+    biome: 3, par: 4, goal: ['combo', 3], heroes: ['nimbus', 'trio', 'dyna', 'zip', 'rocky', 'dyna', 'rocky'],
     build(addB, addP) {
       const F = fort(addB, addP);
       [765, 1080].forEach((x, i) => {
@@ -210,7 +210,7 @@ const LEVELS = [
   },
   // 5. Неоновая крепость: четыре пролёта, галерея и зубцы
   {
-    biome: 4, par: 4, heroes: ['trio', 'dyna', 'nimbus', 'zip', 'rocky', 'rocky'],
+    biome: 4, par: 4, goal: ['boom'], heroes: ['trio', 'dyna', 'nimbus', 'zip', 'rocky', 'rocky'],
     build(addB, addP) {
       const F = fort(addB, addP);
       const x = 945;
@@ -227,7 +227,7 @@ const LEVELS = [
   },
   // 6. Цитадель в жерле вулкана: три этажа и ящик на вершине
   {
-    biome: 5, par: 3, heroes: ['trio', 'zip', 'dyna', 'nimbus', 'magma', 'rocky'],
+    biome: 5, par: 3, goal: ['collapse', 34], heroes: ['trio', 'zip', 'dyna', 'nimbus', 'magma', 'rocky'],
     build(addB, addP) {
       const F = fort(addB, addP);
       const x = 945;
@@ -245,7 +245,7 @@ const LEVELS = [
   },
   // 7. Силовые щиты: первый удар только снимает щит
   {
-    biome: 0, par: 5, name: 0, gems: 2, heroes: ['rocky', 'trio', 'zip', 'dyna', 'rocky', 'magma', 'rocky'],
+    biome: 0, par: 5, goal: ['score', 18000], name: 0, gems: 2, heroes: ['rocky', 'trio', 'zip', 'dyna', 'rocky', 'magma', 'rocky'],
     build(addB, addP, L) {
       const F = fort(addB, addP);
       const a = 770;
@@ -268,7 +268,7 @@ const LEVELS = [
   },
   // 8. Дроны: две цели летают над большой крепостью
   {
-    biome: 1, par: 4, name: 1, gems: 2, heroes: ['trio', 'zip', 'dyna', 'rocky', 'nimbus', 'trio', 'rocky'],
+    biome: 1, par: 4, goal: ['combo', 2], name: 1, gems: 2, heroes: ['trio', 'zip', 'dyna', 'rocky', 'nimbus', 'trio', 'rocky'],
     build(addB, addP, L) {
       const F = fort(addB, addP);
       addP(790, G - 350, 26, false, { hover: { ax: 40, speed: 0.7 } });
@@ -287,7 +287,7 @@ const LEVELS = [
   },
   // 9. Батут: стенка невысокая, поверх неё тоже можно перекинуть
   {
-    biome: 2, par: 3, name: 2, gems: 2, heroes: ['dyna', 'zip', 'rocky', 'nimbus', 'trio', 'rocky'],
+    biome: 2, par: 3, goal: ['shots', 2], name: 2, gems: 2, heroes: ['dyna', 'zip', 'rocky', 'nimbus', 'trio', 'rocky'],
     build(addB, addP, L) {
       const F = fort(addB, addP);
       L.rock(760, G - 80, 60, 160);
@@ -307,7 +307,7 @@ const LEVELS = [
   },
   // 10. Бур: стальной бункер проще всего пройти насквозь, но ящики взрываются и так
   {
-    biome: 3, par: 3, name: 3, gems: 1, heroes: ['drill', 'dyna', 'rocky', 'drill', 'magma', 'rocky'],
+    biome: 3, par: 3, goal: ['score', 15000], name: 3, gems: 1, heroes: ['drill', 'dyna', 'rocky', 'drill', 'magma', 'rocky'],
     build(addB, addP, L) {
       const F = fort(addB, addP);
       const x = 950;
@@ -328,7 +328,7 @@ const LEVELS = [
   },
   // 11. Портал: влетел здесь, вылетел за стеной. Стену можно и перекинуть
   {
-    biome: 4, par: 5, name: 4, gems: 2, heroes: ['rocky', 'dyna', 'zip', 'dyna', 'trio', 'nimbus', 'magma', 'rocky'],
+    biome: 4, par: 5, goal: ['collapse', 18], name: 4, gems: 2, heroes: ['rocky', 'dyna', 'zip', 'dyna', 'trio', 'nimbus', 'magma', 'rocky'],
     build(addB, addP, L) {
       const F = fort(addB, addP);
       L.rock(700, G - 65, 50, 130);
@@ -348,7 +348,7 @@ const LEVELS = [
   },
   // 12. Гигабот: первый босс парит над каменным залом с ящиками
   {
-    biome: 5, par: 6, name: 5, gems: 2, boss: true, heroes: ['dyna', 'magma', 'rocky', 'zip', 'nimbus', 'dyna', 'trio'],
+    biome: 5, par: 6, goal: ['score', 21000], name: 5, gems: 2, boss: true, heroes: ['dyna', 'magma', 'rocky', 'zip', 'nimbus', 'dyna', 'trio'],
     build(addB, addP, L) {
       const F = fort(addB, addP);
       L.rock(745, G - 60, 80, 120);
@@ -366,7 +366,7 @@ const LEVELS = [
   },
   // 13. Снежок: стальные балки хрупкие на морозе, но взрыв их тоже берёт
   {
-    biome: 3, par: 5, name: 6, gems: 1, heroes: ['frost', 'dyna', 'rocky', 'frost', 'dyna', 'rocky', 'zip'],
+    biome: 3, par: 5, goal: ['combo', 3], name: 6, gems: 1, heroes: ['frost', 'dyna', 'rocky', 'frost', 'dyna', 'rocky', 'zip'],
     build(addB, addP, L) {
       const F = fort(addB, addP);
       [[775, 250], [1070, 270]].forEach(([x, span], i) => {
@@ -383,7 +383,7 @@ const LEVELS = [
   },
   // 14. Вихрь: полёт изгибается, а постройки стоят открыто
   {
-    biome: 4, par: 4, name: 7, gems: 3, heroes: ['trio', 'dyna', 'zip', 'rocky', 'nimbus', 'rocky'],
+    biome: 4, par: 4, goal: ['collapse', 9], name: 7, gems: 3, heroes: ['trio', 'dyna', 'zip', 'rocky', 'nimbus', 'rocky'],
     build(addB, addP, L) {
       const F = fort(addB, addP);
       L.well(600, G - 320, 170, 0.35);
@@ -404,7 +404,7 @@ const LEVELS = [
   },
   // 15. Бомботы: один взрыв тянет за собой другой
   {
-    biome: 2, par: 4, name: 8, gems: 1, heroes: ['rocky', 'zip', 'trio', 'dyna', 'rocky', 'rocky'],
+    biome: 2, par: 4, goal: ['combo', 8], name: 8, gems: 1, heroes: ['rocky', 'zip', 'trio', 'dyna', 'rocky', 'rocky'],
     build(addB, addP, L) {
       const F = fort(addB, addP);
       [750, 945, 1130].forEach((x) => {
@@ -419,7 +419,7 @@ const LEVELS = [
   },
   // 16. Небесные острова: у каждого острова свой подход, портал только помогает
   {
-    biome: 1, par: 5, name: 9, gems: 3, heroes: ['dyna', 'trio', 'zip', 'dyna', 'nimbus', 'rocky', 'drill', 'rocky'],
+    biome: 1, par: 5, goal: ['shots', 2], name: 9, gems: 3, heroes: ['dyna', 'trio', 'zip', 'dyna', 'nimbus', 'rocky', 'drill', 'rocky'],
     build(addB, addP, L) {
       const F = fort(addB, addP);
       // Острова лесенкой вверх: ближние низкие, дальние высокие, траектория идёт над всеми
@@ -446,7 +446,7 @@ const LEVELS = [
   },
   // 17. Лабиринт: три этажа с открытым входом, в каждый можно попасть сверху или сбоку
   {
-    biome: 0, par: 5, name: 10, gems: 3, heroes: ['dyna', 'drill', 'dyna', 'frost', 'zip', 'magma', 'trio', 'rocky'],
+    biome: 0, par: 5, goal: ['score', 15000], name: 10, gems: 3, heroes: ['dyna', 'drill', 'dyna', 'frost', 'zip', 'magma', 'trio', 'rocky'],
     build(addB, addP, L) {
       const F = fort(addB, addP);
       L.rock(1010, G - 140, 300, 24);
@@ -471,7 +471,7 @@ const LEVELS = [
   },
   // 18. Гигабот возвращается: ярость и бомботы-помощники, зато взрывчатки хватает
   {
-    biome: 5, par: 6, name: 11, gems: 3, boss: true, heroes: ['dyna', 'magma', 'dyna', 'frost', 'rocky', 'dyna', 'nimbus', 'zip'],
+    biome: 5, par: 6, goal: ['score', 22000], name: 11, gems: 3, boss: true, heroes: ['dyna', 'magma', 'dyna', 'frost', 'rocky', 'dyna', 'nimbus', 'zip'],
     build(addB, addP, L) {
       const F = fort(addB, addP);
       L.rock(735, G - 50, 60, 100);
@@ -489,5 +489,123 @@ const LEVELS = [
       L.gem(800, G - 340);
       L.gem(1040, G - 280);
     }
+  },
+  // ---------- Мир 4: «Воздушный парад». Новое: шарики держат гири, мосты и ботов ----------
+  // L.hang(тело, сколько шариков, длина нитки): лопни шарики — и то, что они держат, упадёт.
+  // Пуф пролетает шарик насквозь, способность после этого ещё работает.
+  // 19. Шарики: каменная гиря висит над двумя ботами, рядом летучий бот
+  {
+    biome: 0, par: 4, goal: ['balloons'], name: 12, heroes: ['rocky', 'zip', 'trio', 'rocky', 'rocky'],
+    build(addB, addP, L) {
+      const F = fort(addB, addP);
+      const x = 905;
+      F.post(x - 125, 0, 110, 'wood');
+      F.post(x + 125, 0, 110, 'wood');
+      F.bot(x - 52, 0, 24);
+      F.bot(x + 52, 0, 24);
+      L.hang(addB(x, G - 290, 150, 44, 'stone'), 2, 62);
+      L.hang(addP(715, G - 270, 23, false), 2, 52);
+      F.hall(1125, 0, 170, 1, 120, 'wood');
+      F.bot(1125, 0, 24);
+    }
+  },
+  // 20. Воздушный мост: два бота на доске, доску держат три шарика, внизу ящики-бум
+  {
+    biome: 1, par: 3, goal: ['score', 12000], name: 13, heroes: ['trio', 'zip', 'rocky', 'dyna', 'rocky'],
+    build(addB, addP, L) {
+      const F = fort(addB, addP);
+      const x = 885;
+      L.hang(addB(x, G - 250, 270, 26, 'wood'), 3, 64);
+      F.bot(x - 75, 263, 22);
+      F.bot(x + 75, 263, 22);
+      F.crate(x - 70, 0);
+      F.crate(x + 70, 0);
+      const top = F.hall(1120, 0, 190, 1, 125, 'stone', 'wood');
+      F.bot(1120, 0, 26);
+      F.teeth(1120, top, 110, 2, 'wood', 32);
+    }
+  },
+  // 21. Канатка над каньоном: три бота висят на шариках на разной высоте
+  {
+    biome: 2, par: 4, goal: ['balloons'], name: 14, heroes: ['trio', 'nimbus', 'zip', 'dyna', 'trio', 'rocky'],
+    build(addB, addP, L) {
+      const F = fort(addB, addP);
+      L.hang(addP(700, G - 350, 23, false), 2, 52);
+      L.hang(addP(860, G - 240, 23, false), 2, 52);
+      L.hang(addP(1015, G - 300, 23, false), 2, 52);
+      const top = F.hall(1140, 0, 170, 1, 120, 'wood');
+      F.bot(1140, 0, 24);
+      F.crate(1140, top, 42);
+    }
+  },
+  // 22. Стальные гири: лопни шарики над крышей — гиря проломит её до самых ботов
+  {
+    biome: 3, par: 4, goal: ['collapse', 13], name: 15, heroes: ['frost', 'dyna', 'rocky', 'zip', 'rocky'],
+    build(addB, addP, L) {
+      const F = fort(addB, addP);
+      const x = 905;
+      const first = F.hall(x, 0, 340, 2, 115, ['stone', 'ice', 'stone'], 'ice');
+      F.bot(F.mid(x, 340, 2, 0), 0, 26);
+      F.bot(F.mid(x, 340, 2, 1), 0, 26);
+      const second = F.hall(x, first, 200, 1, 90, 'ice', 'wood');
+      F.bot(x, first, 24);
+      L.hang(addB(x - 55, G - (second + 125), 76, 58, 'steel'), 2, 48);
+      L.hang(addB(x + 55, G - (second + 125), 76, 58, 'steel'), 1, 48);
+      F.bot(1130, 0, 26);
+      F.post(1075, 0, 110, 'ice');
+      F.post(1185, 0, 110, 'ice');
+      F.slab(1130, 110, 150, 'wood');
+    }
+  },
+  // 23. Неоновый карнавал: ящик-бум на трёх шариках над каменной крепостью, портал поднимает к нему
+  {
+    biome: 4, par: 5, goal: ['score', 10000], name: 16, heroes: ['zip', 'trio', 'dyna', 'nimbus', 'rocky', 'trio', 'rocky'],
+    build(addB, addP, L) {
+      const F = fort(addB, addP);
+      const x = 1005;
+      const first = F.hall(x, 0, 380, 2, 120, 'stone', 'stone');
+      F.bot(F.mid(x, 380, 2, 0), 0, 26);
+      F.bot(F.mid(x, 380, 2, 1), 0, 26);
+      F.bot(x, first, 24);
+      L.hang(addB(x, G - 320, 64, 64, 'boom'), 3, 52);
+      L.hang(addP(770, G - 290, 23, false), 2, 50);
+      L.portal(520, G - 110, 840, G - 430);
+    }
+  },
+  // 24. Гигабот-воздухоплаватель: пока его держат шарики, он неуязвим. Лопни шарики — он рухнет.
+  // На половине здоровья надувает новые шарики и зовёт помощника
+  {
+    biome: 5, par: 6, goal: ['score', 21000], name: 17, boss: true, heroes: ['trio', 'dyna', 'zip', 'magma', 'dyna', 'trio', 'rocky', 'dyna'],
+    build(addB, addP, L) {
+      const F = fort(addB, addP);
+      L.rock(735, G - 50, 60, 100);
+      F.crate(735, 100);
+      const x = 1015;
+      const first = F.hall(x, 0, 400, 2, 115, 'stone', 'wood');
+      F.crate(F.mid(x, 400, 2, 0), 0);
+      F.bot(F.mid(x, 400, 2, 1), 0, 24);
+      F.teeth(x, first, 300, 3, 'wood');
+      addP(905, G - 280, 56, true, { boss: true, hp: 170, lift: 3, phases: [0.5], bombs: true, hover: { ax: 30, ay: 14, speed: 0.5 } });
+    }
   }
 ];
+
+// Главы на экране уровней: по шесть уровней
+const CHAPTERS = [[0, 5], [6, 11], [12, 17], [18, 23]];
+
+// Следы за пуфом: открываются за звёзды и медали вместе (всего 72 звезды и 24 медали)
+const TRAILS = [
+  { id: 'basic', need: 0, c: '#ffffff' },
+  { id: 'rainbow', need: 10, c: '#ff5fb7' },
+  { id: 'stars', need: 24, c: '#ffe14d' },
+  { id: 'bubbles', need: 40, c: '#7ef9ff' },
+  { id: 'fire', need: 56, c: '#ff7a1a' },
+  { id: 'gold', need: 76, c: '#ffc21f' }
+];
+
+// Шарики: размер, цвета, сколько очков за лопнувший
+const BALLOON_R = 21;
+const BALLOON_COLORS = ['#ff4f7b', '#ffd23f', '#3fc8ff', '#7cff5c', '#c58cff', '#ff9a3d'];
+const BALLOON_PTS = 500;
+// Разрушомер: какая доля очков за все блоки уровня даёт бонусного пуфа
+const METER_SHARE = 0.5;

@@ -1,17 +1,37 @@
 // Сцена «Маяка»: ночная бухта-диорама. Правила живут в rules.js, здесь только картинка.
 // Координаты правил (x вправо, z от берега в море) в сцене становятся (x, 0, −z): камера стоит над берегом и смотрит в море.
-import * as T from "../vendor/three/three.module.min.js?v=e4b14d4e";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=e4b14d4e";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=e4b14d4e";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=e4b14d4e";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=e4b14d4e";
-import { makeSky, makeSea, makeFoam, makeDecals } from "./sea.js?v=e4b14d4e";
-import { Particles, Marks, DOT, BUBBLE, SPARK, PUFF, STREAK, MARK_ASK, MARK_ALARM, MARK_GRAB } from "./fx.js?v=e4b14d4e";
+import * as T from "../vendor/three/three.module.min.js?v=092eaf93";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=092eaf93";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=092eaf93";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=092eaf93";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=092eaf93";
+import { makeSky, makeSea, makeFoam, makeDecals } from "./sea.js?v=092eaf93";
+import { Particles, Marks, DOT, BUBBLE, SPARK, PUFF, STREAK, RAIN, MARK_ASK, MARK_ALARM, MARK_GRAB } from "./fx.js?v=092eaf93";
 import {
   BOAT_LOOK, LAMP_Y, SHARED, bellGeometry, boatGeometry, harborGeometry, lifeRingGeometry, lighthouseGeometry,
-  reefGeometry, shadeBodyGeometry, shadeMaterial, shoreGeometry, toyMaterial,
-} from "./models.js?v=e4b14d4e";
-import { BOATS, SHADES } from "./rules.js?v=e4b14d4e";
+  reefGeometry, shadeBodyGeometry, shadeMaterial, shoreGeometry, toyMaterial, whaleGeometry, findGeometry,
+} from "./models.js?v=092eaf93";
+import { BOATS, SHADES, BUOY_R, WHALE } from "./rules.js?v=092eaf93";
+
+// Уровни графики: 0 — низкий (без свечения, мелкая картинка, мало капель), 1 — средний, 2 — высокий
+const LEVELS = [
+  { ratio: 1, bloom: false, rain: 55, ripples: 8, motes: 0, fog: 12 },
+  { ratio: 1.5, bloom: true, rain: 110, ripples: 16, motes: 0.5, fog: 18 },
+  { ratio: 2, bloom: true, rain: 180, ripples: 26, motes: 1, fog: 22 },
+];
+// Сильное ли устройство: по умолчанию высокое качество, на слабом — среднее или низкое
+function autoLevel() {
+  const cores = navigator.hardwareConcurrency || 4;
+  const memory = navigator.deviceMemory || 8;
+  const coarse = window.matchMedia("(pointer: coarse)").matches;
+  if (cores <= 2 || memory <= 2) return 0;
+  if (coarse && (cores < 6 || memory < 4)) return 1;
+  return 2;
+}
+const hash = (n) => {
+  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+};
 
 const TAU = Math.PI * 2;
 const clamp = T.MathUtils.clamp;
@@ -59,7 +79,7 @@ export class BayView {
     this.sea = makeSea();
     this.foam = makeFoam(96);
     this.decals = makeDecals(96);
-    this.particles = new Particles(900);
+    this.particles = new Particles(1500);
     this.marks = new Marks(40);
     this.scene.add(this.sky.mesh, this.sea.mesh, this.foam.mesh, this.decals.mesh, this.particles.mesh, this.marks.mesh);
 
@@ -90,6 +110,24 @@ export class BayView {
     this.starIn = 6;
     this.wakeIn = 0;
     this.quality = 1;
+    this.pref = 0; // выбор игрока: 0 — авто
+    this.level = autoLevel();
+    this.beamColor = [1.0, 0.84, 0.52]; // null — радужный
+    this.paint = {};
+    this.warm = new T.Color(1.0, 0.84, 0.52);
+    this.rain = 0;
+    this.storm = 0;
+    this.bolt = 0;
+    this.boltX = 0;
+    this.waves = []; // расходящиеся кольца на воде: спасение, лопнувшая тень, фонтан кита
+    this.rockets = []; // салют на победе ночи
+    this.fireworks = 0;
+    this.whales = new Map();
+    this.finds = new Map();
+    this.buoyMeshes = [];
+    this.moteIn = 0;
+    // «меньше движения» в системе: молния мягче, без тряски
+    this.calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     this.composer = new EffectComposer(renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
@@ -111,7 +149,7 @@ export class BayView {
     geometry.setIndex(index);
     geometry.setAttribute("position", new T.BufferAttribute(positions, 3).setUsage(T.DynamicDrawUsage));
     geometry.setAttribute("fade", new T.BufferAttribute(fade, 1));
-    const uniforms = { uPower: { value: power } };
+    const uniforms = { uPower: { value: power }, uColor: { value: new T.Color(1.0, 0.86, 0.56) } };
     const material = new T.ShaderMaterial({
       uniforms,
       transparent: true,
@@ -131,10 +169,11 @@ blending: T.CustomBlending,
       fragmentShader: /* glsl */ `
         precision highp float;
         uniform float uPower;
+        uniform vec3 uColor;
         varying float vFade;
         void main() {
           float a = (0.012 + 0.2 * pow(vFade, 2.4)) * uPower;
-          gl_FragColor = vec4(vec3(1.0, 0.86, 0.56) * a, 1.0);
+          gl_FragColor = vec4(uColor * a, 1.0);
         }
       `,
     });
@@ -174,7 +213,8 @@ blending: T.CustomBlending,
         if (child.geometry) child.geometry.dispose();
       }
       const shore = new T.Mesh(shoreGeometry(bay.hw, bay.harbor.x), this.toy);
-      const tower = new T.Mesh(lighthouseGeometry(), this.toy);
+      const tower = new T.Mesh(lighthouseGeometry(this.paint), this.toy);
+      this.tower = tower;
       tower.position.set(bay.light.x, 0.1, -bay.light.z);
       const village = harborGeometry();
       const harbor = new T.Mesh(village.geometry, this.toy);
@@ -232,9 +272,53 @@ blending: T.CustomBlending,
     this.shades.clear();
     this.ghosts.length = 0;
     this.particles.list.length = 0;
+    for (const v of this.whales.values()) this.scene.remove(v.group);
+    for (const v of this.finds.values()) this.scene.remove(v.mesh);
+    for (const m of this.buoyMeshes) this.scene.remove(m.mesh);
+    this.whales.clear();
+    this.finds.clear();
+    this.buoyMeshes.length = 0;
+    this.waves.length = 0;
+    this.rockets.length = 0;
+    this.fireworks = 0;
+    this.bolt = 0;
     this.dawn = 0;
     this.flash = 0;
     this.flashAge = 99;
+  }
+
+  // ---------- качество и внешний вид ----------
+  // pref — выбор игрока (0 — авто, 1–3 — низкое…высокое); level — принудительно (авто-снижение при медленных кадрах)
+  setLevel(pref, level = null) {
+    this.pref = pref;
+    const next = pref > 0 ? pref - 1 : level ?? autoLevel();
+    this.level = clamp(next, 0, 2);
+    if (pref > 0) this.quality = 1;
+    this.bloom.enabled = LEVELS[this.level].bloom;
+    if (this.width) this.resize();
+  }
+  // color — цвет луча [r, g, b] или null (радужный); paint — краска маяка { stripe, roof }
+  setLook(color, paint) {
+    this.beamColor = color;
+    const changed = paint && paint !== this.paint;
+    this.paint = paint || {};
+    if (changed && this.tower) {
+      this.tower.geometry.dispose();
+      this.tower.geometry = lighthouseGeometry(this.paint);
+    }
+  }
+  // расходящееся кольцо на воде
+  wave(x, z, max, r, g, b, dur = 0.8, power = 0.9) {
+    if (this.waves.length > 24) this.waves.shift();
+    this.waves.push({ x, z, max, r, g, b, dur, power, t: 0 });
+  }
+  burst(x, y, z, n, o) {
+    const k = this.level === 0 ? 0.5 : 1;
+    for (let i = 0; i < n * k; i++) {
+      const a = Math.random() * TAU;
+      const sp = (o.speed || 2) * (0.4 + Math.random() * 0.8);
+      this.particles.emit(x, y, z, { vx: Math.cos(a) * sp, vy: (o.up || 2) * (0.5 + Math.random()), vz: Math.sin(a) * sp, life: (o.life || 0.8) * (0.7 + Math.random() * 0.6), size: o.size || 0.16, kind: o.kind ?? SPARK, r: o.r, g: o.g, b: o.b, gravity: o.gravity ?? 3, drag: o.drag ?? 1 });
+    }
   }
 
   // ---------- камера ----------
@@ -243,7 +327,7 @@ blending: T.CustomBlending,
     const h = this.canvas.clientHeight || window.innerHeight;
     this.width = w;
     this.height = h;
-    const ratio = Math.min(window.devicePixelRatio || 1, 1.75) * this.quality;
+    const ratio = Math.min(window.devicePixelRatio || 1, LEVELS[this.level].ratio) * this.quality;
     this.renderer.setPixelRatio(ratio);
     this.renderer.setSize(w, h, false);
     this.composer.setPixelRatio(ratio);
@@ -413,6 +497,9 @@ blending: T.CustomBlending,
         fx.emit(e.x, 0.6 + Math.random() * 0.6, -e.z, { vx: Math.cos(a) * 1.6, vy: 1.6 + Math.random() * 1.6, vz: Math.sin(a) * 1.6, life: 0.9 + Math.random() * 0.5, size: 0.2, kind: SPARK, r: 2.2, g: 1.7, b: 0.7, gravity: 2.2, drag: 1 });
       }
       this.bellSwing = 1;
+      // золотое кольцо и искры у причала
+      this.wave(e.x, e.z, 2.6, this.warm.r * 1.4, this.warm.g * 1.3, this.warm.b * 1.1, 0.7);
+      if (e.streak > 2) this.burst(e.x, 1.2, -e.z, 10 + e.streak * 2, { speed: 2.4, up: 3, r: 2.2, g: 1.9, b: 1.0, life: 0.9 });
     } else if (e.type === "wreck" || e.type === "dragged") {
       const view = this.boats.get(e.id);
       if (view) {
@@ -440,6 +527,8 @@ blending: T.CustomBlending,
         fx.emit(e.x + Math.cos(a) * 0.3, 0.3 + Math.random() * 0.5, -e.z + Math.sin(a) * 0.3, { vx: Math.cos(a) * s, vy: 1.2 + Math.random() * 2.2, vz: Math.sin(a) * s, life: 0.7 + Math.random() * 0.6, size: 0.12 + Math.random() * 0.16, kind: BUBBLE, r: 1.0, g: 0.75, b: 1.5, drag: 1.6, gravity: -0.6 });
       }
       if (e.type === "pop") {
+        this.wave(e.x, e.z, 2.2, 1.0, 0.55, 1.6, 0.55);
+        this.burst(e.x, 0.6, -e.z, 8, { kind: SPARK, speed: 2.6, up: 2.2, r: 1.8, g: 1.4, b: 2.2, life: 0.6 });
         for (let i = 0; i < 10; i++) {
           const a = Math.random() * TAU;
           fx.emit(e.x, 0.4, -e.z, { vx: Math.cos(a) * 3, vy: 2 + Math.random() * 2, vz: Math.sin(a) * 3, life: 0.5, size: 0.16, kind: DOT, r: 1.3, g: 0.5, b: 1.8, gravity: 8, floor: 0 });
@@ -461,6 +550,49 @@ blending: T.CustomBlending,
       for (let i = 0; i < 8; i++) fx.emit(e.x + (Math.random() - 0.5), 0.1, -e.z + (Math.random() - 0.5), { vy: 0.8 + Math.random(), life: 1 + Math.random() * 0.5, size: 0.1 + Math.random() * 0.1, kind: BUBBLE, r: 0.9, g: 0.7, b: 1.4 });
     } else if (e.type === "flash") {
       this.flashAge = 0;
+    } else if (e.type === "find-up") {
+      for (let i = 0; i < 10; i++) fx.emit(e.x + (Math.random() - 0.5) * 0.6, 0.1, -e.z + (Math.random() - 0.5) * 0.6, { vy: 1 + Math.random(), life: 0.8, size: 0.1, kind: BUBBLE, r: 0.8, g: 1.1, b: 1.3 });
+      this.wave(e.x, e.z, 1.4, 0.5, 0.8, 1.1, 0.6, 0.6);
+    } else if (e.type === "find") {
+      const view = this.finds.get(e.id);
+      if (view) {
+        this.finds.delete(e.id);
+        // светобуй остаётся светить на воде, остальное взлетает и тает
+        if (e.kind === "buoy") this.buoyMeshes.push({ mesh: view.mesh, x: e.x, z: e.z, t: 0 });
+        else this.ghosts.push({ group: view.mesh, type: "lift", t: 0, view });
+      }
+      const gold = e.kind === "buoy" ? [2.2, 1.8, 0.9] : e.kind === "bottle" ? [1.2, 2.0, 1.9] : [2.4, 2.0, 0.6];
+      this.burst(e.x, 0.7, -e.z, 26, { speed: 3, up: 3.4, r: gold[0], g: gold[1], b: gold[2], life: 0.9 });
+      this.wave(e.x, e.z, e.kind === "buoy" ? BUOY_R : 1.8, gold[0] * 0.6, gold[1] * 0.6, gold[2] * 0.6, 0.7);
+    } else if (e.type === "find-gone") {
+      const view = this.finds.get(e.id);
+      if (view) {
+        this.finds.delete(e.id);
+        this.ghosts.push({ group: view.mesh, type: "sinkfind", t: 0, view });
+      }
+    } else if (e.type === "spout") {
+      const view = this.whales.get(e.id);
+      if (view) view.spout = 0;
+      // светящийся фонтан, кольцо по всей зоне кита, лёгкая встряска
+      const c = this.warm;
+      for (let i = 0; i < (this.level ? 70 : 34); i++) {
+        const a = Math.random() * TAU;
+        const sp = 0.4 + Math.random() * 1.6;
+        fx.emit(e.x + 0.8, 1.2, -e.z, { vx: Math.cos(a) * sp, vy: 5 + Math.random() * 4, vz: Math.sin(a) * sp, life: 1.3 + Math.random() * 0.6, size: 0.14 + Math.random() * 0.12, kind: i % 3 ? DOT : SPARK, r: 1.2 + c.r, g: 1.2 + c.g, b: 1.4 + c.b * 0.6, gravity: 6, drag: 0.4 });
+      }
+      this.wave(e.x, e.z, WHALE.reach, c.r * 1.2, c.g * 1.2, c.b * 1.2, 1.1, 1.1);
+      this.wave(e.x, e.z, WHALE.reach * 0.6, 0.9, 1.3, 1.6, 0.8, 0.8);
+      this.shake = Math.max(this.shake, 0.18);
+      this.flashAge = Math.min(this.flashAge, 0.6);
+    } else if (e.type === "whale-gone") {
+      const view = this.whales.get(e.id);
+      if (view) view.diving = 0;
+    } else if (e.type === "bolt") {
+      this.bolt = 1;
+      this.boltX = e.at;
+      if (!this.calm) this.shake = Math.max(this.shake, 0.12);
+    } else if (e.type === "dawn") {
+      if (game.mode !== "demo") this.fireworks = game.wrecks ? 1.2 : 2.8;
     } else if (e.type === "grab") {
       this.shake = Math.max(this.shake, 0.15);
     }
@@ -487,10 +619,23 @@ blending: T.CustomBlending,
     this.gust += (gustGoal - this.gust) * Math.min(1, realDt * 2.5);
     const dawnGoal = game.mode === "dawn" || game.mode === "upgrade" || game.mode === "won" ? 1 : 0;
     this.dawn += (dawnGoal - this.dawn) * Math.min(1, realDt * 0.8);
+    const L = LEVELS[this.level];
+    // гроза: тучи, дождь; молния гаснет за полсекунды двумя вспышками
+    this.storm += ((game.rain ? 1 : 0) - this.storm) * Math.min(1, realDt * 0.7);
+    this.bolt = Math.max(0, this.bolt - realDt * 2.1);
+    const boltNow = this.bolt > 0 ? this.bolt * (0.6 + 0.4 * Math.sin(this.bolt * 30)) * (this.calm ? 0.35 : 1) : 0;
+    // цвет луча из мастерской; радужный переливается
+    if (this.beamColor) this.warm.setRGB(this.beamColor[0], this.beamColor[1], this.beamColor[2]);
+    else this.warm.setHSL((t * 0.08) % 1, 0.75, 0.72);
 
     // --- лучи ---
     const beam = game.beam;
     sea.uTime.value = t;
+    sea.uWarm.value.set(this.warm.r, this.warm.g, this.warm.b);
+    sea.uStorm.value = this.storm;
+    sea.uBolt.value = boltNow;
+    for (const cone of [this.cone, this.coneCore, this.cone2]) cone.uniforms.uColor.value.copy(this.warm).multiplyScalar(1.03);
+    this.beamLight.color.copy(this.warm);
     sea.uSpot.value.set(beam.x, beam.z, beam.sin, beam.cos);
     const beamPower = 1 - this.flash * 0.6;
     sea.uSpotAxes.value.set(beam.a, beam.b, beamPower);
@@ -523,19 +668,22 @@ blending: T.CustomBlending,
     sea.uHarbor.value.z = game.harborGlow;
     this.foam.uniforms.uTime.value = t;
     this.foam.uniforms.uLit.value = this.flash;
-    this.hemi.intensity = 1.25 + this.flash * 1.3 + this.dawn * 0.9;
+    this.hemi.intensity = 1.25 + this.flash * 1.3 + this.dawn * 0.9 + boltNow * 2.2 - this.storm * 0.25;
     this.toy.userData.glow.value = 1 - this.dawn * 0.35;
 
     // лампа маяка: ореол и лучики
     const flare = 1.25 + this.flash * 0.7 + 0.1 * Math.sin(t * 7);
-    fx.sprite(this.lamp.x, this.lamp.y, this.lamp.z, flare, DOT, 1.5, 1.2, 0.7, 0.8);
-    fx.sprite(this.lamp.x, this.lamp.y, this.lamp.z, flare * 1.6, SPARK, 1.4, 1.15, 0.7, 0.4 + this.flash * 0.5);
+    const w = this.warm;
+    fx.sprite(this.lamp.x, this.lamp.y, this.lamp.z, flare, DOT, 1.5 * w.r, 1.43 * w.g, 1.35 * w.b, 0.8);
+    fx.sprite(this.lamp.x, this.lamp.y, this.lamp.z, flare * 1.6, SPARK, 1.4 * w.r, 1.37 * w.g, 1.35 * w.b, 0.4 + this.flash * 0.5);
 
     // --- небо ---
     const sky = this.sky.uniforms;
     sky.uTime.value = t;
     sky.uDawn.value = this.dawn;
     sky.uFlash.value = this.flash;
+    sky.uStorm.value = this.storm;
+    sky.uBolt.value.set(this.boltX * 0.8, boltNow);
     // луна плывёт по небу, пока идёт ночь
     const night = playing && game.mode !== "demo" ? clamp(game.time / 85, 0, 1) : 0.4;
     const moonX = lerp(0.12, 0.52, night) - (this.width / this.height < 0.7 ? 0.0 : 0.25);
@@ -702,6 +850,177 @@ blending: T.CustomBlending,
       }
     }
 
+    // --- кит-фонарик ---
+    for (const whale of game.whales) {
+      let view = this.whales.get(whale.id);
+      if (!view) {
+        const group = new T.Group();
+        const mesh = new T.Mesh(whaleGeometry(), this.toy);
+        group.add(mesh);
+        group.scale.setScalar(1.25);
+        this.scene.add(group);
+        view = { group, mesh, rise: 0, spout: -1, diving: -1, x: whale.x };
+        this.whales.set(whale.id, view);
+      }
+      const g = view.group;
+      view.rise = Math.min(1, view.rise + realDt / 1.2);
+      g.position.set(whale.x, -0.45 + 0.35 * view.rise + Math.sin(t * 1.6 + whale.id) * 0.06, -whale.z);
+      g.rotation.y = whale.dir > 0 ? 0 : Math.PI;
+      g.rotation.z = Math.sin(t * 1.3 + whale.id) * 0.05;
+      if (view.diving >= 0) {
+        // уходит на глубину, махнув хвостом
+        view.diving += realDt;
+        g.position.y -= view.diving * 1.2;
+        g.rotation.z = -view.diving * 0.5 * (whale.dir > 0 ? 1 : -1);
+      }
+      if (whale.state === "swim") {
+        // кольцо «сколько ещё светить»: заполняется, пока кит в луче
+        this.decals.add(whale.x, whale.z, 2.2, 0.5, 0.85, 1.2, 0.18 + 0.1 * Math.sin(t * 3), 0);
+        if (whale.woke > 0.02) this.decals.add(whale.x, whale.z, 2.4 - 0.9 * whale.woke, this.warm.r, this.warm.g, this.warm.b, 0.5 + whale.woke, 2);
+        if (whale.lit > 0 && Math.random() < realDt * 20) fx.emit(whale.x + (Math.random() - 0.5) * 2.6, 1.0 + Math.random(), -whale.z, { vy: 1.4, life: 0.6, size: 0.13, kind: SPARK, r: 2, g: 1.8, b: 1.1 });
+      }
+      if (whale.state === "spout") {
+        // фонтан бьёт ещё пару секунд
+        if (Math.random() < realDt * 50 * (this.level ? 1 : 0.5)) {
+          const a = Math.random() * TAU;
+          fx.emit(whale.x + 0.6 * (whale.dir > 0 ? 1 : -1), 1.4, -whale.z, { vx: Math.cos(a) * 0.9, vy: 4.5 + Math.random() * 2, vz: Math.sin(a) * 0.9, life: 1.1, size: 0.16, kind: DOT, r: 1.4 + this.warm.r, g: 1.4 + this.warm.g, b: 1.6, gravity: 6 });
+        }
+        this.decals.add(whale.x, whale.z, WHALE.reach, this.warm.r, this.warm.g, this.warm.b, 0.12, 0);
+      }
+      // светлячки на спине кита светят на воду
+      this.decals.add(whale.x, whale.z, 2.6, 0.5, 0.9, 1.3, 0.14, 0);
+    }
+    for (const [id, view] of this.whales) {
+      if (!game.whales.some((w) => w.id === id)) {
+        this.scene.remove(view.group);
+        this.whales.delete(id);
+      }
+    }
+    // --- находки на воде ---
+    for (const find of game.finds) {
+      let view = this.finds.get(find.id);
+      if (!view) {
+        const mesh = new T.Mesh(findGeometry(find.kind), this.toy);
+        this.scene.add(mesh);
+        view = { mesh, rise: 0 };
+        this.finds.set(find.id, view);
+      }
+      view.rise = Math.min(1, view.rise + realDt * 2);
+      const m = view.mesh;
+      const bob = Math.sin(t * 2.2 + find.id) * 0.08;
+      const spin = find.kind === "spark" ? t * 1.6 : Math.sin(t * 0.9 + find.id) * 0.5;
+      m.position.set(find.x, find.kind === "spark" ? 0.6 + bob : bob, -find.z);
+      m.rotation.set(find.kind === "spark" ? 0 : Math.sin(t * 1.7 + find.id) * 0.12, spin, 0);
+      m.scale.setScalar(1.25 * (0.3 + 0.7 * view.rise) * (1 + find.glow * 0.25));
+      // зовущее мерцание и кольцо подбора
+      const call = 0.5 + 0.5 * Math.sin(t * 4 + find.id);
+      const tint = find.kind === "bottle" ? [0.6, 1.2, 1.1] : find.kind === "buoy" ? [1.4, 0.9, 0.5] : [1.5, 1.25, 0.4];
+      this.decals.add(find.x, find.z, 1.1 + call * 0.2, tint[0], tint[1], tint[2], 0.22 + 0.1 * call, 0);
+      if (find.glow > 0.02) this.decals.add(find.x, find.z, 1.25 - 0.45 * find.glow, tint[0] * 1.3, tint[1] * 1.3, tint[2] * 1.3, 0.6 + find.glow, 2);
+      fx.sprite(find.x, 0.7 + bob, -find.z, 0.5 + call * 0.25 + find.glow * 0.4, SPARK, tint[0], tint[1], tint[2], 0.35 + 0.4 * find.glow);
+      if (find.age > 11) m.visible = Math.sin(t * 18) > -0.3; // скоро уйдёт под воду — мигает
+      else m.visible = true;
+    }
+    for (const [id, view] of this.finds) {
+      if (!game.finds.some((f) => f.id === id)) {
+        this.scene.remove(view.mesh);
+        this.finds.delete(id);
+      }
+    }
+    // --- светобуи светят сами ---
+    for (let i = this.buoyMeshes.length - 1; i >= 0; i--) {
+      const b = this.buoyMeshes[i];
+      const live = game.buoys.find((x) => Math.abs(x.x - b.x) < 1e-3 && Math.abs(x.z - b.z) < 1e-3);
+      b.mesh.position.y = Math.sin(t * 2 + i) * 0.06 - (live ? 0 : Math.min(1, (b.t += realDt)) * 1.2);
+      if (!live && b.t >= 1) {
+        this.scene.remove(b.mesh);
+        this.buoyMeshes.splice(i, 1);
+        continue;
+      }
+      if (live) {
+        const fade = Math.min(1, live.t / 1.5);
+        const pulse = 0.85 + 0.15 * Math.sin(t * 3 + i);
+        this.decals.add(b.x, b.z, BUOY_R + 0.4, 1.0, 0.78, 0.42, 0.28 * fade * pulse, 0);
+        this.decals.add(b.x, b.z, BUOY_R, 1.2, 0.9, 0.5, 0.5 * fade, 1);
+        fx.sprite(b.x, 1.1, -b.z, 1.1 * pulse, DOT, 1.6, 1.3, 0.7, 0.8 * fade);
+      }
+    }
+
+    // --- гроза: дождь, круги от капель ---
+    this.rain += ((game.rain ? 1 : 0) - this.rain) * Math.min(1, realDt * 0.8);
+    if (this.rain > 0.02) {
+      const span = bay.hw * 2 + 6;
+      const n = Math.round(L.rain * this.rain);
+      const lightUp = 1 + boltNow * 2.5;
+      for (let i = 0; i < n; i++) {
+        const fall = (t * 13 + hash(i) * 9) % 9;
+        const x = (hash(i + 0.31) - 0.5) * span + this.gust * fall * 0.8;
+        const z = hash(i + 0.77) * (bay.depth + 4) - 1;
+        fx.sprite(x, 8.5 - fall, -z, 0.42, RAIN, 0.42 * lightUp, 0.5 * lightUp, 0.68 * lightUp, 0.42 * this.rain);
+      }
+      for (let i = 0; i < L.ripples; i++) {
+        const cycle = t * 1.4 + hash(i + 9.1);
+        const k = cycle % 1;
+        const seed = i * 13 + Math.floor(cycle);
+        const x = (hash(seed + 0.5) - 0.5) * bay.hw * 2;
+        const z = hash(seed + 0.9) * bay.depth;
+        this.decals.add(x, z, 0.12 + k * 0.5, 0.5, 0.65, 0.9, (1 - k) * 0.35 * this.rain, 1);
+      }
+    }
+    // --- кольца на воде ---
+    for (let i = this.waves.length - 1; i >= 0; i--) {
+      const wv = this.waves[i];
+      wv.t += realDt;
+      const k = wv.t / wv.dur;
+      if (k >= 1) {
+        this.waves.splice(i, 1);
+        continue;
+      }
+      const ease = 1 - (1 - k) ** 3;
+      this.decals.add(wv.x, wv.z, 0.3 + wv.max * ease, wv.r, wv.g, wv.b, wv.power * (1 - k), 1);
+    }
+    // --- пылинки в луче: свет кажется плотным, «объёмным» ---
+    if (L.motes && playing) {
+      this.moteIn -= realDt;
+      if (this.moteIn <= 0) {
+        this.moteIn = 0.06 / L.motes;
+        const k = 0.25 + Math.random() * 0.7;
+        const along = (Math.random() - 0.5) * beam.a * 1.2 * k;
+        const across = (Math.random() - 0.5) * beam.b * 1.2 * k;
+        const px = this.lamp.x + (beam.x + beam.sin * along + beam.cos * across - this.lamp.x) * k;
+        const pz = this.lamp.z + (-(beam.z + beam.cos * along - beam.sin * across) - this.lamp.z) * k;
+        const py = this.lamp.y + (0.1 - this.lamp.y) * k;
+        fx.emit(px, py, pz, { vx: (Math.random() - 0.5) * 0.3, vy: (Math.random() - 0.3) * 0.2, vz: (Math.random() - 0.5) * 0.3, life: 1.4, size: 0.05 + Math.random() * 0.04, kind: DOT, r: 1.5 * w.r, g: 1.5 * w.g, b: 1.5 * w.b, alpha: 0.7 });
+      }
+    }
+    // --- салют над деревней на победе ночи ---
+    if (this.fireworks > 0) {
+      this.fireworks -= realDt;
+      if (Math.random() < realDt * 4.5) {
+        const x = hb.x + (Math.random() - 0.3) * Math.min(9, bay.hw * 1.4);
+        this.rockets.push({ x, y: 0.8, z: -(1 + Math.random() * bay.depth * 0.25), vy: 8 + Math.random() * 3, fuse: 0.7 + Math.random() * 0.35, hue: Math.random() });
+      }
+    }
+    for (let i = this.rockets.length - 1; i >= 0; i--) {
+      const r = this.rockets[i];
+      r.fuse -= realDt;
+      r.vy -= 6 * realDt;
+      r.y += r.vy * realDt;
+      fx.sprite(r.x, r.y, r.z, 0.25, SPARK, 2, 1.6, 0.9, 0.9);
+      if (Math.random() < 0.6) fx.emit(r.x, r.y, r.z, { vy: -0.5, life: 0.35, size: 0.08, kind: DOT, r: 1.6, g: 1.1, b: 0.6 });
+      if (r.fuse <= 0) {
+        const c = new T.Color().setHSL(r.hue, 0.85, 0.65);
+        const n = this.level ? 46 : 22;
+        for (let k = 0; k < n; k++) {
+          const a = (k / n) * TAU;
+          const up = Math.random() * 2 - 1;
+          const sp = 3 + Math.random() * 0.8;
+          fx.emit(r.x, r.y, r.z, { vx: Math.cos(a) * sp * Math.sqrt(1 - up * up), vy: up * sp, vz: Math.sin(a) * sp * Math.sqrt(1 - up * up) * 0.6, life: 1 + Math.random() * 0.4, size: 0.14, kind: k % 2 ? SPARK : DOT, r: c.r * 2.2, g: c.g * 2.2, b: c.b * 2.2, gravity: 2.5, drag: 1.4 });
+        }
+        this.rockets.splice(i, 1);
+      }
+    }
+
     // --- те, кто доигрывает: причаливают, тонут, плавают на круге ---
     for (let i = this.ghosts.length - 1; i >= 0; i--) {
       const ghost = this.ghosts[i];
@@ -735,6 +1054,18 @@ blending: T.CustomBlending,
         g.position.y = -k * 0.8;
         done = k >= 1;
         if (done) this.dropShade(ghost.view);
+      } else if (ghost.type === "lift" || ghost.type === "sinkfind") {
+        // подобранная находка взлетает и тает; забытая — уходит под воду
+        const k = Math.min(1, ghost.t / 0.6);
+        if (ghost.type === "lift") {
+          g.position.y += dt * 3;
+          g.rotation.y += dt * 9;
+          g.scale.setScalar(Math.max(0.01, 1.4 * (1 - k)));
+        } else {
+          g.position.y -= dt * 1.2;
+          g.scale.setScalar(Math.max(0.01, 1 - k));
+        }
+        done = k >= 1;
       } else if (ghost.type === "ring") {
         // экипаж на спасательном круге: покачается, поплывёт к гавани и скроется у берега
         const k = Math.min(1, ghost.t / 0.4);
@@ -752,7 +1083,8 @@ blending: T.CustomBlending,
         done = out >= 1 || d < 1;
       }
       if (done) {
-        if (ghost.material) {
+        if (ghost.type === "lift" || ghost.type === "sinkfind") this.scene.remove(g);
+        else if (ghost.material) {
           this.scene.remove(g);
           ghost.material.dispose();
         } else if (ghost.type !== "dive") this.dropBoat(ghost.view); // тень уже убрана выше
@@ -763,7 +1095,7 @@ blending: T.CustomBlending,
     // --- туман: клубы над полосой ---
     if (this.fog > 0.02 && game.fog) {
       const span = bay.hw * 2 + 10;
-      for (let i = 0; i < 22; i++) {
+      for (let i = 0; i < L.fog; i++) {
         const x = ((((i * 0.6180339 * span + t * (0.3 + (i % 3) * 0.1)) % span) + span) % span) - span / 2;
         const z = game.fog.z + Math.sin(i * 2.4 + t * 0.17) * game.fog.half * 0.75;
         fx.sprite(x, 0.7 + (i % 4) * 0.2, -z, 2.6 + (i % 5) * 0.35, PUFF, 0.5, 0.62, 0.8, 0.12 * this.fog);
@@ -794,6 +1126,7 @@ blending: T.CustomBlending,
       const s = this.shake * this.shake * 0.5;
       this.camera.position.set(this.camHome.x + Math.sin(t * 61) * s, this.camHome.y + Math.cos(t * 53) * s, this.camHome.z);
     }
+    // на низком уровне свечение (bloom) выключено: остаются только тон и цвет OutputPass
     this.composer.render();
   }
 

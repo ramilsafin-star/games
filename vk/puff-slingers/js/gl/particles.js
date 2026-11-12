@@ -1,5 +1,5 @@
 // Все эффекты игры: огонь, дым, искры, вспышки, обломки и конфетти. Данные берутся из той же системы FX.
-import * as T from '../../vendor/three/three.module.min.js?v=d6bb936e';
+import * as T from '../../vendor/three/three.module.min.js?v=7f585ca2';
 
 const VERT = `
 attribute vec3 iPos; attribute vec2 iSize; attribute float iRot; attribute vec4 iColor; attribute float iFrame;

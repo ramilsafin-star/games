@@ -521,6 +521,228 @@ button {
 .total-line { font-size: 16px; font-weight: 700; color: #3c2565; }
 .total-line b { color: var(--violet); font-weight: 900; }
 
+/* ---------- Медали, разрушомер, главы, следы ---------- */
+.medal-ico {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 16px;
+  height: 18px;
+  vertical-align: -3px;
+  background:
+    radial-gradient(circle at 50% 64%, #fff7b0 0 18%, #ffc21f 19% 46%, #d98a00 47% 52%, transparent 53%),
+    linear-gradient(90deg, transparent 22%, #ff2e88 22% 45%, #29b6ff 45% 68%, transparent 68%) top / 100% 46% no-repeat;
+}
+.boom-ico {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  background: radial-gradient(circle, #fff3a0 0 25%, #ff9a1f 26% 60%, #ff3d3d 61%);
+  clip-path: polygon(50% 0, 60% 30%, 92% 12%, 72% 42%, 100% 55%, 68% 62%, 80% 96%, 50% 72%, 20% 96%, 32% 62%, 0 55%, 28% 42%, 8% 12%, 40% 30%);
+}
+.hud-sub { display: flex; flex-basis: 100%; gap: 6px; align-items: center; flex-wrap: wrap; }
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 3px 10px;
+  border-radius: 11px;
+  background: rgba(26, 8, 56, 0.82);
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.pill-goal span { font-variant-numeric: tabular-nums; }
+.pill-goal.done { background: linear-gradient(180deg, #ffe066, #f0a400); color: var(--ink); border-color: #fff; }
+.pill-goal.failed { opacity: 0.55; text-decoration: line-through; }
+.pill-goal.had:not(.done) { border-color: #ffd23f; }
+.pill.pop { animation: pill-pop 0.6s cubic-bezier(0.2, 1.8, 0.4, 1); }
+.pill-meter .bar {
+  position: relative;
+  width: 64px;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.18);
+}
+.pill-meter .bar i {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  transform: scaleX(0);
+  border-radius: 6px;
+  background: linear-gradient(90deg, #ffd23f, #ff7a1a 60%, #ff2e88);
+}
+.pill-meter.used .bar i { background: linear-gradient(90deg, #9be8ff, #d6c2ff); }
+.pill-meter.used { opacity: 0.6; }
+.banner-goal {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 6px 14px;
+  border-radius: 14px;
+  background: rgba(26, 8, 56, 0.86);
+  border: 2px solid #ffd23f;
+  font-size: clamp(14px, 3.2vmin, 20px);
+  font-weight: 800;
+  color: #fff;
+}
+.banner-goal .medal-ico { width: 20px; height: 22px; }
+.banner-goal.had { border-color: #7cff5c; }
+.title-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.title-row .btn { position: relative; }
+.dot {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--pink);
+  border: 3px solid #fff;
+  animation: breathe 0.9s ease-in-out infinite;
+}
+.tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-height: 46px;
+  padding: 4px 4px;
+  border-radius: 12px;
+  border: 3px solid #d7c5f7;
+  background: #fff;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.1;
+}
+.tab b { font-weight: 900; }
+.tab small { font-size: 11px; font-weight: 800; color: #4b2f7c; white-space: nowrap; }
+.tab small i { width: 11px; height: 11px; margin: 0 1px 0 3px; vertical-align: -1px; }
+.tab small .medal-ico { width: 10px; height: 12px; }
+.tab.on { background: linear-gradient(180deg, #a98bff 0%, #6d3bf0 100%); color: #fff; border-color: var(--ink); }
+.tab.on small { color: #fff3c0; }
+.tab.locked { opacity: 0.55; }
+.level-card .mini-medal {
+  position: absolute;
+  top: 5px;
+  left: 6px;
+  width: 15px;
+  height: 17px;
+  filter: grayscale(1) brightness(0.45);
+}
+.level-card .mini-medal.lit { filter: none; }
+.medal-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 14px;
+  background: #f3ecff;
+  border: 2px dashed #c9b6f2;
+  font-size: 14px;
+  font-weight: 800;
+  color: #4b2f7c;
+}
+.medal-row .medal-ico { width: 22px; height: 25px; filter: grayscale(1) brightness(0.6); }
+.medal-row.got { background: linear-gradient(180deg, #fff6c2, #ffd75a); border: 2px solid #d98a00; color: #5a3200; }
+.medal-row.got .medal-ico, .medal-row.had .medal-ico { filter: none; }
+.medal-row.pop { animation: pill-pop 0.6s cubic-bezier(0.2, 1.8, 0.4, 1); }
+.new-trail {
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: linear-gradient(90deg, #ff9ae0, #b78cff, #7ef9ff);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 900;
+  animation: breathe 1.2s ease-in-out infinite;
+}
+.trails-note { font-size: 15px; font-weight: 700; color: #3c2565; }
+.trails-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.trail-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 6px 8px;
+  border-radius: 16px;
+  border: 3px solid var(--ink);
+  background: linear-gradient(180deg, #3a1d8a, #1c0b45);
+  color: #fff;
+  box-shadow: 0 4px 0 var(--ink);
+  transition: transform 0.09s ease;
+}
+.trail-card b { font-size: 15px; font-weight: 900; }
+.trail-card small { min-height: 15px; font-size: 12px; font-weight: 800; color: #ffd23f; }
+.trail-card.on { outline: 4px solid #7cff5c; outline-offset: 1px; }
+.trail-card.locked { filter: grayscale(0.8) brightness(0.7); cursor: not-allowed; }
+.trail-card:not(.locked):active { transform: translateY(3px); }
+.swatch { display: flex; align-items: center; gap: 3px; height: 26px; }
+.swatch i { display: block; border-radius: 50%; }
+.swatch i:nth-child(1) { width: 6px; height: 6px; opacity: 0.4; }
+.swatch i:nth-child(2) { width: 9px; height: 9px; opacity: 0.55; }
+.swatch i:nth-child(3) { width: 12px; height: 12px; opacity: 0.7; }
+.swatch i:nth-child(4) { width: 16px; height: 16px; opacity: 0.85; }
+.swatch i:nth-child(5) { width: 22px; height: 22px; background: radial-gradient(circle at 35% 35%, #fff, #ffb07a 40%, #ff4d5e) !important; }
+.trail-basic .swatch i { background: #ff5470; }
+.trail-rainbow .swatch i:nth-child(1) { background: #ff3d3d; }
+.trail-rainbow .swatch i:nth-child(2) { background: #ffb02e; }
+.trail-rainbow .swatch i:nth-child(3) { background: #7cff5c; }
+.trail-rainbow .swatch i:nth-child(4) { background: #3fc8ff; }
+.trail-stars .swatch i:not(:nth-child(5)) { background: #ffe14d; border-radius: 0; clip-path: polygon(50% 0, 63% 33%, 98% 36%, 71% 59%, 80% 94%, 50% 75%, 20% 94%, 29% 59%, 2% 36%, 37% 33%); }
+.trail-bubbles .swatch i:not(:nth-child(5)) { background: transparent; border: 2px solid #7ef9ff; }
+.trail-fire .swatch i:not(:nth-child(5)) { background: radial-gradient(circle, #fff0a8, #ff9a1f 60%, #ff2e4d); }
+.trail-gold .swatch i:not(:nth-child(5)) { background: radial-gradient(circle at 35% 35%, #fffbe0, #ffc21f 55%, #b87400); box-shadow: 0 0 8px #ffd23f; }
+#result-score.counting { color: #8f5bff; }
+#result-score.bump { animation: star-pop 0.4s cubic-bezier(0.2, 1.8, 0.4, 1); }
+#flash.big { background: #ffffff; }
+#flash.big.play { animation: flash-big 0.5s ease-out; }
+.ui-spark {
+  position: fixed;
+  z-index: 40;
+  width: 9px;
+  height: 9px;
+  margin: -4px 0 0 -4px;
+  pointer-events: none;
+  clip-path: polygon(50% 0, 63% 37%, 100% 50%, 63% 63%, 50% 100%, 37% 63%, 0 50%, 37% 37%);
+  animation: ui-spark 0.65s cubic-bezier(0.2, 0.8, 0.4, 1) forwards;
+}
+@keyframes ui-spark { from { transform: translate(0, 0) scale(1.4); opacity: 1; } to { transform: translate(var(--dx), var(--dy)) scale(0.2); opacity: 0; } }
+@keyframes pill-pop { 0% { transform: scale(1); } 40% { transform: scale(1.35); } 100% { transform: scale(1); } }
+@keyframes flash-big { from { opacity: 0.55; } to { opacity: 0; } }
+.result-actions { display: flex; flex-direction: column; gap: 10px; }
+@media (min-width: 620px) {
+  .trails-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
+/* Телефон боком: кнопки итога в один ряд, медаль и след — компактно */
+@media (max-height: 520px) {
+  .result-actions { flex-direction: row; align-items: stretch; }
+  .result-actions > .btn { flex: 1.2 1 0; min-width: 0; }
+  .result-actions .row { flex: 2 1 0; flex-wrap: nowrap; }
+  .result-actions .btn.hidden + .row { flex: 1 1 100%; }
+  #result-score-wrap .score-sub { display: inline-block; margin: 0 6px; }
+}
+@media (max-height: 400px) {
+  #final-medals-wrap { display: none; }
+  .new-trail { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}
+@media (max-height: 520px) {
+  .tabs { gap: 4px; }
+  .tab { min-height: 38px; padding: 2px; font-size: 12px; }
+  .trail-card { padding: 6px 4px; }
+  .medal-row { padding: 3px 8px; font-size: 13px; }
+  .new-trail { padding: 3px 8px; font-size: 13px; }
+  .pill { min-height: 26px; padding: 2px 8px; font-size: 12px; }
+}
+@media (max-width: 420px) {
+  .tab small { display: none; }
+}
+
 /* ---------- Крайние соотношения сторон ---------- */
 @media (min-width: 620px) {
   .levels-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }

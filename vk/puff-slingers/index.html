@@ -6,9 +6,9 @@
   <title>Пушистый залп</title>
 
 
-  <script src="./vendor/vk/vk-bridge.min.js?v=d6bb936e"></script>
-    <script src="./js/vk-host.js?v=d6bb936e" data-keys="puff_slingers_save" data-ad-gap="120"></script>
-    <link rel="stylesheet" href="./style.css?v=d6bb936e">
+  <script src="./vendor/vk/vk-bridge.min.js?v=7f585ca2"></script>
+    <script src="./js/vk-host.js?v=7f585ca2" data-keys="puff_slingers_save" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=7f585ca2">
   <style>
     /* Кнопки VK-версии в углах экранов */
     .vk-corner { position: absolute; top: calc(12px + var(--safe-top)); z-index: 2; }
@@ -16,27 +16,29 @@
     .vk-corner.right { right: calc(12px + var(--safe-right)); }
     .vk-sound:not(.off) .off-i, .vk-sound.off .on-i { display: none; }
     .vk-sound.off { background: linear-gradient(180deg, #b7b0c8 0%, #776f8c 100%); }
-    /* Телефон в альбомной ориентации: 18 уровней в два ряда по девять, «Назад» без прокрутки (правило 3.2.1) */
+    /* Телефон в альбомной ориентации: шесть уровней главы в один ряд, вкладки глав и «Назад» без прокрутки (правило 3.2.1) */
     @media (max-height: 520px) and (min-width: 560px) {
-      #screen-levels .card { max-width: 760px; }
-      .levels-grid { grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 6px; }
+      #screen-levels .card, #screen-trails .card { max-width: 760px; }
+      .levels-grid, .trails-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
       .level-card { aspect-ratio: 4 / 5; min-height: 0; }
       .level-card .num { font-size: 22px; -webkit-text-stroke-width: 3px; }
       .mini-stars i { width: 13px; height: 13px; }
     }
     /* Пока виден баннер VK (он стоит сразу под окном игры), экраны и их прокрутка кончаются
-       не ближе 24 px к нему (правило 5.1.4.2г); на невысоком экране 18 уровней — в два ряда по девять */
+       не ближе 24 px к нему (правило 5.1.4.2г); на невысоком экране уровни главы — в один ряд */
     html.vk-banner .screen { border-bottom: 24px solid transparent; }
     @media (max-height: 600px) and (min-width: 560px) {
       html.vk-banner #screen-levels .card { max-width: 760px; }
-      html.vk-banner .levels-grid { grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 6px; }
+      html.vk-banner .levels-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
       html.vk-banner .level-card { aspect-ratio: 1; min-height: 0; }
     }
     @media (max-height: 400px) {
       html.vk-banner .total-line { display: none; }
     }
-    /* Самые низкие экраны (568×320): итог и финал без прокрутки */
+    /* Самые низкие экраны (568×320): итог и финал без прокрутки; кнопка меню над уровнями меньше и в самом углу,
+       чтобы не заходить на вкладки глав */
     @media (max-height: 340px) {
+      #screen-levels .vk-corner { width: 42px; height: 42px; padding: 8px; top: calc(5px + var(--safe-top)); left: calc(5px + var(--safe-left)); }
       .card { gap: 5px; padding-top: 8px; padding-bottom: 10px; }
       .stars { min-height: 40px; }
       .star { width: 36px; height: 36px; }
@@ -57,6 +59,11 @@
       <div class="chip chip-level"><span data-i18n="level"></span> <b id="hud-level">1</b></div>
       <div class="chip chip-score"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l3 6.6 7.2.8-5.4 4.8 1.5 7.1L12 17.7l-6.3 3.6 1.5-7.1L1.800 9.400 9 8.600z" fill="currentColor"/></svg><b id="hud-score">0</b></div>
       <div id="hud-gems-wrap" class="chip chip-gems hidden"><i class="gem-ico"></i><b id="hud-gems">0/0</b></div>
+      <!-- Медаль уровня и разрушомер (бонусный пуф) -->
+      <div class="hud-sub">
+        <div id="hud-goal" class="pill pill-goal"><i class="medal-ico"></i><span id="hud-goal-text"></span></div>
+        <div id="hud-meter" class="pill pill-meter"><i class="boom-ico"></i><span class="bar"><i id="hud-meter-fill"></i></span></div>
+      </div>
     </div>
     <div class="hud-right">
       <button id="vk-sound-hud" class="icon-btn vk-sound" type="button" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><g class="on-i"><path d="M3 9.5h4l5.5-4.5v14L7 14.5H3z" fill="currentColor"/><path d="M15.6 8.8a4.6 4.6 0 0 1 0 6.4M18.4 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></g><g class="off-i"><path d="M3 9.5h4l5.5-4.5v14L7 14.5H3z" fill="currentColor"/><path d="M16 9.5l5 5m0-5l-5 5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></g></svg></button>
@@ -80,9 +87,13 @@
     </div>
     <p class="tagline" data-i18n="tagline"></p>
     <button id="btn-play" class="btn primary huge" type="button"></button>
-    <button id="btn-title-levels" class="btn secondary" type="button" data-i18n="levels"></button>
+    <div class="title-row">
+      <button id="btn-title-levels" class="btn secondary" type="button" data-i18n="levels"></button>
+      <button id="btn-title-trails" class="btn secondary" type="button"><span data-i18n="trails"></span><i id="trails-dot" class="dot hidden"></i></button>
+    </div>
     <div id="title-best-wrap" class="title-best hidden">
-      <span><i class="star-ico"></i> <b id="title-stars">0/18</b></span>
+      <span><i class="star-ico"></i> <b id="title-stars">0/72</b></span>
+      <span id="title-medals-wrap" class="hidden"><i class="medal-ico"></i> <b id="title-medals">0/24</b></span>
       <span id="title-gems-wrap" class="hidden"><i class="gem-ico"></i> <b id="title-gems">0/0</b></span>
       <span><span data-i18n="totalBest"></span>: <b id="title-best">0</b></span>
     </div>
@@ -102,6 +113,7 @@
         <button id="tgl-music" class="toggle" type="button"><span data-i18n="music"></span><span class="state"></span></button>
         <button id="tgl-sfx" class="toggle" type="button"><span data-i18n="sfx"></span><span class="state"></span></button>
         <button id="tgl-shake" class="toggle" type="button"><span data-i18n="shake"></span><span class="state"></span></button>
+        <button id="tgl-gfx" class="toggle" type="button"><span data-i18n="graphics"></span><span class="state"></span></button>
       </div>
       <p class="keys" data-i18n="keys"></p>
     </div>
@@ -111,6 +123,7 @@
   <section id="screen-levels" class="screen"><button class="icon-btn vk-corner left" type="button" data-vk-menu aria-label="Главное меню"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.5 11h2.8v9.5h5.2v-6h3v6h5.2V11h2.8z" fill="currentColor"/></svg></button>
     <div class="card card-wide">
       <h2 class="card-title" data-i18n="selectLevel"></h2>
+      <div id="chapter-tabs" class="tabs" role="tablist"></div>
       <div id="levels-grid" class="levels-grid"></div>
       <p class="total-line"><span data-i18n="totalBest"></span>: <b id="levels-total">0</b></p>
       <button id="btn-levels-back" class="btn secondary" type="button" data-i18n="back"></button>
@@ -131,11 +144,15 @@
         <div id="result-bonus-wrap" class="score-sub hidden"><span data-i18n="bonus"></span>: <b id="result-bonus">0</b></div>
         <div id="result-gems-wrap" class="score-sub hidden"><span data-i18n="gems"></span>: <b id="result-gems">0</b></div>
       </div>
+      <div id="result-medal" class="medal-row hidden"><i class="medal-ico"></i><span id="result-medal-text"></span></div>
+      <p id="result-trail" class="new-trail hidden"></p>
       <p id="result-tip" class="tip hidden" data-i18n="loseTip"></p>
-      <button id="btn-next" class="btn primary" type="button"></button>
-      <div class="row">
-        <button id="btn-retry" class="btn secondary" type="button" data-i18n="retry"></button>
-        <button id="btn-result-levels" class="btn secondary" type="button" data-i18n="levels"></button>
+      <div class="result-actions">
+        <button id="btn-next" class="btn primary" type="button"></button>
+        <div class="row">
+          <button id="btn-retry" class="btn secondary" type="button" data-i18n="retry"></button>
+          <button id="btn-result-levels" class="btn secondary" type="button" data-i18n="levels"></button>
+        </div>
       </div>
     </div>
   </section>
@@ -146,7 +163,8 @@
       <h2 class="card-title gold" data-i18n="finalTitle"></h2>
       <p class="final-text" data-i18n="finalText"></p>
       <div class="score-box">
-        <div class="score-main"><span data-i18n="finalStars"></span> <b id="final-stars">0/18</b></div>
+        <div class="score-main"><span data-i18n="finalStars"></span> <b id="final-stars">0/72</b></div>
+        <div id="final-medals-wrap" class="score-sub"><span data-i18n="medals"></span>: <b id="final-medals">0/24</b></div>
         <div class="score-sub"><span data-i18n="totalBest"></span>: <b id="final-best">0</b></div>
       </div>
       <p id="final-note" class="tip"></p>
@@ -155,14 +173,26 @@
     </div>
   </section>
 
-  <script src="./matter.min.js?v=d6bb936e"></script>
-  <script src="./js/data.js?v=d6bb936e"></script>
-  <script src="./js/i18n.js?v=d6bb936e"></script>
-  <script src="./js/audio.js?v=d6bb936e"></script>
-  <script src="./js/art.js?v=d6bb936e"></script>
-  <script src="./js/background.js?v=d6bb936e"></script>
-  <script src="./js/fx.js?v=d6bb936e"></script>
-  <script src="./js/game.js?v=d6bb936e"></script>
-  <script src="./js/ui.js?v=d6bb936e"></script>
+  <!-- Следы за пуфом: открываются за звёзды и медали -->
+  <section id="screen-trails" class="screen">
+    <div class="card card-wide">
+      <h2 class="card-title" data-i18n="trailsTitle"></h2>
+      <p id="trails-note" class="trails-note"></p>
+      <div id="trails-grid" class="trails-grid"></div>
+      <button id="btn-trails-back" class="btn secondary" type="button" data-i18n="back"></button>
+    </div>
+  </section>
+
+  <script src="./matter.min.js?v=7f585ca2"></script>
+  <script src="./js/data.js?v=7f585ca2"></script>
+  <script src="./js/i18n.js?v=7f585ca2"></script>
+  <script src="./js/audio.js?v=7f585ca2"></script>
+  <script src="./js/art.js?v=7f585ca2"></script>
+  <script src="./js/background.js?v=7f585ca2"></script>
+  <script src="./js/fx.js?v=7f585ca2"></script>
+  <script src="./js/balloons.js?v=7f585ca2"></script>
+  <script src="./js/goals.js?v=7f585ca2"></script>
+  <script src="./js/game.js?v=7f585ca2"></script>
+  <script src="./js/ui.js?v=7f585ca2"></script>
 </body>
 </html>

@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#2b2560">
   <title>Линия спасения</title>
-  <meta name="description" content="Физическая головоломка: нарисуй линию — она станет настоящим предметом. Укрой Тошу от жуков и камней, подставь мостик ягоде, проведи друзей по домам. 90 уровней в шести главах.">
+  <meta name="description" content="Физическая головоломка: нарисуй линию — она станет настоящим предметом. Укрой Тошу от жуков, камней и привидений, подставь мостик ягоде, проведи друзей по домам. 105 уровней в семи главах, светлячки, задача дня и награды.">
   <link rel="icon" href="./icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="./icon-180.png">
-  <link rel="stylesheet" href="./style.css?v=8e3275de">
+  <link rel="stylesheet" href="./style.css?v=dbaf642d">
 </head>
 <body class="side" data-screen="load">
   <canvas id="stage" aria-label="Игровое поле"></canvas>
@@ -17,11 +17,13 @@
     <svg class="on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path class="w" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>
     <svg class="off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path class="w" d="M17 9l5 6M22 9l-5 6"/></svg>
   </button>
+  <button class="round" id="gear" aria-label="Настройки графики"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3M5.5 5.5l2.1 2.1M16.4 16.4l2.1 2.1M5.5 18.5l2.1-2.1M16.4 7.6l2.1-2.1"/></svg></button>
 
   <div id="hud" hidden>
     <div class="hud-l">
       <button class="round" id="pause" aria-label="Пауза"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg></button>
       <div class="lvl" id="lvl">1-1</div>
+      <div class="flyhud" id="flyhud" title="Светлячок уровня"><span class="fly-ico"></span></div>
     </div>
     <div class="ink" id="ink" aria-label="Чернила">
       <svg class="pen" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1-5L15 5l4 4L9 19z"/><path d="M13 7l4 4"/></svg>
@@ -40,7 +42,7 @@
 
   <main id="menu" class="screen" hidden>
     <div class="menu-card">
-      <p class="eyebrow">ГОЛОВОЛОМКА · 90 УРОВНЕЙ</p>
+      <p class="eyebrow">ГОЛОВОЛОМКА · 105 УРОВНЕЙ</p>
       <h1 class="logo"><span>Линия</span> <em>спасения</em>
         <svg class="squiggle" viewBox="0 0 300 30" aria-hidden="true"><path d="M6 20C40 6 70 26 104 14s66-10 98 2 60 6 92-6"/></svg>
       </h1>
@@ -48,6 +50,11 @@
       <div class="menu-buttons">
         <button class="btn primary big" id="play">Играть</button>
         <button class="btn" id="levels">Уровни</button>
+      </div>
+      <div class="menu-extra">
+        <button class="btn tile" id="daily"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M4 10h16M10 14l2 2 3-3"/></svg><span>Задача дня<small id="daily-sub"></small></span></button>
+        <button class="btn tile" id="shop"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1-5L15 5l4 4L9 19z"/><path d="M13 7l4 4"/></svg><span>Мастерская<small id="shop-sub"></small></span></button>
+        <button class="btn tile" id="awards"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="5.5"/><path d="M8.5 13.5L7 21l5-2.5 5 2.5-1.5-7.5"/></svg><span>Награды<small id="awards-sub"></small></span></button>
       </div>
       <p class="stat" id="menu-stat"></p>
     </div>
@@ -70,7 +77,7 @@
   <p id="turn" class="turn">Поверни телефон — так удобнее рисовать</p>
 
   <div id="loading" class="loading" role="status"><i class="spin"></i><span id="load-text">Загружаем…</span></div>
-  <script src="./vendor/matter.min.js?v=8e3275de"></script>
-  <script type="module" src="./js/boot.js?v=8e3275de"></script>
+  <script src="./vendor/matter.min.js?v=dbaf642d"></script>
+  <script type="module" src="./js/boot.js?v=dbaf642d"></script>
 </body>
 </html>

@@ -1,7 +1,7 @@
 // Небо и море «Маяка»: два шейдера. Небо — прямоугольник на весь экран позади сцены,
 // море — большая плоскость с бегущими бликами, пятнами света от лучей и вспышки, туманом и пеной у берега.
 // Цвета пишутся линейными: тон и sRGB накладывает OutputPass в конце.
-import * as T from "../vendor/three/three.module.min.js?v=e4b14d4e";
+import * as T from "../vendor/three/three.module.min.js?v=092eaf93";
 
 const NOISE = /* glsl */ `
   float hash(vec2 p) {
@@ -27,6 +27,8 @@ export function makeSky() {
     uDawn: { value: 0 }, // 0 — ночь, 1 — рассвет
     uFlash: { value: 0 },
     uStar: { value: new T.Vector4(0, 0, 0, 0) }, // падающая звезда: x, y, ход 0..1, яркость
+    uStorm: { value: 0 }, // гроза: тучи закрывают звёзды и луну
+    uBolt: { value: new T.Vector2(0, 0) }, // молния: где по горизонтали экрана, яркость
   };
   const material = new T.ShaderMaterial({
     uniforms,
@@ -45,8 +47,8 @@ export function makeSky() {
     fragmentShader: /* glsl */ `
       precision highp float;
       varying vec2 vPos;
-      uniform float uTime, uHorizon, uAspect, uDawn, uFlash;
-      uniform vec2 uMoon;
+      uniform float uTime, uHorizon, uAspect, uDawn, uFlash, uStorm;
+      uniform vec2 uMoon, uBolt;
       uniform vec4 uStar;
       ${NOISE}
       void main() {
@@ -101,6 +103,23 @@ export function makeSky() {
           col += vec3(1.3, 1.25, 1.0) * trail * uStar.w;
         }
         col += vec3(0.5, 0.45, 0.3) * uFlash * 0.22;
+        // гроза: клубящиеся тучи прячут звёзды и луну
+        if (uStorm > 0.0) {
+          vec2 q = vec2(p.x * 1.6 + uTime * 0.05, up * 3.2);
+          float cloud = noise(q * 2.0) * 0.6 + noise(q * 4.3 + 3.0) * 0.3 + noise(q * 9.0) * 0.1;
+          float cover = smoothstep(0.32, 0.72, cloud) * smoothstep(0.0, 0.12, up);
+          vec3 sky = mix(vec3(0.035, 0.05, 0.09), vec3(0.10, 0.12, 0.18), cloud);
+          col = mix(col, sky, uStorm * (0.55 + 0.45 * cover));
+          // молния: светятся тучи и бьёт ломаная нить с неба к горизонту
+          if (uBolt.y > 0.0) {
+            col += vec3(0.55, 0.55, 0.85) * uBolt.y * (0.35 + 0.65 * cover) * uStorm;
+            float y = vPos.y;
+            float zig = (noise(vec2(y * 9.0, uBolt.x * 13.0)) - 0.5) * 0.16 + (noise(vec2(y * 31.0, uBolt.x * 7.0)) - 0.5) * 0.04;
+            float d = abs((vPos.x - uBolt.x - zig * (1.0 - up)) * uAspect);
+            float line = smoothstep(0.012, 0.0, d) + exp(-d * 60.0) * 0.5;
+            col += vec3(1.6, 1.6, 2.2) * line * uBolt.y * step(0.0, up) * smoothstep(1.0, 0.75, vPos.y);
+          }
+        }
         // ниже горизонта неба нет: там тёмная суша (видна, только если камера заглянет за край берега)
         col = mix(col, vec3(0.008, 0.030, 0.026), smoothstep(-0.01, -0.06, up));
         gl_FragColor = vec4(col, 1.0);
@@ -133,6 +152,9 @@ export function makeSea() {
     uMoonX: { value: 0.4 }, // где луна по горизонтали экрана, −1..1
     uDawn: { value: 0 },
     uRes: { value: new T.Vector2(1, 1) },
+    uWarm: { value: new T.Vector3(1.0, 0.84, 0.52) }, // цвет луча (мастерская)
+    uStorm: { value: 0 }, // гроза: вода темнее, рябь крупнее
+    uBolt: { value: 0 }, // молния подсвечивает всю бухту
   };
   const material = new T.ShaderMaterial({
     uniforms,
@@ -149,9 +171,9 @@ export function makeSea() {
     fragmentShader: /* glsl */ `
       precision highp float;
       varying vec2 vP;
-      uniform float uTime, uDepth, uEnd, uFlash, uFlashRing, uGust, uMoonX, uDawn;
+      uniform float uTime, uDepth, uEnd, uFlash, uFlashRing, uGust, uMoonX, uDawn, uStorm, uBolt;
       uniform vec4 uSpot, uSpot2;
-      uniform vec3 uSpotAxes, uSpot2Axes, uHarbor, uFog;
+      uniform vec3 uSpotAxes, uSpot2Axes, uHarbor, uFog, uWarm;
       uniform vec2 uLight, uRes;
       ${NOISE}
       float spotMask(vec4 spot, vec3 axes, vec2 p, out float e) {
@@ -172,6 +194,7 @@ export function makeSea() {
         float r1 = noise(p * vec2(0.85, 2.7) + vec2(0.10, -0.22) * t + wind * 0.6);
         float r2 = noise(p * vec2(2.0, 5.6) + vec2(-0.21, 0.36) * t + wind);
         float ripple = r1 * 0.58 + r2 * 0.42;
+        ripple += (noise(p * vec2(3.1, 7.5) + vec2(0.5, -0.9) * t) - 0.5) * 0.25 * uStorm; // в грозу вода неспокойная
         float dash = smoothstep(0.64, 0.74, ripple);
         float glint = smoothstep(0.76, 0.90, ripple);
         // вода: у берега бирюзовее, вдали темнее
@@ -195,10 +218,13 @@ export function makeSea() {
         float fogK = uFog.z * (1.0 - smoothstep(uFog.y * 0.72, uFog.y * 1.05, abs(p.y - uFog.x)));
         float lit = max(s1, s2 * 0.66) * (1.0 - 0.38 * fogK);
         lit = max(lit, uFlash * 0.6);
-        vec3 warm = vec3(1.00, 0.84, 0.52);
+        vec3 warm = uWarm;
         vec3 shallow = vec3(0.070, 0.265, 0.315) * (0.82 + 0.36 * swell);
         col = mix(col, shallow, lit * 0.86);
         col += warm * lit * (0.050 + dash * 0.22 + glint * 1.9);
+        // блики луча: мелкие искры на ряби бегут и мерцают
+        float sparkle = smoothstep(0.86, 0.97, noise(p * vec2(5.5, 11.0) + vec2(0.9, -1.4) * t)) * (0.55 + 0.45 * sin(t * 7.0 + p.x * 3.0));
+        col += warm * sparkle * max(s1, s2 * 0.66) * 1.6;
         // тонкая светлая кайма: видно, где кончается свет
         float rim1 = (smoothstep(0.90, 0.97, e1) - smoothstep(0.97, 1.03, e1)) * uSpotAxes.z;
         float rim2 = (smoothstep(0.88, 0.96, e2) - smoothstep(0.96, 1.04, e2)) * uSpot2Axes.z * 0.8;
@@ -211,6 +237,9 @@ export function makeSea() {
         float n1 = swell;
         float n2 = r1;
         float n3 = r2;
+        // гроза: вода темнее, молния на миг высвечивает всю бухту
+        col *= 1.0 - 0.28 * uStorm;
+        col += vec3(0.28, 0.32, 0.48) * uBolt * (0.35 + glint * 1.2 + dash * 0.4);
         // туман: полоса светлее и серее
         col = mix(col, vec3(0.20, 0.27, 0.36) + vec3(0.05) * n1, fogK * 0.42);
         // пена у берега

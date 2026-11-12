@@ -208,6 +208,44 @@ const Sound = {
     });
   },
 
+  // Лопнул шарик: хлопок и короткий писк воздуха
+  balloon() {
+    if (!this.canPlay('balloon', 40)) return;
+    this.noise({ f0: 2600, f1: 600, dur: 0.09, vol: 0.24, filter: 'bandpass' });
+    this.tone({ type: 'square', f0: 1300 + Math.random() * 300, f1: 2400, dur: 0.07, vol: 0.05, at: 0.01 });
+    this.tone({ type: 'sine', f0: 180, f1: 70, dur: 0.12, vol: 0.18 });
+  },
+
+  // Медаль: звонкое арпеджио вверх
+  medal() {
+    if (!this.canPlay('medal', 300)) return;
+    [784, 988, 1175, 1568].forEach((f, i) => {
+      this.tone({ type: 'triangle', f0: f, f1: f, dur: 0.22, vol: 0.14, at: i * 0.08 });
+      this.tone({ type: 'sine', f0: f * 2, f1: f * 2, dur: 0.12, vol: 0.05, at: i * 0.08 + 0.02 });
+    });
+  },
+
+  // Бонусный пуф из разрушомера
+  bonus() {
+    if (!this.canPlay('bonus', 300)) return;
+    this.tone({ type: 'sine', f0: 300, f1: 900, dur: 0.25, vol: 0.18 });
+    [1047, 1319, 1568].forEach((f, i) => this.tone({ type: 'triangle', f0: f, f1: f, dur: 0.18, vol: 0.12, at: 0.2 + i * 0.07 }));
+  },
+
+  // Гигабот повержен: низкий удар и победный аккорд
+  bossDown() {
+    if (!this.canPlay('bossDown', 1000)) return;
+    this.tone({ type: 'sine', f0: 120, f1: 40, dur: 0.8, vol: 0.3 });
+    this.noise({ f0: 900, f1: 120, dur: 0.9, vol: 0.2 });
+    [523, 659, 784, 1047].forEach((f, i) => this.tone({ type: 'triangle', f0: f, f1: f, dur: 0.6, vol: 0.1, at: 0.35 + i * 0.05 }));
+  },
+
+  // Хлопушки с конфетти по краям экрана
+  pops() {
+    if (!this.canPlay('pops', 500)) return;
+    for (let i = 0; i < 2; i++) this.noise({ f0: 3200, f1: 900, dur: 0.08, vol: 0.16, filter: 'bandpass', at: i * 0.11 });
+  },
+
   shieldPop() {
     if (!this.canPlay('shield', 60)) return;
     this.tone({ type: 'sine', f0: 1900, f1: 520, dur: 0.2, vol: 0.14 });

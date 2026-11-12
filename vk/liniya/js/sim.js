@@ -1,8 +1,8 @@
 // Симуляция уровня с постоянным шагом 1/120 с. Физика — matter.js (передаётся снаружи:
 // в браузере window.Matter, в Node — require). DOM не нужен, поэтому проверки гоняют
 // те же правила, что и игра.
-import { dist, rng, cumLengths, pathAt, chaikin, polyLength } from "./geom.js?v=b97d5aa8";
-import { W, H, LINE_T, HERO_R, WALKER_R, BERRY_R, icicle, drawWith } from "./world.js?v=b97d5aa8";
+import { dist, rng, cumLengths, pathAt, chaikin, polyLength } from "./geom.js?v=80a70cba";
+import { W, H, LINE_T, HERO_R, WALKER_R, BERRY_R, icicle, drawWith } from "./world.js?v=80a70cba";
 
 export const HZ = 120;
 export const DT = 1 / HZ;
@@ -13,7 +13,7 @@ export function useMatter(m) {
   M = m;
 }
 
-const CAT = { T: 1, L: 2, H: 4, Z: 8, B: 16, D: 32, G: 64 };
+const CAT = { T: 1, L: 2, H: 4, Z: 8, B: 16, D: 32, G: 64, P: 128 }; // P — привидения и огоньки
 const ALL = 0xffff;
 
 export function createSim(L) {
@@ -37,6 +37,7 @@ class PhysSim {
     this.bugs = [];
     this.hazards = []; // камни, ядра, сосульки, шары с шипами
     this.drops = [];
+    this.ghosts = []; // привидения и огоньки: летят сквозь землю и камни, но не сквозь линию
     this.statics = []; // всё неподвижное, что рисуется отдельно (пушки, гвозди, пружины…)
     this.movers = [];
     this.doors = [];
@@ -153,6 +154,8 @@ class PhysSim {
     }
     for (const n of L.bugs || []) this.statics.push({ k: "nest", ...n, made: 0 });
     for (const r of L.rocks || []) this.statics.push({ k: "rocks", ...r, made: 0 });
+    // Лунный туман: из него вылетают привидения (fire — огоньки, которые поджигают линию)
+    for (const m of L.ghosts || []) this.statics.push({ k: "mist", ...m, made: 0 });
     // Вентиляторы
     for (const f of L.fans || []) {
       add(tag(Bodies.rectangle(f.x, f.y + 7, f.w, 26, { isStatic: true, collisionFilter: { category: CAT.T, mask: ALL } }), "fanbox"));
@@ -219,7 +222,7 @@ class PhysSim {
     body.plugin = { k: "line" };
     Composite.add(this.world, body);
     const local = pts.map(([x, y]) => [x - body.position.x, y - body.position.y]);
-    const line = { b: body, local, pts, pins: [] };
+    const line = { b: body, local, pts, pins: [], cons: [], burn: 0, gone: false };
     // Гвоздики: линия, прошедшая рядом, на них повисает
     for (const nail of this.L.nails) {
       let best = Infinity,
@@ -246,6 +249,7 @@ class PhysSim {
         });
         Composite.add(this.world, c);
         line.pins.push(nail);
+        line.cons.push(c);
       }
     }
     this.lines.push(line);
@@ -347,6 +351,28 @@ class PhysSim {
     this.drops.push({ b, born: this.t, lava: !!d.lava });
   }
 
+  // Привидение (или огонёк): неподвижный датчик, который мы двигаем сами — физика его не толкает,
+  // земля и камни ему не помеха (маска столкновений: только линии и герои)
+  spawnGhost(m) {
+    const { Bodies, Composite } = M;
+    const a = this.rand() * Math.PI * 2;
+    const x = m.x + Math.cos(a) * 10,
+      y = m.y + Math.sin(a) * 10;
+    const r = m.fire ? 12 : 16;
+    const b = Bodies.circle(x, y, r, { isStatic: true, isSensor: true, collisionFilter: { category: CAT.P, mask: CAT.L | CAT.H } });
+    b.plugin = { k: "ghost", fire: !!m.fire };
+    Composite.add(this.world, b);
+    this.ghosts.push({ b, x, y, r, fire: !!m.fire, phase: this.rand() * 6.28, born: this.t, speed: (m.speed || 1) * (0.92 + this.rand() * 0.16), vx: 0, vy: 0 });
+    this.fx.push({ k: "mistout", x: m.x, y: m.y, fire: !!m.fire });
+  }
+
+  // Огонёк поджёг линию: через 0,8 с она сгорает
+  ignite(line) {
+    if (line.burn || line.gone) return;
+    line.burn = this.t + 0.8;
+    this.fx.push({ k: "ignite", x: line.b.position.x, y: line.b.position.y });
+  }
+
   remove(list, i) {
     M.Composite.remove(this.world, list[i].b);
     list.splice(i, 1);
@@ -370,6 +396,9 @@ class PhysSim {
       } else if (s.k === "cannon") {
         s.flash = Math.max(0, s.flash - DT * 3);
         if (running && s.shot < (s.n || 3) && t >= (s.delay ?? 0.5) + s.shot * (s.every || 1.2)) s.shot++, this.fire(s);
+      } else if (s.k === "mist" && running) {
+        const due = Math.min(s.n || 6, Math.floor((t - (s.delay ?? 0.5)) / (s.every || 0.9)) + 1);
+        while (t >= (s.delay ?? 0.5) && s.made < due) s.made++, this.spawnGhost(s);
       } else if (s.k === "pipe" && running) {
         const due = Math.min(s.n || 40, Math.floor((t - (s.delay ?? 0.4)) / (s.every || 0.12)) + 1);
         while (t >= (s.delay ?? 0.4) && s.made < due) s.made++, this.drip(s);
@@ -378,7 +407,7 @@ class PhysSim {
     for (const h of this.hazards) if (h.held && t >= h.at) this.release(h);
 
     // Жуки летят к ближайшему герою, покачиваясь; после конца уровня улетают
-    const g = this.engine.gravity.scale;
+    const g = this.engine.gravity.scale * this.engine.gravity.y;
     for (const bug of this.bugs) {
       const b = bug.b;
       let goal = null,
@@ -409,6 +438,32 @@ class PhysSim {
         sp = Math.hypot(v.x, v.y),
         max = 4.6 * bug.speed;
       if (sp > max) Body.setVelocity(b, { x: (v.x / sp) * max, y: (v.y / sp) * max });
+    }
+
+    // Привидения плывут к ближайшему герою, покачиваясь; после конца уровня тают и улетают вверх
+    for (const gh of this.ghosts) {
+      let goal = null,
+        best = Infinity;
+      for (const h of this.heroes) {
+        const d = Math.hypot(h.b.position.x - gh.x, h.b.position.y - gh.y);
+        if (d < best) (best = d), (goal = h.b.position);
+      }
+      let dx = 0,
+        dy = -1;
+      if (goal && running) (dx = goal.x - gh.x), (dy = goal.y - gh.y);
+      const l = Math.hypot(dx, dy) || 1;
+      dx /= l;
+      dy /= l;
+      const wob = Math.sin(t * (gh.fire ? 6 : 3.2) + gh.phase) * (gh.fire ? 0.45 : 0.6);
+      const sp = (gh.fire ? 150 : 105) * gh.speed * (running ? 1 : 1.4);
+      const vx = (dx - dy * wob) * sp,
+        vy = (dy + dx * wob) * sp;
+      // плавный разгон: призрак не дёргается при смене цели
+      gh.vx += (vx - gh.vx) * Math.min(1, DT * 4);
+      gh.vy += (vy - gh.vy) * Math.min(1, DT * 4);
+      gh.x += gh.vx * DT;
+      gh.y += gh.vy * DT;
+      Body.setPosition(gh.b, { x: gh.x, y: gh.y });
     }
 
     // Вентиляторы дуют на всё подвижное над собой
@@ -490,6 +545,19 @@ class PhysSim {
       this.fx.push({ k: "spring", x: body.position.x, y: body.position.y });
     }
 
+    // Подожжённые линии сгорают
+    for (const line of this.lines) {
+      if (line.burn && !line.gone && this.t >= line.burn) {
+        line.gone = true;
+        for (const c of line.cons) M.Composite.remove(this.world, c);
+        M.Composite.remove(this.world, line.b);
+        this.fx.push({ k: "burnt", line });
+      }
+    }
+    for (let i = this.ghosts.length - 1; i >= 0; i--) {
+      const g = this.ghosts[i];
+      if (g.dead || this.t - g.born > 12 || g.y < -120 || g.y > H + 160 || g.x < -200 || g.x > W + 200) this.remove(this.ghosts, i);
+    }
     // Капли и камни живут недолго
     for (let i = this.drops.length - 1; i >= 0; i--) {
       const d = this.drops[i];
@@ -548,11 +616,27 @@ class PhysSim {
       const v = M.Body.getVelocity(a);
       if (Math.hypot(v.x, v.y) > 2) this.fx.push({ k: "knock", x: a.position.x, y: a.position.y, v: Math.hypot(v.x, v.y) });
     }
+    if (ka === "ghost") {
+      const g = this.ghosts.find((x) => x.b === a);
+      if (g && !g.dead && kb === "line") {
+        const line = this.lines.find((l) => l.b === b);
+        if (line && !line.gone) {
+          g.dead = true;
+          this.fx.push({ k: g.fire ? "fizz" : "ghostpoof", x: g.x, y: g.y });
+          if (g.fire) this.ignite(line);
+          return;
+        }
+      }
+    }
     if (!running) return;
     // Попадание в героя
     if (ka === "hero") {
       const h = this.heroes.find((x) => x.b === a);
       if (kb === "bug" || kb === "drop") return this.hurt(h, b, kb === "drop" ? (b.plugin.lava ? "lava" : "wet") : "bug");
+      if (kb === "ghost") {
+        const g = this.ghosts.find((x) => x.b === b);
+        if (g && !g.dead) return this.hurt(h, b, g.fire ? "wisp" : "ghost");
+      }
       if (kb === "rock" || kb === "ball" || kb === "icicle" || kb === "spike") {
         const va = M.Body.getVelocity(a),
           vb = M.Body.getVelocity(b);

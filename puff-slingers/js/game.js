@@ -12,6 +12,27 @@ let scene3d = null;
 let lockQuality = false;
 let slowFrames3d = 0;
 
+// Сколько частиц держит каждая ступень качества: низкая, средняя, высокая
+const FX_MAX = [180, 320, 560];
+
+// Настройка «Графика» из паузы: Авто (по умолчанию) или постоянная ступень 0–2
+function applyGfx() {
+  if (Save.gfx === 'auto') {
+    lockQuality = false;
+    // На слабом устройстве начинаем со средней ступени
+    const weak = (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 3;
+    quality = weak ? 1 : 2;
+  } else {
+    lockQuality = true;
+    quality = Save.gfx;
+  }
+  FX.max = FX_MAX[quality];
+  slowFrames3d = 0;
+  perfTime = 0;
+  perfFrames = 0;
+  if (vw) resize();
+}
+
 // Если 3D сломалось или не тянет, игра продолжается в двумерной отрисовке
 function disable3D(why) {
   if (!scene3d) return;
@@ -140,6 +161,13 @@ function addBot(x, y, r, isMega, opts) {
   }
   b.hp = hp;
   b.maxHp = hp;
+  // Шарики держат бота в воздухе: пока они целы, он неуязвим (щит)
+  if (opts.lift) {
+    b.lift = { n: opts.lift, home: { x: x + levelShift, y }, len: 100 };
+    b.shield = 1;
+    b.hpBar = true;
+    Balloons.lift(b, opts.lift, b.lift.len);
+  }
   b.hitFlash = 0;
   b.scared = 0;
   b.laugh = 0;
@@ -179,7 +207,7 @@ function addGem(x, y) {
   gems.push({ x: x + levelShift, y, taken: false, phase: gems.length * 1.7 });
 }
 
-const LEVEL_KIT = { rock: addRock, jelly: addJelly, portal: addPortal, well: addWell, gem: addGem };
+const LEVEL_KIT = { rock: addRock, jelly: addJelly, portal: addPortal, well: addWell, gem: addGem, hang: (body, n, len) => Balloons.hang(body, n, len) };
 
 function queueX(i) {
   return SLING_X - 74 - i * queueGap;
@@ -209,6 +237,7 @@ function loadLevel(index, opts) {
   wells = [];
   gems = [];
   gemsTaken = 0;
+  Balloons.clear();
   primary = null;
   pull = null;
   drag = null;
@@ -220,6 +249,7 @@ function loadLevel(index, opts) {
   levelOver = false;
   abilityUsed = false;
   shotsFired = 0;
+  bossDownAt = -1;
   score = 0;
   shownScore = 0;
   combo = 0;
@@ -240,6 +270,7 @@ function loadLevel(index, opts) {
   }));
   cfg.build(addBlock, addBot, LEVEL_KIT);
   presettle();
+  Goals.reset(cfg);
 
   const extras = Math.min(levelFails[level], MAX_EXTRA_HEROES);
   queue = cfg.heroes.concat(new Array(extras).fill('rocky'));
@@ -269,7 +300,7 @@ function loadLevel(index, opts) {
     cam.zoom = overview.zoom * 1.28;
     cam.x = (bounds.fortL + bounds.right) / 2 - 20;
     cam.y = baseCamY(cam.zoom);
-    UI.banner(`${t('level')} ${level + 1}`, cfg.name !== undefined ? t('levelNames')[cfg.name] : t('biome')[cfg.biome]);
+    UI.banner(`${t('level')} ${level + 1}`, cfg.name !== undefined ? t('levelNames')[cfg.name] : t('biome')[cfg.biome], false, Goals.text());
     UI.setHint('');
   }
   UI.updateHud();
@@ -376,6 +407,7 @@ function fire() {
   restTimer = 0;
   shotsFired++;
   botsAtTurnStart = bots.length;
+  Goals.onFire();
 
   Sound.launch();
   Sound.voice(type);
@@ -509,6 +541,7 @@ function frostWave(x, y, radius) {
   FX.sparks(x, y, '#e8ffff', 26, 540, 0.6);
   FX.text(x, y - 44, t('wordFrost'), '#c8fff6', 30);
   wakeAll();
+  Balloons.blast(x, y, radius);
   blocks.forEach((b) => {
     if (b.mat === 'ice' || b.mat === 'boom') return;
     if (Math.hypot(b.position.x - x, b.position.y - y) > radius + Math.max(b.w, b.h) * 0.3) return;
@@ -555,6 +588,7 @@ function detonateHero(h, radius) {
 // =====================================================
 function blastBodies(x, y, radius, kick, dmg, source) {
   wakeAll();
+  Balloons.blast(x, y, radius);
   blocks.concat(bots).forEach((b) => {
     if (b.dead) return;
     const dx = b.position.x - x;
@@ -576,9 +610,15 @@ function blastBodies(x, y, radius, kick, dmg, source) {
 
 let boomWordT = 0;
 
+// Ударная волна: в 3D кадр на миг «плывёт» кольцом от центра взрыва
+function shockwave(x, y, k) {
+  if (scene3d && Save.shake) scene3d.shock(x, GROUND_Y - y, k);
+}
+
 function explode(x, y, radius, kick, dmg) {
   Sound.explosion();
   addTrauma(0.72);
+  shockwave(x, y, clamp(radius / 190, 0.5, 1.2));
   cam.punch = Math.max(cam.punch, 0.05);
   hitStopMs = Math.max(hitStopMs, 55);
   UI.screenFlash();
@@ -615,6 +655,10 @@ function damage(b, dmg, attacker) {
   }
   if (b.label === 'bot') {
     if (b.shieldT > 0) return;
+    if (b.lift && b.lift.n > 0) {
+      liftBounce(b, dmg);
+      return;
+    }
     if (b.shield > 0) {
       if (dmg >= 6) popShield(b);
       return;
@@ -648,7 +692,8 @@ function bossRage(b) {
   if (b.dead) return;
   const { x, y } = b.position;
   b.shield = 1;
-  b.hover.speed *= 1.25;
+  if (b.lift) bossRelift(b);
+  else b.hover.speed *= 1.25;
   Sound.bossRage();
   addTrauma(0.5);
   FX.ring(x, y, b.circleRadius * 3, '#ff5470', 12, 0.45);
@@ -661,6 +706,65 @@ function bossRage(b) {
   });
   helper.hitFlash = 1;
   FX.flash(helper.position.x, helper.position.y, 70, '#ffffff');
+}
+
+// ---------- Гигабот на шариках ----------
+let liftWordT = 0;
+// Удар по боссу, пока шарики целы: отскок и подсказка «Лопни шарики!»
+function liftBounce(b, dmg) {
+  if (dmg < 6) return;
+  b.hitFlash = 1;
+  const { x, y } = b.position;
+  FX.ring(x, y, b.circleRadius * 2.4, '#9be8ff', 7, 0.28);
+  FX.sparks(x, y, '#bff4ff', 8, 300, 0.35);
+  if (liftWordT <= 0) {
+    FX.text(x, y - b.circleRadius - 30, t('wordBalloonsFirst'), '#ffffff', 24, 1.1);
+    liftWordT = 1.4;
+  }
+  Sound.shieldPop();
+}
+
+// Последний шарик лопнул: босс без щита падает на свою крепость
+function bossLiftLost(b) {
+  if (!b.lift || b.dead) return;
+  b.lift.n = Math.max(0, b.lift.n - 1);
+  if (b.lift.n > 0) return;
+  b.hover = null;
+  b.sleepThreshold = 50;
+  b.shield = 0;
+  Sleeping.set(b, false);
+  wakeAll();
+  Body.setVelocity(b, { x: 0, y: 2 });
+  const { x, y } = b.position;
+  Sound.shieldPop();
+  addTrauma(0.3);
+  FX.ring(x, y, b.circleRadius * 3, '#ffffff', 10, 0.4);
+  FX.text(x, y - b.circleRadius - 40, t('wordFall'), '#ffd23f', 34, 1.2);
+  if (slowmoT <= 0) slowmo(0.5, 0.45);
+  cam.focus = { x, y: y + 60, zoom: overview.flightZoom, t: 1.1 };
+}
+
+// Ярость: босс надувает два новых шарика и снова взлетает к себе домой
+function bossRelift(b) {
+  b.lift.n = 2;
+  b.shield = 1;
+  b.sleepThreshold = Infinity;
+  Sleeping.set(b, false);
+  b.hover = { x: b.lift.home.x, y: b.lift.home.y - 10, ax: 40, ay: 18, speed: 0.62, phase: 0, t: 0 };
+  Balloons.lift(b, 2, b.lift.len);
+  FX.text(b.position.x, b.position.y - b.circleRadius - 70, t('wordInflate'), '#ff9ae0', 28, 1.2);
+}
+
+// Пыльная волна от тяжёлого обломка у земли
+function dustWave(x, size) {
+  const n = quality > 0 ? 6 : 3;
+  for (let i = 0; i < n; i++) {
+    const side = i % 2 ? 1 : -1;
+    FX.add({
+      k: 'smoke', x: x + side * (8 + i * 6), y: GROUND_Y - 8, vx: side * (90 + Math.random() * 120), vy: -20 - Math.random() * 30, g: -10, drag: 0.95,
+      ttl: 0.9 + Math.random() * 0.5, s0: size * 0.18, s1: size * 0.5, c: '#e6d6bc', a: 0.6
+    });
+  }
 }
 
 let collapseCount = 0;
@@ -690,6 +794,9 @@ function killBlock(b) {
   addTrauma(clamp(size / 900, 0.04, 0.14));
   // Очки за блоки считаются молча: при обрушении цифры закрывали бы всё действие
   addScore(b.piece ? Math.round(m.pts / 3) : m.pts);
+  Goals.onBlock(b, b.piece ? Math.round(m.pts / 3) : m.pts);
+  // Тяжёлый обломок у земли поднимает облако пыли в обе стороны
+  if (y > GROUND_Y - 90 && size >= 60) dustWave(x, size);
   if (b.mat === 'boom') {
     later(55 + Math.random() * 60, () => explode(x, y, 175, 17, 85));
   } else if (!b.piece && size >= 110 && b.mat !== 'steel') {
@@ -742,11 +849,13 @@ function killBot(b) {
   combo = comboTimer > 0 ? combo + 1 : 1;
   comboTimer = 1.5;
   lastKill = { x, y };
+  Goals.onBot();
   if (b.volatile) later(70 + Math.random() * 70, () => explode(x, y, 150, 15, 90));
   if (b.isBoss) {
     for (let i = 0; i < 4; i++) {
       later(130 + i * 170, () => explode(x + (Math.random() - 0.5) * 120, y + (Math.random() - 0.5) * 120, 110, 6, 30));
     }
+    bossDefeated(x, y);
   }
 
   Sound.botDown(combo - 1);
@@ -772,6 +881,21 @@ function killBot(b) {
   queueCheer();
 }
 
+// Финал боя с боссом: замедление, белая вспышка, золотые кольца, звёзды и конфетти
+let bossDownAt = -1;
+function bossDefeated(x, y) {
+  slowmo(1.6, 0.22);
+  hitStopMs = Math.max(hitStopMs, 120);
+  UI.screenFlash(true);
+  shockwave(x, y, 1.6);
+  cam.punch = Math.max(cam.punch, 0.09);
+  [0, 1, 2, 3].forEach((i) => later(i * 140, () => FX.ring(x, y, 160 + i * 90, i % 2 ? '#ffd23f' : '#ffffff', 9 - i * 2, 0.6)));
+  for (let i = 0; i < 26; i++) FX.star(x, y, i % 3 ? '#ffd23f' : '#ffffff');
+  FX.confetti(x, y - 40, quality > 0 ? 90 : 40, 260, 420);
+  bossDownAt = simSteps;
+  Sound.bossDown();
+}
+
 let cheerT = 0;
 function queueCheer() {
   cheerT = 1.1;
@@ -779,6 +903,7 @@ function queueCheer() {
 
 function addScore(pts, x, y, color, size) {
   score += pts;
+  Goals.onScore();
   // Небольшой разброс, чтобы числа при цепной реакции не слипались
   if (x !== undefined) FX.text(x + (Math.random() - 0.5) * 44, y + (Math.random() - 0.5) * 16, `+${pts}`, color, size);
 }
@@ -985,6 +1110,7 @@ function stepSim() {
   engine.timing.timeScale = slowmoT > 0 ? slowmoScale : 1;
   Engine.update(engine, STEP_MS);
   flushRemovals();
+  Balloons.step();
   for (let i = 0; i < bots.length; i++) {
     if (bots[i].shieldT > 0) bots[i].shieldT -= STEP_MS / 1000;
     if (bots[i].frozenT > 0) bots[i].frozenT -= STEP_MS / 1000;
@@ -1169,6 +1295,7 @@ function updateTurn() {
 function updateSettle() {
   settleTimer++;
   const calm = worldCalm();
+  if ((calm && settleTimer > 10) || settleTimer > 60) Goals.maybeBonus();
   if (queue.length > 0) {
     if ((calm && settleTimer > 14) || settleTimer > 70) takeNextHero(false);
   } else if ((calm && settleTimer > 30) || settleTimer > 260) {
@@ -1186,10 +1313,30 @@ function startWin() {
   drag = null;
   UI.setHint('');
   if (lastKill) cam.focus = { x: lastKill.x, y: lastKill.y, zoom: overview.zoom * 1.22, t: 0.95 };
-  slowmo(0.8, 0.28);
-  UI.banner(t('clear'), '', true);
+  if (slowmoT <= 0) slowmo(0.8, 0.28);
+  if (lastKill) {
+    shockwave(lastKill.x, lastKill.y, 0.9);
+    FX.ring(lastKill.x, lastKill.y, 220, '#fff2a8', 10, 0.5);
+  }
+  // Победа над боссом — свой заголовок вместо «Зачищено!»
+  UI.banner(bossDownAt >= 0 && simSteps - bossDownAt < 600 ? t('wordBossDown') : t('clear'), '', true);
   Sound.win();
   later(240, () => FX.confetti(cam.x, cam.y - vh / 2 / cam.zoom, quality > 0 ? 70 : 34, vw / cam.zoom, 120));
+  // Хлопушки снизу по краям кадра
+  later(420, () => {
+    const half = vw / 2 / cam.zoom;
+    const gy = Math.min(GROUND_Y, cam.y + vh / 2 / cam.zoom) - 10;
+    [-1, 1].forEach((s) => {
+      for (let i = 0; i < (quality > 0 ? 40 : 18); i++) {
+        FX.add({
+          k: 'confetti', x: cam.x + s * half * 0.92, y: gy, vx: -s * (120 + Math.random() * 260), vy: -(380 + Math.random() * 360), g: 320, drag: 0.985,
+          ttl: 2 + Math.random() * 1.2, w: 5 + Math.random() * 6, h: 3 + Math.random() * 5, rot: Math.random() * TAU, vr: (Math.random() - 0.5) * 12,
+          phase: Math.random() * TAU, c: ['#ff2e88', '#ffd23f', '#29f3ff', '#7cff5c', '#b78cff', '#ffffff'][i % 6]
+        });
+      }
+    });
+    Sound.pops();
+  });
   later(1000, runBonus);
 }
 
@@ -1222,12 +1369,19 @@ function finishLevel(win, bonus) {
     const stars = used <= cfg.par ? 3 : used <= cfg.par + 1 ? 2 : 1;
     const before = Save.best[level] || 0;
     const newBest = score > before;
+    const pointsBefore = trailPoints();
     Save.gems[level] = Math.max(Save.gems[level], gemsTaken);
+    const medal = Goals.finish(true);
     Save.recordWin(level, stars, score);
-    UI.showResult({ win: true, stars, score, bonus, newBest, level });
+    const trails = TRAILS.map((tr, i) => i).filter((i) => TRAILS[i].need > pointsBefore && TRAILS[i].need <= trailPoints());
+    if (trails.length) {
+      Save.newTrail = true;
+      Platform.requestSave();
+    }
+    UI.showResult({ win: true, stars, score, bonus, newBest, level, medal, trails });
   } else {
     levelFails[level]++;
-    UI.showResult({ win: false, stars: 0, score, bonus: 0, newBest: false, level });
+    UI.showResult({ win: false, stars: 0, score, bonus: 0, newBest: false, level, medal: { earned: false } });
   }
 }
 
@@ -1263,7 +1417,8 @@ function setPull(dx, dy) {
 
 function showHeroHint() {
   // На обучении подсказка про способность только отвлекала бы от первого выстрела
-  UI.setHint(showTutorial ? '' : heroHint(slingHero.type));
+  if (Balloons.total && !Save.seen.balloons) UI.setHint(t('balloonHint'));
+  else UI.setHint(showTutorial ? '' : heroHint(slingHero.type));
 }
 
 function skipIntro() {
@@ -1494,6 +1649,9 @@ function updateVisuals(dt) {
   comboTimer = Math.max(0, comboTimer - dt);
   collapseT = Math.max(0, collapseT - dt);
   boomWordT = Math.max(0, boomWordT - dt);
+  liftWordT = Math.max(0, liftWordT - dt);
+  Balloons.update(dt);
+  UI.tickMeter(dt);
   cheerT = Math.max(0, cheerT - dt);
   aimIdle = phase === 'aim' && !pull ? aimIdle + dt : 0;
   if (tapPrompt > 0) tapPrompt = Math.max(0, tapPrompt - dt);
@@ -1589,9 +1747,10 @@ function updateVisuals(dt) {
   perfFrames++;
   if (perfTime >= 1.2) {
     const frame = perfTime / perfFrames;
-    if (frame > 0.026 && quality > 0 && !lockQuality) {
+    // Ниже ~45 кадров в секунду — ступенькой ниже (настройка «Авто»)
+    if (frame > 0.0225 && quality > 0 && !lockQuality) {
       quality--;
-      FX.max = quality === 0 ? 180 : 300;
+      FX.max = FX_MAX[quality];
       resize();
     } else if (scene3d && quality === 0 && frame > 0.045 && !lockQuality) {
       // Даже самые простые настройки не тянут: лучше плавная двумерная картинка
@@ -1612,8 +1771,9 @@ function drawTrail(h) {
   const tr = h.trail;
   const n = tr.length / 2;
   if (n < 2) return;
-  const color = HEROES[h.heroType].trail;
-  const sprite = softSprite(color);
+  // Выбранный след: в двумерной версии меняется только цвет
+  const style = trailStyle();
+  const color = style === 'gold' ? '#ffc21f' : style === 'fire' ? '#ff7a1a' : style === 'bubbles' ? '#7ef9ff' : style === 'stars' ? '#ffe14d' : HEROES[h.heroType].trail;
   const r = h.circleRadius;
   ctx.globalCompositeOperation = 'lighter';
   const boost = h.dashT > 0 ? 1.6 : 1;
@@ -1621,11 +1781,18 @@ function drawTrail(h) {
   for (let i = 0; i < n; i += stride) {
     const k = i / n;
     const s = r * (0.5 + k * 1.5) * boost;
+    const sprite = softSprite(style === 'rainbow' ? RAINBOW[(i + Math.floor(time * 20)) % RAINBOW.length] : color);
     ctx.globalAlpha = k * k * 0.72;
     ctx.drawImage(sprite, tr[i * 2] - s, tr[i * 2 + 1] - s, s * 2, s * 2);
   }
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
+}
+
+// След за пуфом, выбранный в «Следах» (если он ещё открыт)
+const RAINBOW = ['#ff3d3d', '#ff9a1f', '#ffe14d', '#7cff5c', '#29d8ff', '#5b7bff', '#c58cff'];
+function trailStyle() {
+  return TRAILS[trailOpen(Save.trail) ? Save.trail : 0].id;
 }
 
 function pouchPos() {
@@ -1749,6 +1916,21 @@ function drawAim() {
     }
   });
   ctx.globalAlpha = 1;
+  // Шарики на пути пуфа обведены: видно, что они лопнут
+  if (Balloons.list.length) {
+    Balloons.crossed(pull.x, pull.y, slingHero.r);
+    if (scene3d) {
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 3 / clamp(cam.zoom, 0.5, 1.2);
+      ctx.setLineDash([7, 6]);
+      Balloons.marked.forEach((bl) => {
+        ctx.beginPath();
+        ctx.arc(Balloons.cx(bl) + Balloons.sway(bl, time), Balloons.cy(bl), BALLOON_R + 10 + Math.sin(time * 9) * 2, 0, TAU);
+        ctx.stroke();
+      });
+      ctx.setLineDash([]);
+    }
+  }
   // Метка попадания: сразу видно, что выстрел придётся в бота
   if (hit && hit.label === 'bot') {
     const pulse = 0.5 + 0.5 * Math.sin(time * 10);
@@ -2014,6 +2196,7 @@ function render(dt) {
     drawPortal(ctx, p.b.x, p.b.y, time, '#ff9a1f', -1);
   });
   rocks.forEach((q) => drawRock(ctx, q, cfg.biome, time));
+  Balloons.draw2D(ctx, time);
   blocks.forEach((b) => drawBlock(ctx, b, time));
   orbs.forEach((o) => drawOrb(ctx, o, time));
   bots.forEach((b) => drawBot(ctx, b, time));

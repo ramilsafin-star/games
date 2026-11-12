@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#5fb4f0">
   <title>Вихрь</title>
-  <meta name="description" content="3D-аркада: управляй мультяшным вихрем, втягивай куриц, машины и дома и стань самым большим вихрем раунда.">
+  <meta name="description" content="3D-аркада: управляй мультяшным вихрем, втягивай куриц, машины и дома, хватай бонусы, победи Урагана-великана и продержись в «Буре».">
   <link rel="icon" href="./icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="./icon-180.png">
-  <script src="./vendor/vk/vk-bridge.min.js?v=aa0c23d8"></script>
-    <script src="./js/vk-host.js?v=aa0c23d8" data-keys="vihr-v1" data-ad-gap="120"></script>
-    <link rel="stylesheet" href="./style.css?v=aa0c23d8">
+  <script src="./vendor/vk/vk-bridge.min.js?v=935ab875"></script>
+    <script src="./js/vk-host.js?v=935ab875" data-keys="vihr-v1" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=935ab875">
 <style>
 html.vk-banner { --bottom: max(24px, env(safe-area-inset-bottom)); }
 @media (max-height: 360px) { html.vk-banner #record { display: none; } }
@@ -23,9 +23,11 @@ html.vk-banner { --bottom: max(24px, env(safe-area-inset-bottom)); }
   <header class="top">
     
     <div class="wallet menu-only" aria-label="Монеты"><span class="coin"></span><b data-coins>0</b></div>
+    <button id="quests" class="pill quests menu-only" aria-label="Задания дня"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg><span id="quests-text">Задания</span><i id="quests-dot" hidden></i></button>
     <div id="timer" class="pill play-only"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg><b id="time">2:00</b></div>
     <div id="me" class="pill me play-only">1 место</div>
     <div class="tools">
+      <button class="round menu-only" id="settings" aria-label="Настройки графики"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.6M12 18.6v2.6M21.2 12h-2.6M5.4 12H2.8M18.5 5.5l-1.8 1.8M7.3 16.7l-1.8 1.8M18.5 18.5l-1.8-1.8M7.3 7.3L5.5 5.5"/></svg></button>
       <button class="round" id="sound" aria-label="Звук" aria-pressed="true"><svg class="on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12"/></svg><svg class="off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 9.5l5 5M21.5 9.5l-5 5"/></svg></button>
       <button class="round play-only" id="pause" aria-label="Пауза"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg></button>
     </div>
@@ -45,6 +47,10 @@ html.vk-banner { --bottom: max(24px, env(safe-area-inset-bottom)); }
         <div class="map-info"><b id="map-name">Ферма</b><small id="map-note"></small><div id="map-num" class="dots" aria-hidden="true"></div></div>
         <button id="next-map" class="arrow" aria-label="Следующая карта">›</button>
       </div>
+      <div class="modes" id="modes" role="radiogroup" aria-label="Режим">
+        <button data-mode="0" role="radio">Классика</button>
+        <button data-mode="1" role="radio">Буря<small>круг сужается</small></button>
+      </div>
       <button id="play" class="primary big">Играть</button>
       <div class="pair">
         <button id="open-upgrades" class="ghost">Улучшения</button>
@@ -61,7 +67,9 @@ html.vk-banner { --bottom: max(24px, env(safe-area-inset-bottom)); }
     <div id="next"></div>
     <div id="arrows"></div>
     <div id="stick" hidden><i id="knob"></i></div>
+    <div id="pw"></div>
   </section>
+  <div id="flash" aria-hidden="true"></div>
   <div id="say" aria-live="polite"></div>
   <div id="toast" aria-live="polite"></div>
   <div id="hint" hidden></div>
@@ -74,6 +82,6 @@ html.vk-banner { --bottom: max(24px, env(safe-area-inset-bottom)); }
     <div class="sheet" id="panel-body"></div>
   </section>
 
-  <script type="module" src="./js/boot.js?v=aa0c23d8"></script>
+  <script type="module" src="./js/boot.js?v=935ab875"></script>
 </body>
 </html>

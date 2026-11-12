@@ -260,3 +260,82 @@ body.top .ink .bar b { top: 0; bottom: 0; width: 3px; }
   .map-body { top: calc(var(--st) + 104px); }
   .total { display: none; }
 }
+
+/* ---------- Светлячки, Мастерская, награды, задача дня (Лунная роща и мета) ---------- */
+.fly-ico { display: inline-block; width: 12px; height: 12px; margin: 0 4px -1px 0; border-radius: 50%; vertical-align: baseline;
+  background: radial-gradient(circle at 40% 40%, #fff 0 18%, #fff36a 32%, #e6c21a 70%); box-shadow: 0 0 6px 2px rgba(255,236,120,.85), 0 0 0 2px var(--ink); }
+.fly-ico.big { width: 22px; height: 22px; margin-right: 8px; vertical-align: -4px; animation: glow 1.2s ease-in-out infinite; }
+@keyframes glow { 50% { box-shadow: 0 0 14px 6px rgba(255,236,120,.95), 0 0 0 2px var(--ink); } }
+.bump { display: inline-block; animation: bump .7s cubic-bezier(.3,1.9,.5,1) .55s both; }
+@keyframes bump { from { transform: scale(0) translateY(10px); opacity: 0; } }
+#gear { position: fixed; z-index: 30; top: calc(var(--st) + 56px); right: var(--sr); }
+#gear svg { stroke-width: 2.2; }
+body:not([data-screen="menu"]):not([data-screen="map"]) #gear { display: none; }
+body[data-screen="map"] #gear { top: auto; bottom: var(--sb); }
+.menu-extra { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.btn.tile { min-height: 48px; padding: 4px 6px; font-size: 13px; gap: 5px; border-radius: 14px; box-shadow: 0 4px 0 var(--ink); justify-content: flex-start; text-align: left; line-height: 1.05; }
+.btn.tile svg { width: 20px; height: 20px; flex: none; }
+.btn.tile small { font-size: 11px; margin-top: 2px; white-space: nowrap; }
+.btn.tile .fly-ico { width: 9px; height: 9px; }
+#daily { background: #fff3c4; }
+#daily.done { background: #dff6e8; }
+.flyhud { position: absolute; right: -9px; bottom: -8px; width: 22px; height: 22px; display: grid; place-items: center; background: var(--paper); border: 2px solid var(--ink); border-radius: 50%; }
+.flyhud .fly-ico { width: 10px; height: 10px; margin: 0; filter: grayscale(1) brightness(1.3); opacity: .45; box-shadow: 0 0 0 2px var(--ink); }
+.flyhud.on .fly-ico, .flyhud.old .fly-ico { filter: none; opacity: 1; box-shadow: 0 0 8px 3px rgba(255,236,120,.9), 0 0 0 2px var(--ink); }
+.flyhud.on { animation: star .5s cubic-bezier(.3,1.8,.5,1); background: #fff6c8; }
+#hint.nudge { background: var(--sun); animation: pulse 1.2s ease-in-out infinite; }
+.lvl.daily { background: var(--sun); }
+.lv .fl { position: absolute; top: 5px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: #d8d4ea; box-shadow: 0 0 0 2px #b8b2d6; }
+.lv .fl.on { background: #fff36a; box-shadow: 0 0 6px 2px rgba(255,230,90,.9), 0 0 0 2px var(--ink); }
+.lv:disabled .fl { display: none; }
+.flyline { font-weight: 900 !important; color: var(--ink) !important; }
+.flyline.got { font-size: 18px !important; }
+.flyline:not(.got) { font-size: 13px !important; color: var(--ink-soft) !important; }
+.award { margin: 6px 0 !important; padding: 6px 10px; border-radius: 12px; background: #fff3c4; border: 2px dashed #d8a520; color: var(--ink) !important; }
+.streak { font-weight: 900 !important; color: var(--coral-d) !important; }
+.card .note { font-size: 13px; }
+.shop-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; }
+.wallet { font-weight: 950; font-size: 20px; padding: 6px 12px; border: 3px solid var(--ink); border-radius: 14px; background: #fff6c8; box-shadow: 0 3px 0 var(--ink); white-space: nowrap; }
+.tabs, .seg { display: flex; gap: 6px; margin: 8px 0; }
+.tabs button, .seg button { flex: 1; min-height: 38px; border: 3px solid var(--ink); border-radius: 12px; background: #fff; font-weight: 900; font-size: 14px; box-shadow: 0 3px 0 var(--ink); }
+.tabs button.on, .seg button.on { background: var(--sun); }
+.items { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.item { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 4px 8px; border: 3px solid #d8d2ee; border-radius: 16px; background: #fff; }
+.item.on { border-color: var(--ink); background: #fff6dc; }
+.item b { font-size: 13px; }
+.item canvas { width: 96px; max-width: 100%; height: auto; aspect-ratio: 4 / 3; }
+.btn.mini { min-height: 32px; padding: 0 8px; font-size: 13px; border-radius: 11px; box-shadow: 0 3px 0 var(--ink); }
+.tag { font-size: 12px; font-weight: 900; padding: 6px 8px; border-radius: 10px; background: var(--mint); color: #fff; }
+.achs { display: grid; gap: 6px; margin-top: 8px; text-align: left; }
+.ach { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 14px; background: #fff; border: 2px solid #e3def4; }
+.ach.on { background: #eafbf1; border-color: #8fd8b0; }
+.ach .medal { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: #e6e2f6; font-weight: 950; font-size: 13px; }
+.ach.on .medal { background: var(--mint); color: #fff; }
+.ach .what { flex: 1; min-width: 0; }
+.ach .what b { display: block; font-size: 14px; }
+.ach .what small { display: block; font-size: 12px; font-weight: 700; color: var(--ink-soft); }
+.ach .bar { display: block; height: 6px; margin-top: 4px; border-radius: 4px; background: #ece8f8; overflow: hidden; }
+.ach .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--sun), var(--coral)); }
+.ach .rew { flex: none; font-weight: 950; font-size: 13px; text-align: right; }
+.ach .rew small { display: block; font-size: 11px; color: var(--ink-soft); }
+@media (max-height: 520px) {
+  .menu-extra { margin-top: 8px; gap: 6px; }
+  .btn.tile { min-height: 40px; font-size: 12px; }
+  .btn.tile small { font-size: 10px; }
+  .btn.tile svg { width: 16px; height: 16px; }
+  #gear { top: calc(var(--st) + 50px); }
+  .items { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .item canvas { width: 72px; }
+}
+@media (max-width: 640px) and (orientation: portrait) {
+  .map-body { top: calc(var(--st) + 140px); }
+  .items { grid-template-columns: repeat(2, 1fr); }
+}
+/* узкий экран боком: у невыбранных глав — только номер, чтобы все семь вкладок помещались */
+@media (max-width: 960px) and (orientation: landscape) {
+  .chapters button:not([aria-selected="true"]) .nm { display: none; }
+  .chapters button { flex: 0 0 auto; min-width: 40px; }
+}
+#play { flex-direction: column; gap: 0; line-height: 1.05; }
+#play small { font-size: 13px; opacity: .9; }
+.award .bump { margin-left: 8px; white-space: nowrap; }

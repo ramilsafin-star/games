@@ -122,7 +122,17 @@ function startSea() {
   windGain.gain.value = 0.0001;
   src.connect(filter).connect(windGain).connect(out);
   src.start(0, Math.random());
+  // дождь: шелест, молчит, пока нет грозы
+  const rainSrc = noiseSource(ctx);
+  const hp = ctx.createBiquadFilter();
+  hp.type = "highpass";
+  hp.frequency.value = 2400;
+  rainGain = ctx.createGain();
+  rainGain.gain.value = 0.0001;
+  rainSrc.connect(hp).connect(rainGain).connect(out);
+  rainSrc.start(0, Math.random());
 }
+let rainGain = null;
 
 // Нота музыкальной шкатулки: чистый тон с быстрым звонким призвуком.
 function chime(f, t, v, d = 1.7) {
@@ -352,6 +362,62 @@ export const Sound = {
   },
   win() {
     [74, 78, 81, 86, 81, 86, 90, 93].forEach((m, i) => tone(midi(m), 0.6, { v: 0.07, delay: i * 0.14 }));
+  },
+  // гроза: шелест дождя то нарастает, то стихает
+  rain(on) {
+    const a = live();
+    if (!a || !rainGain) return;
+    const t = a.currentTime;
+    rainGain.gain.cancelScheduledValues(t);
+    rainGain.gain.setValueAtTime(Math.max(0.0001, rainGain.gain.value), t);
+    rainGain.gain.exponentialRampToValueAtTime(on ? 0.05 : 0.0001, t + (on ? 2 : 1.2));
+  },
+  // гром — мягкий и далёкий, без резкого треска (игра для детей)
+  thunder() {
+    noise(0.25, 0.05, 2600, 900, { type: "bandpass", q: 0.8 });
+    noise(2.4, 0.16, 420, 60, { delay: 0.35 });
+    tone(55, 1.8, { to: 38, v: 0.07, type: "triangle", delay: 0.4, attack: 0.2 });
+  },
+  task() {
+    [81, 85, 88, 93].forEach((m, i) => tone(midi(m), 0.35, { v: 0.07, type: "triangle", delay: i * 0.08 }));
+    tone(midi(100), 0.5, { v: 0.03, delay: 0.32 });
+  },
+  findUp() {
+    blip(700, 0, 0.04);
+    blip(900, 0.08, 0.04);
+  },
+  find(kind) {
+    if (kind === "bottle") {
+      tone(1046, 0.12, { v: 0.06 });
+      tone(1568, 0.25, { v: 0.05, delay: 0.08 });
+      tone(2093, 0.3, { v: 0.03, delay: 0.16 });
+    } else if (kind === "buoy") {
+      [74, 81, 86].forEach((m, i) => tone(midi(m), 0.8, { v: 0.05, delay: i * 0.06 }));
+    } else {
+      tone(midi(93), 0.2, { v: 0.05 });
+      tone(midi(98), 0.4, { v: 0.05, delay: 0.1 });
+    }
+  },
+  // кит-фонарик: добрый низкий «у-у-у»
+  whale() {
+    tone(220, 1.1, { to: 330, v: 0.06, type: "triangle", attack: 0.25, cutoff: 900 });
+    tone(330, 0.9, { to: 262, v: 0.04, type: "triangle", attack: 0.2, delay: 0.9, cutoff: 900 });
+  },
+  spout() {
+    noise(1.1, 0.12, 400, 5000, { type: "bandpass", q: 0.6 });
+    [74, 78, 81, 86, 90, 93].forEach((m, i) => tone(midi(m), 0.6, { v: 0.05, delay: 0.2 + i * 0.06 }));
+  },
+  // салют над деревней на победе ночи
+  fireworks() {
+    for (let i = 0; i < 5; i++) {
+      const at = 0.25 + i * 0.32 + Math.random() * 0.1;
+      tone(300 + Math.random() * 200, 0.3, { to: 1200, v: 0.02, delay: at });
+      noise(0.35, 0.07, 3000, 500, { delay: at + 0.3 });
+      tone(midi(86 + (i % 3) * 4), 0.4, { v: 0.03, delay: at + 0.32 });
+    }
+  },
+  buy() {
+    [88, 93, 97, 100].forEach((m, i) => tone(midi(m), 0.25, { v: 0.06, delay: i * 0.06 }));
   },
   pick() {
     tone(660, 0.1, { v: 0.07, type: "triangle" });

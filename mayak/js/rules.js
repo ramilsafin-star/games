@@ -51,18 +51,44 @@ export const UPGRADES = {
 // ---------- Ночи ----------
 // boats: «секунда:лодки» через пробел, лодки одной волны — через запятую. shades — так же.
 // gusts — секунды, когда налетает порыв. fog — полоса тумана на всю ночь.
+// rain — гроза: дождь гасит фонарики быстрее, а молнии на миг освещают всю бухту.
+// whales — секунды, когда через бухту плывёт кит-фонарик. finds — сколько находок всплывёт за ночь.
+// tasks — три задания ночи (за каждое — ракушки): stars3 — все лодки дома, pop:N — лопни N теней,
+// streak:N — N лодок подряд, finds:N — подбери N находок, noflash — без вспышки, whale — разбуди кита, score:N — очки.
 export const NIGHTS = [
-  { name: "Тихая ночь", ridges: 2, cover: 0.36, boats: "1.5:row 18:row 30:sail 41:row 49:sail", shades: "34:blob" },
-  { name: "Первая вспышка", ridges: 2, cover: 0.45, boats: "1:sail 9:row 18:sail 25:row 35:sail,row 46:sail 53:row", shades: "14:blob 31:blob 44:blob" },
-  { name: "Туманная ночь", ridges: 3, cover: 0.45, fog: true, boats: "1:sail 8:row 16:speed 23:sail 31:row,sail 41:speed 49:sail 55:row", shades: "13:blob 28:blob 44:blob" },
-  { name: "Ветреная ночь", ridges: 3, cover: 0.52, gusts: "21 44", boats: "1:sail,row 11:speed 19:sail 27:row,sail 37:speed 45:sail,row 55:sail", shades: "8:blob 17:blob 26:blob 34:blob 42:blob 51:blob" },
-  { name: "Ночной паром", ridges: 3, cover: 0.62, boats: "1:ferry 8:sail 15:row 22:speed,sail 31:ferry 39:sail,row 48:speed 54:sail,row", shades: "8:blob 14:blob 20:blob 26:blob,blob 33:blob 39:blob 45:blob,blob 52:blob" },
-  { name: "Гирлянда", ridges: 3, cover: 0.66, gusts: "36", boats: "1:lamp,row 8:sail 14:speed 20:sail,row 27:lamp 33:speed,sail 40:speed 46:row,sail 52:speed,sail", shades: "6:blob 11:dart 16:blob 21:dart,blob 27:blob 32:dart 37:blob,dart 43:blob 48:dart,blob 54:blob" },
-  { name: "Туман и ветер", ridges: 4, cover: 0.62, fog: true, gusts: "18 44", boats: "1:sail,sail 7:speed 12:row 17:ferry 23:sail,speed 29:lamp 34:speed,sail 40:sail 45:row,speed 51:sail,speed", shades: "5:blob 10:dart 15:blob 20:blob,dart 26:blob 31:dart 36:blob,blob 42:dart 47:blob,dart 53:blob 57:dart" },
-  { name: "Большая тень", ridges: 4, cover: 0.64, gusts: "30 52", boats: "1:ferry,sail 7:speed 12:row,sail 18:lamp,speed 24:sail 29:speed,sail 35:ferry 40:speed,row 46:sail 51:lamp,speed", shades: "5:blob 9:big 14:dart 19:blob,blob 24:dart 28:big 33:blob,dart 38:blob 42:big,dart 47:blob 51:dart 55:blob,dart" },
-  { name: "Караван", ridges: 4, cover: 0.7, fog: true, gusts: "23 46", boats: "1:sail,sail,row 9:speed 14:lamp 19:sail,speed 25:ferry 30:speed 35:sail,sail 41:speed,lamp 47:sail 52:speed,row", shades: "4:blob 9:dart 14:blob,blob 19:big 24:dart 28:blob,dart 33:blob 37:big 41:blob,dart 46:blob 50:big 54:dart 58:blob" },
-  { name: "Большой шторм", ridges: 4, cover: 0.76, fog: true, gusts: "13 28 42 56", boats: "1:sail,row 7:speed 11:ferry 16:sail,lamp 22:speed,speed 27:sail 31:ferry,sail 37:speed 41:lamp,speed 46:sail,sail 51:speed 55:sail,row", shades: "4:blob 8:dart 12:blob,blob 16:big 20:dart 24:blob,dart 28:big 32:dart,blob 36:blob 40:big,dart 44:blob 48:blob,dart 52:big 56:dart,blob 59:blob" },
+  { name: "Тихая ночь", ridges: 2, cover: 0.36, finds: 1, tasks: "stars3 pop:1 streak:3", boats: "1.5:row 18:row 30:sail 41:row 49:sail", shades: "34:blob" },
+  { name: "Первая вспышка", ridges: 2, cover: 0.45, tasks: "stars3 pop:3 finds:1", boats: "1:sail 9:row 18:sail 25:row 35:sail,row 46:sail 53:row", shades: "14:blob 31:blob 44:blob" },
+  { name: "Туманная ночь", ridges: 3, cover: 0.45, fog: true, tasks: "streak:5 pop:3 finds:2", boats: "1:sail 8:row 16:speed 23:sail 31:row,sail 41:speed 49:sail 55:row", shades: "13:blob 28:blob 44:blob" },
+  { name: "Ветреная ночь", ridges: 3, cover: 0.52, gusts: "21 44", tasks: "stars3 pop:5 finds:2", boats: "1:sail,row 11:speed 19:sail 27:row,sail 37:speed 45:sail,row 55:sail", shades: "8:blob 17:blob 26:blob 34:blob 42:blob 51:blob" },
+  { name: "Ночной паром", ridges: 3, cover: 0.62, tasks: "streak:6 pop:8 noflash", boats: "1:ferry 8:sail 15:row 22:speed,sail 31:ferry 39:sail,row 48:speed 54:sail,row", shades: "8:blob 14:blob 20:blob 26:blob,blob 33:blob 39:blob 45:blob,blob 52:blob" },
+  { name: "Гирлянда", ridges: 3, cover: 0.66, gusts: "36", tasks: "stars3 pop:9 finds:3", boats: "1:lamp,row 8:sail 14:speed 20:sail,row 27:lamp 33:speed,sail 40:speed 46:row,sail 52:speed,sail", shades: "6:blob 11:dart 16:blob 21:dart,blob 27:blob 32:dart 37:blob,dart 43:blob 48:dart,blob 54:blob" },
+  { name: "Туман и ветер", ridges: 4, cover: 0.62, fog: true, gusts: "18 44", tasks: "streak:7 pop:10 finds:3", boats: "1:sail,sail 7:speed 12:row 17:ferry 23:sail,speed 29:lamp 34:speed,sail 40:sail 45:row,speed 51:sail,speed", shades: "5:blob 10:dart 15:blob 20:blob,dart 26:blob 31:dart 36:blob,blob 42:dart 47:blob,dart 53:blob 57:dart" },
+  { name: "Большая тень", ridges: 4, cover: 0.64, gusts: "30 52", tasks: "stars3 pop:12 noflash", boats: "1:ferry,sail 7:speed 12:row,sail 18:lamp,speed 24:sail 29:speed,sail 35:ferry 40:speed,row 46:sail 51:lamp,speed", shades: "5:blob 9:big 14:dart 19:blob,blob 24:dart 28:big 33:blob,dart 38:blob 42:big,dart 47:blob 51:dart 55:blob,dart" },
+  { name: "Караван", ridges: 4, cover: 0.7, fog: true, gusts: "23 46", tasks: "streak:8 pop:12 finds:3", boats: "1:sail,sail,row 9:speed 14:lamp 19:sail,speed 25:ferry 30:speed 35:sail,sail 41:speed,lamp 47:sail 52:speed,row", shades: "4:blob 9:dart 14:blob,blob 19:big 24:dart 28:blob,dart 33:blob 37:big 41:blob,dart 46:blob 50:big 54:dart 58:blob" },
+  { name: "Большой шторм", ridges: 4, cover: 0.76, fog: true, gusts: "13 28 42 56", tasks: "stars3 pop:14 finds:3", boats: "1:sail,row 7:speed 11:ferry 16:sail,lamp 22:speed,speed 27:sail 31:ferry,sail 37:speed 41:lamp,speed 46:sail,sail 51:speed 55:sail,row", shades: "4:blob 8:dart 12:blob,blob 16:big 20:dart 24:blob,dart 28:big 32:dart,blob 36:blob 40:big,dart 44:blob 48:blob,dart 52:big 56:dart,blob 59:blob" },
+  // вторая глава: Грозовой берег
+  { name: "Гроза", ridges: 3, cover: 0.6, rain: true, finds: 3, tasks: "stars3 pop:8 finds:3", boats: "1:sail,row 8:speed 14:sail 20:row,sail 27:lamp 33:speed,sail 40:sail 46:row,speed 52:sail", shades: "6:blob 11:blob 16:dart 21:blob 26:blob,dart 32:blob 37:big 42:blob,dart 48:blob 54:dart" },
+  { name: "Кит-фонарик", ridges: 3, cover: 0.64, gusts: "40", whales: "12 42", finds: 3, tasks: "whale pop:10 streak:8", boats: "1:sail,sail 7:speed 13:row,sail 19:ferry 25:speed,sail 31:lamp 36:sail,row 42:speed 48:sail,speed 54:row", shades: "5:blob 10:dart 14:blob,blob 19:big 24:dart,blob 29:blob 34:big 38:blob,dart 43:blob 48:dart,blob 53:blob" },
+  { name: "Письма в бутылках", ridges: 4, cover: 0.64, fog: true, whales: "30", finds: 7, tasks: "finds:6 stars3 pop:10", boats: "1:sail,row 7:speed 12:sail 17:lamp,row 23:speed 28:sail,ferry 34:speed 39:sail,row 45:speed,lamp 51:sail", shades: "5:blob 9:dart 13:blob 18:blob,dart 23:big 28:blob 32:dart,blob 37:blob 41:big,dart 46:blob 51:dart 55:blob" },
+  { name: "Последняя гроза", ridges: 4, cover: 0.72, rain: true, gusts: "24 50", whales: "16 44", finds: 4, tasks: "whale stars3 finds:4", boats: "1:sail,row 6:speed 11:ferry 16:sail,lamp 21:speed,speed 26:sail 31:ferry,sail 36:speed 41:lamp,speed 46:sail,sail 51:speed 55:sail,row", shades: "4:blob 8:dart 12:blob,blob 16:big 20:dart 24:blob,dart 28:big 32:dart,blob 36:blob 40:big,dart 44:blob 48:blob,dart 52:big 56:dart" },
 ];
+export const STORM_AT = 10; // после этой ночи открыт «Шторм до рассвета» (как и до второй главы)
+
+// ---------- Находки: всплывают в бухте, подбираются лучом ----------
+// bottle — письмо в бутылке (ракушки), buoy — светобуй (светит сам 10 с), spark — звёздочка (вспышка готова скорее)
+export const FINDS = {
+  bottle: { name: "Письмо в бутылке", points: 60, shells: 2 },
+  buoy: { name: "Светобуй", points: 40, light: 10 },
+  spark: { name: "Звёздочка", points: 40, flash: 8 },
+};
+const FIND_TIME = 0.7; // столько держать находку в луче
+const FIND_LIFE = 15; // потом она уходит под воду
+export const BUOY_R = 2.6; // радиус света светобуя
+// Кит-фонарик: проплывает поперёк бухты; подержи его в луче — пустит светящийся фонтан
+export const WHALE = { speed: 1.5, wake: 1.0, reach: 5.5, points: 150, shells: 1 };
+export const TASK_SHELLS = 5; // ракушек за задание
+const BOLT_TIME = 0.28; // сколько светит молния
+const RAIN_FADE = 0.8; // в дождь фонарики гаснут быстрее
 
 const AREA = 380; // площадь бухты в любых пропорциях
 const LIGHT_Z = -1.4; // лампа маяка стоит на берегу чуть позади кромки воды
@@ -407,7 +433,7 @@ export class Bay {
   get widthMul() { return 1 + 0.22 * this.ups.wide; }
   // на последнем сердечке море добрее: фонарики горят на четверть дольше, а тень в полтора раза дольше держит лодку
   get lastHeart() { return !this.endless && this.hearts <= 1 ? 1 : 0; }
-  get fadeMul() { return (1 + 0.25 * this.ups.long) * (1 + 0.12 * Math.min(this.ease, 3)) * (1 + 0.25 * this.lastHeart) * (1 - this.gale); }
+  get fadeMul() { return (1 + 0.25 * this.ups.long) * (1 + 0.12 * Math.min(this.ease, 3)) * (1 + 0.25 * this.lastHeart) * (1 - this.gale) * (this.rain ? RAIN_FADE : 1); }
   get quickMul() { return 1 + 0.25 * this.ups.quick; }
   get flashCooldown() { return FLASH_COOLDOWN * 0.8 ** this.ups.flash; }
   get flashTime() { return FLASH_TIME + 0.4 * this.ups.flash; }
@@ -481,6 +507,20 @@ export class Bay {
     this.dawnT = 0;
     this.hour = 0;
     this.lastLane = undefined;
+    // вторая глава: находки, светобуи, киты, гроза, задания
+    this.finds = [];
+    this.findQueue = []; // { t, kind }
+    this.buoys = []; // { x, z, t } — подобранные светобуи светят сами
+    this.found = 0;
+    this.whales = [];
+    this.whaleQueue = [];
+    this.woke = 0; // скольких китов разбудили
+    this.rain = false;
+    this.boltIn = 4;
+    this.boltT = 0;
+    this.bestStreak = 0;
+    this.tasks = []; // { kind, n, done, old } — old: выполнено раньше, ракушек не даёт
+    this.shells = 0; // ракушки, заработанные за эту ночь
   }
 
   buildReefs(cfg, seed) {
@@ -491,12 +531,13 @@ export class Bay {
 
   // ---- запуск ----
   // grant — за эту ночь положено улучшение (первое прохождение); keepEase — это повтор после неудачи
-  startNight(n, { aspect = this.aspect, grant = true, keepEase = false } = {}) {
+  startNight(n, { aspect = this.aspect, grant = true, keepEase = false, done = 0 } = {}) {
     const cfg = NIGHTS[n - 1];
     if (!cfg) return;
     this.restoreUps();
     if (!keepEase) this.ease = 0;
     this.endless = false;
+    this.daily = 0;
     this.night = n;
     this.grant = grant;
     this.setLayout(aspect, n * 7919 + Math.round(bayFor(aspect).hw * 10));
@@ -519,21 +560,80 @@ export class Bay {
     }
     this.gustQueue = (cfg.gusts ? cfg.gusts.split(" ").map(Number) : []).map((t) => t * stretch);
     if (cfg.fog) this.fog = { z: this.bay.depth * 0.55, half: this.bay.depth * 0.11, phase: this.random() * TAU };
+    this.rain = !!cfg.rain;
+    this.whaleQueue = (cfg.whales ? cfg.whales.split(" ").map(Number) : []).map((t) => t * stretch);
+    // находки — поровну по ночи, между первой и последней волной лодок
+    const count = cfg.finds ?? (n >= 2 ? 3 : 0);
+    const end = this.queue.length ? this.queue[this.queue.length - 1].t : 50;
+    const kinds = n < 3 ? ["bottle"] : ["bottle", "buoy", "spark"];
+    for (let i = 0; i < count; i++) {
+      const t = 8 + (i + 0.3 + this.random() * 0.4) * (end - 4) / count;
+      this.findQueue.push({ t, kind: kinds[(i + n) % kinds.length] });
+    }
+    this.setTasks(cfg.tasks, done);
     this.mode = "play";
     this.emit("night", { night: n, name: cfg.name });
+  }
+
+  // задания ночи; done — битовая маска уже выполненных раньше
+  setTasks(text, done = 0) {
+    this.tasks = (text ? text.split(" ") : []).map((item, i) => {
+      const [kind, n] = item.split(":");
+      const old = !!(done & (1 << i));
+      return { kind, n: Number(n) || 0, done: old, old };
+    });
+  }
+
+  // выполнено ли задание (end — ночь уже кончилась рассветом)
+  taskOk(task, end) {
+    switch (task.kind) {
+      case "stars3": return end && this.wrecks === 0;
+      case "noflash": return end && this.flashUsed === 0;
+      case "pop": return this.popped >= task.n;
+      case "streak": return this.bestStreak >= task.n;
+      case "finds": return this.found >= task.n;
+      case "whale": return this.woke >= 1;
+      case "score": return this.score >= task.n;
+    }
+    return false;
+  }
+
+  // сколько уже сделано: для подсказки «3/5»
+  taskProgress(task) {
+    switch (task.kind) {
+      case "pop": return Math.min(task.n, this.popped);
+      case "streak": return Math.min(task.n, this.bestStreak);
+      case "finds": return Math.min(task.n, this.found);
+      case "whale": return Math.min(1, this.woke);
+      case "score": return Math.min(task.n, this.score);
+    }
+    return 0;
+  }
+
+  checkTasks(end = false) {
+    if (this.mode === "demo") return;
+    this.tasks.forEach((task, i) => {
+      if (task.done || !this.taskOk(task, end)) return;
+      task.done = true;
+      this.shells += TASK_SHELLS;
+      this.emit("task", { i, kind: task.kind, n: task.n, shells: TASK_SHELLS });
+    });
   }
 
   retry() {
     if (this.mode !== "lost") return;
     if (this.endless) return this.startEndless({ aspect: this.aspect });
+    if (this.daily) return this.startDaily({ aspect: this.aspect, seed: this.daily });
+    const done = this.tasks.reduce((mask, task, i) => mask | (task.done ? 1 << i : 0), 0);
     this.ease++;
-    this.startNight(this.night, { aspect: this.aspect, grant: this.grant, keepEase: true });
+    this.startNight(this.night, { aspect: this.aspect, grant: this.grant, keepEase: true, done });
   }
 
   startEndless({ aspect = this.aspect } = {}) {
     this.restoreUps();
     this.ease = 0;
     this.endless = true;
+    this.daily = 0;
     this.night = 0;
     this.grant = false;
     this.setLayout(aspect, Math.floor(this.random() * 1e9) + 1);
@@ -581,6 +681,14 @@ export class Bay {
       const gusts = h >= 9 ? 3 : h >= 5 ? 2 : 1;
       for (let i = 0; i < gusts; i++) this.gustQueue.push(from + 8 + (i + this.random()) * (HOUR - 12) / gusts);
     }
+    // находки, кит и гроза в шторме тоже бывают
+    for (let i = 0; i < 2; i++) this.findQueue.push({ t: from + 6 + i * 17 + this.random() * 8, kind: ["bottle", "buoy", "spark"][Math.floor(this.random() * 3)] });
+    if (h >= 2) this.whaleQueue.push(from + 10 + this.random() * 18);
+    this.rain = h >= 3 && h % 4 === 3;
+    if (h > 1) {
+      this.shells++;
+      this.emit("hour-shell", { hour: h, shells: 1 });
+    }
     const foggy = h % 3 === 0 || (h >= 7 && h % 3 === 1);
     if (foggy && !this.fog) this.fog = { z: this.bay.depth * 0.55, half: this.bay.depth * 0.11, phase: this.random() * TAU };
     else if (!foggy) this.fog = null;
@@ -596,6 +704,7 @@ export class Bay {
   startDemo({ aspect = this.aspect } = {}) {
     this.restoreUps();
     this.endless = false;
+    this.daily = 0;
     this.night = 0;
     this.setLayout(aspect, Math.floor(this.random() * 1e9) + 1);
     this.buildReefs({ ridges: 3, cover: 0.5 }, this.reefSeed);
@@ -673,8 +782,181 @@ export class Bay {
     if (this.flashT > 0) return 1;
     const fog = this.fog && Math.abs(z - this.fog.z) < this.fog.half ? 0.5 : 1;
     if (this.inSpot(this.beam, x, z, radius)) return fog;
+    let light = this.boltT > 0 ? 0.8 : 0; // молния на миг освещает всю бухту
+    if (this.helper && this.inSpot(this.helper, x, z, radius)) light = Math.max(light, 0.6 * fog);
+    for (const b of this.buoys) if (Math.hypot(x - b.x, z - b.z) < BUOY_R + radius * 0.5) light = Math.max(light, 0.7);
+    return light;
+  }
+
+  // свет только от лучей (главного и малого): им подбирают находки и будят китов
+  beamAt(x, z, radius) {
+    const fog = this.fog && Math.abs(z - this.fog.z) < this.fog.half ? 0.5 : 1;
+    if (this.inSpot(this.beam, x, z, radius)) return fog;
     if (this.helper && this.inSpot(this.helper, x, z, radius)) return 0.6 * fog;
     return 0;
+  }
+
+  // ---- находки ----
+  spawnFind(kind) {
+    const bay = this.bay;
+    let best = null;
+    for (let i = 0; i < 30; i++) {
+      const x = (this.random() * 2 - 1) * (bay.hw - 1.2);
+      const z = bay.depth * (0.25 + this.random() * 0.6);
+      if (this.rocks.some((r) => Math.hypot(x - r.x, z - r.z) < r.r + 1.1)) continue;
+      if (this.inHarbor(x, z, 1)) continue;
+      let room = Infinity;
+      for (const f of this.finds) room = Math.min(room, Math.hypot(x - f.x, z - f.z));
+      if (!best || room > best.room) best = { x, z, room };
+      if (room > 4) break;
+    }
+    if (!best) return null;
+    const find = { id: ++this.serial, kind, x: best.x, z: best.z, glow: 0, lit: 0, age: 0 };
+    this.finds.push(find);
+    this.emit("find-up", { id: find.id, kind, x: find.x, z: find.z });
+    return find;
+  }
+
+  moveFinds(dt) {
+    for (const b of this.buoys) b.t -= dt;
+    this.buoys = this.buoys.filter((b) => b.t > 0);
+    for (const find of [...this.finds]) {
+      find.age += dt;
+      const lit = this.beamAt(find.x, find.z, 0.4);
+      find.lit = lit;
+      if (lit > 0) find.glow = Math.min(1, find.glow + dt / FIND_TIME * lit * this.quickMul);
+      else find.glow = Math.max(0, find.glow - dt * 0.4);
+      if (find.glow >= 1) this.collect(find);
+      else if (find.age > FIND_LIFE) {
+        this.finds.splice(this.finds.indexOf(find), 1);
+        this.emit("find-gone", { id: find.id, x: find.x, z: find.z });
+      }
+    }
+  }
+
+  collect(find) {
+    this.finds.splice(this.finds.indexOf(find), 1);
+    const spec = FINDS[find.kind];
+    this.found++;
+    this.score += spec.points;
+    let shells = 0;
+    if (spec.shells) {
+      shells = spec.shells;
+      this.shells += shells;
+    }
+    if (spec.light) this.buoys.push({ x: find.x, z: find.z, t: spec.light });
+    if (spec.flash && this.flashCool > 0) {
+      this.flashCool = Math.max(this.flashRest, this.flashCool - spec.flash);
+      if (this.flashCool === 0) this.emit("flash-ready");
+    }
+    this.emit("find", { id: find.id, kind: find.kind, x: find.x, z: find.z, points: spec.points, shells });
+    this.checkTasks();
+  }
+
+  // ---- кит-фонарик ----
+  spawnWhale() {
+    const bay = this.bay;
+    // плывёт поперёк бухты там, где дальше всего от камней
+    let bestZ = bay.depth * 0.5;
+    let bestGap = -Infinity;
+    for (let k = 0; k < 24; k++) {
+      const z = bay.depth * (0.3 + 0.5 * k / 23);
+      let gap = Infinity;
+      for (const r of this.rocks) gap = Math.min(gap, Math.abs(r.z - z) - r.r);
+      if (gap > bestGap + 0.05) {
+        bestGap = gap;
+        bestZ = z;
+      }
+    }
+    const dir = this.random() < 0.5 ? 1 : -1;
+    const whale = { id: ++this.serial, x: -dir * (bay.hw + 1.5), z: bestZ, dir, woke: 0, lit: 0, state: "swim", t: 0 };
+    this.whales.push(whale);
+    this.emit("whale", { id: whale.id, x: whale.x, z: whale.z, dir });
+  }
+
+  moveWhales(dt) {
+    const bay = this.bay;
+    for (const whale of [...this.whales]) {
+      whale.t += dt;
+      if (whale.state === "swim") {
+        whale.x += whale.dir * WHALE.speed * dt;
+        const lit = this.beamAt(whale.x, whale.z, 1.2);
+        whale.lit = lit;
+        if (lit > 0) whale.woke = Math.min(1, whale.woke + dt / WHALE.wake * lit * this.quickMul);
+        else whale.woke = Math.max(0, whale.woke - dt * 0.3);
+        if (whale.woke >= 1) this.spout(whale);
+        else if (whale.x * whale.dir > bay.hw + 1.6) {
+          whale.state = "gone";
+          whale.t = 0;
+          this.emit("whale-gone", { id: whale.id, x: whale.x, z: whale.z });
+        }
+      } else if (whale.t > 2.6) this.whales.splice(this.whales.indexOf(whale), 1);
+    }
+  }
+
+  // проснувшийся кит пускает светящийся фонтан: фонарики рядом горят, тени рядом лопаются
+  spout(whale) {
+    whale.state = "spout";
+    whale.t = 0;
+    this.woke++;
+    this.score += WHALE.points;
+    this.shells += WHALE.shells;
+    for (const boat of this.boats) {
+      if (Math.hypot(boat.x - whale.x, boat.z - whale.z) > WHALE.reach) continue;
+      boat.lantern = 1;
+      if (boat.lost) {
+        boat.lost = false;
+        boat.veer = 0;
+        this.emit("found", { id: boat.id, x: boat.x, z: boat.z });
+      }
+    }
+    this.emit("spout", { id: whale.id, x: whale.x, z: whale.z, points: WHALE.points, shells: WHALE.shells });
+    for (const shade of [...this.shades]) if (Math.hypot(shade.x - whale.x, shade.z - whale.z) < WHALE.reach) this.popShade(shade, true);
+    this.checkTasks();
+  }
+
+  // ---- «Ночь дня»: своя на каждый день, одинаковая у всех ----
+  startDaily({ aspect = this.aspect, seed = 1 } = {}) {
+    const r = seeded(seed * 31 + 7);
+    this.restoreUps();
+    this.ease = 0;
+    this.endless = false;
+    this.daily = seed;
+    this.night = 0;
+    this.grant = false;
+    this.setLayout(aspect, seed);
+    this.buildReefs({ ridges: 3, cover: 0.58 + r() * 0.1 }, seed);
+    this.clearNight();
+    // два события из пяти
+    const all = ["rain", "fog", "gusts", "whale", "finds"];
+    const events = [];
+    while (events.length < 2) {
+      const e = all.splice(Math.floor(r() * all.length), 1)[0];
+      events.push(e);
+    }
+    this.dailyEvents = events;
+    const pool = ["sail", "row", "sail", "speed", "ferry", "lamp"];
+    let t = 1;
+    while (t < 56) {
+      const kinds = [pool[Math.floor(r() * pool.length)]];
+      if (r() < 0.3) kinds.push(pool[Math.floor(r() * 3)]);
+      this.queue.push({ t, kinds });
+      this.total += kinds.length;
+      t += kinds.length * (4.6 + r() * 2.2);
+    }
+    for (let i = 0; i < 12; i++) {
+      const roll = r();
+      this.shadeQueue.push({ t: 5 + i * 4.4 + r() * 2, kind: roll < 0.25 ? "dart" : roll > 0.85 ? "big" : "blob" });
+    }
+    if (events.includes("gusts")) this.gustQueue = [18 + r() * 8, 40 + r() * 8];
+    if (events.includes("fog")) this.fog = { z: this.bay.depth * 0.55, half: this.bay.depth * 0.11, phase: r() * TAU };
+    this.rain = events.includes("rain");
+    if (events.includes("whale")) this.whaleQueue = [12 + r() * 6, 36 + r() * 8];
+    const finds = events.includes("finds") ? 6 : 2;
+    for (let i = 0; i < finds; i++) this.findQueue.push({ t: 8 + (i + 0.5) * 48 / finds, kind: ["bottle", "buoy", "spark"][Math.floor(r() * 3)] });
+    this.setTasks("");
+    this.mode = "play";
+    this.emit("night", { night: 0, name: "Ночь дня", daily: true });
   }
 
   inHarbor(x, z, extra = 0) {
@@ -722,6 +1004,7 @@ export class Bay {
     if (this.mode === "demo") return this.emit("deliver", { id: boat.id, kind: boat.kind, x: boat.x, z: boat.z, points: 0, demo: true });
     this.saved++;
     this.streak++;
+    this.bestStreak = Math.max(this.bestStreak, this.streak);
     const points = Math.round(BOATS[boat.kind].points * (1 + 0.1 * Math.min(10, this.streak - 1)));
     this.score += points;
     if (this.flashCool > 0) {
@@ -729,6 +1012,7 @@ export class Bay {
       if (this.flashCool === 0) this.emit("flash-ready");
     }
     this.emit("deliver", { id: boat.id, kind: boat.kind, x: boat.x, z: boat.z, points, streak: this.streak });
+    this.checkTasks();
   }
 
   moveBoats(dt) {
@@ -929,6 +1213,7 @@ export class Bay {
       this.popped++;
     }
     this.emit(why, { id: shade.id, kind: shade.kind, x: shade.x, z: shade.z, points });
+    if (scored) this.checkTasks();
   }
 
   moveShades(dt) {
@@ -1087,6 +1372,21 @@ export class Bay {
 
     // туман медленно ходит по бухте
     if (this.fog) this.fog.z = bay.depth * (0.55 + 0.13 * Math.sin(this.time * 0.11 + this.fog.phase));
+    // гроза: раз в 6–11 с молния освещает всю бухту
+    if (this.boltT > 0) this.boltT = Math.max(0, this.boltT - dt);
+    if (this.rain) {
+      this.boltIn -= dt;
+      if (this.boltIn <= 0) {
+        this.boltIn = 6 + this.random() * 5;
+        this.boltT = BOLT_TIME;
+        this.emit("bolt", { at: this.random() * 2 - 1 });
+      }
+    }
+    while (this.findQueue.length && this.findQueue[0].t <= this.time) this.spawnFind(this.findQueue.shift().kind);
+    while (this.whaleQueue.length && this.whaleQueue[0] <= this.time) {
+      this.whaleQueue.shift();
+      this.spawnWhale();
+    }
     // порывы шторма
     if (this.gust) {
       this.gust.t += dt;
@@ -1132,6 +1432,8 @@ export class Bay {
     if (this.mode === "lost") return;
     this.moveShades(dt);
     if (this.mode === "lost") return;
+    this.moveFinds(dt);
+    this.moveWhales(dt);
 
     // ночь кончается, когда все лодки пришли или потеряны
     if (!this.endless && this.queue.length === 0 && this.boats.length === 0) {
@@ -1141,17 +1443,27 @@ export class Bay {
       this.gustQueue.length = 0;
       this.gust = null;
       for (const shade of [...this.shades]) this.popShade(shade, false, "dive");
+      for (const find of this.finds) this.emit("find-gone", { id: find.id, x: find.x, z: find.z });
+      this.finds = [];
+      this.findQueue.length = 0;
+      this.whaleQueue.length = 0;
+      this.rain = false;
       const bonus = this.hearts * 100;
       this.score += bonus;
       this.emit("dawn", { bonus });
+      this.checkTasks(true);
     }
   }
 
   finishNight() {
     const stars = clamp(3 - this.wrecks, 1, 3);
-    this.result = { night: this.night, stars, saved: this.saved, total: this.total, score: this.score, popped: this.popped, wrecks: this.wrecks };
+    this.result = { night: this.night, daily: this.daily, stars, saved: this.saved, total: this.total, score: this.score, popped: this.popped, wrecks: this.wrecks, found: this.found, shells: this.shells, tasks: this.tasks.map((t) => ({ ...t })) };
     this.ease = 0;
-    if (this.night >= NIGHTS.length) {
+    if (this.daily) {
+      this.offer = [];
+      this.mode = "upgrade";
+      this.emit("clear");
+    } else if (this.night >= NIGHTS.length) {
       this.mode = "won";
       this.emit("won");
     } else {

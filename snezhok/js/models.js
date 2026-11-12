@@ -1,6 +1,6 @@
 // Модели «Снежного кома»: ёлки, камни, ворота, заборы, прессы, снеговик-босс, облики кома.
 // Всё собирается из простых фигур и текстур, нарисованных на холсте, — без файлов.
-import { T, TAU, GEO, hot, lit, part, at, canvasTexture, labelTexture, thinFog } from "./kit.js?v=bd3554ee";
+import { T, TAU, GEO, hot, lit, part, at, canvasTexture, labelTexture, thinFog } from "./kit.js?v=dba1bb88";
 
 // ---------- Склейка геометрий в одну (вершинные цвета) ----------
 export function merge(list) {
@@ -473,6 +473,38 @@ function skinTexture(id) {
         g.fill();
       }
     });
+  if (id === "storm")
+    return canvasTexture(256, 128, (g) => {
+      // буран: голубые вихри по белому
+      g.fillStyle = "#e6f6ff";
+      g.fillRect(0, 0, 256, 128);
+      g.lineCap = "round";
+      for (let k = 0; k < 9; k++) {
+        g.strokeStyle = k % 2 ? "rgba(58,90,224,0.75)" : "rgba(95,216,255,0.85)";
+        g.lineWidth = 5 + (k % 3) * 2;
+        g.beginPath();
+        for (let x = -10; x <= 266; x += 8) g.lineTo(x, 8 + k * 14 + Math.sin(x * 0.05 + k) * 7);
+        g.stroke();
+      }
+    });
+  if (id === "hunter")
+    return canvasTexture(256, 128, (g) => {
+      // снег с отпечатками лап йети
+      g.fillStyle = "#ffffff";
+      g.fillRect(0, 0, 256, 128);
+      g.fillStyle = "rgba(122,150,190,0.55)";
+      for (let k = 0; k < 10; k++) {
+        const x = (k * 53) % 256, y = (k * 37) % 128;
+        g.beginPath();
+        g.ellipse(x, y, 9, 12, 0.4, 0, TAU);
+        g.fill();
+        for (let t = 0; t < 3; t++) {
+          g.beginPath();
+          g.arc(x - 8 + t * 8, y - 15, 3.4, 0, TAU);
+          g.fill();
+        }
+      }
+    });
   if (id === "ice")
     return canvasTexture(256, 128, (g) => {
       g.fillStyle = "#bfeeff";
@@ -502,6 +534,10 @@ export function skinMaterial(id, env, snow) {
       return new T.MeshStandardMaterial({ map, roughness: 0.55, metalness: 0, envMap: env, envMapIntensity: 0.5 });
     case "disco":
       return new T.MeshStandardMaterial({ map, roughness: 0.18, metalness: 1, envMap: env, envMapIntensity: 2.2, flatShading: true });
+    case "storm":
+      return new T.MeshStandardMaterial({ map, roughness: 0.3, metalness: 0.1, envMap: env, envMapIntensity: 1.1, emissive: "#5fd8ff", emissiveMap: map, emissiveIntensity: 0.25 });
+    case "hunter":
+      return new T.MeshStandardMaterial({ map, roughness: 0.8, metalness: 0 });
     case "night":
       return new T.MeshStandardMaterial({ map, roughness: 0.35, metalness: 0.2, envMap: env, envMapIntensity: 0.9, emissive: "#ffffff", emissiveMap: map, emissiveIntensity: 0.55 });
     default:

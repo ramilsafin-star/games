@@ -45,9 +45,57 @@ export const HAZARDS = {
   crusher: { frac: 0.25, min: 2, h: 99, name: "Ледяной пресс" },
   geyser: { frac: 0.22, min: 2, h: 99, name: "Гейзер" },
 };
+HAZARDS.snowball = { frac: 0.15, min: 1, h: 99, name: "Снежок страшилы" };
+HAZARDS.volley = { frac: 0.2, min: 2, h: 99, name: "Снежище снеговика" };
 export function damage(kind, size) {
   const h = HAZARDS[kind];
   return Math.max(h.min, Math.ceil(size * h.frac));
+}
+
+// ---------- Монстры ----------
+// У каждого число над головой, как на воротах. yeti — стоит на трассе: ком крупнее числа сминает
+// его и забирает часть снега, меньше — отлетает. imp — ледяной бесёнок бегает поперёк трассы и
+// откусывает своё число. thrower — снежная страшила у края кидает снежки поперёк трассы.
+// spirit — метельный дух: летит рядом и тянет снег, пока его не собьёт пушка или волна.
+export const MONSTER = {
+  yeti: { r: 1.15, coins: 3, name: "Йети" },
+  imp: { r: 0.6, coins: 2, name: "Ледяной бесёнок" },
+  thrower: { r: 1.0, coins: 3, name: "Снежная страшила" },
+  spirit: { r: 0.9, coins: 4, name: "Метельный дух" },
+};
+export const isMonster = (it) => MONSTER[it.t] !== undefined;
+// Подборы: пушка стреляет сама, шипы сминают любого монстра, волна раскидывает всех рядом,
+// стрелка-ускорение помогает уйти от лавины.
+export const WEAPON = {
+  gun: { time: 5, rate: 3, range: 30, speed: 44 },
+  spike: { time: 5 },
+  wave: { ahead: 15, behind: 4 },
+  boost: { time: 1.4, k: 1.35 },
+};
+export const isPickup = (it) => it.t === "gun" || it.t === "spike" || it.t === "wave" || it.t === "boost";
+// снежок пушки — из снега самого кома: чем крупнее ком, тем сильнее удар
+export const shotDamage = (size) => Math.max(5, Math.round(size * 0.45));
+// сколько снега ком забирает у смятого йети или страшилы
+export const crushGain = (hp) => Math.max(1, Math.ceil(hp * 0.4));
+// сколько отнимает удар о слишком крупного монстра
+export const bonkDamage = (size) => Math.max(2, Math.ceil(size * 0.2));
+// дух тянет такую долю снега в секунду
+export const DRAIN = 0.025;
+// лавина: насколько она быстрее кома и на сколько её отбрасывает ускорение или подтягивает удар
+export const AVALANCHE = { k: 1.08, gap: 12, stumble: 4, bite: 0.2, coins: 10 };
+// бесёнок бегает поперёк трассы туда-обратно (как бревно)
+export const impX = (it, t) => logX(it, t);
+// снежок страшилы: летит от неё к другому краю, в остальное время его нет
+export function throwPos(it, t) {
+  const u = frac(t / it.period + it.phase);
+  if (u > it.fly) return null;
+  const k = u / it.fly;
+  return { x: it.x0 + (it.x1 - it.x0) * k, y: 0.7 + Math.sin(k * Math.PI) * 1.6, k };
+}
+// снежище босса падает на метку: опасен на земле, перед этим метка видна на снегу
+export function volleyState(it, t) {
+  const u = frac(t / it.period + it.phase);
+  return { u, fall: u < 0.5 ? u / 0.5 : 1, hot: u >= 0.5 && u < 0.72 };
 }
 
 // ---------- Движущиеся препятствия: состояние зависит только от времени ----------
@@ -93,6 +141,18 @@ export function touches(item, s, x, y, r, t) {
       return crusherDown(item, t) && boxHit(s, x, r * 0.85, item.s - item.len / 2, item.s + item.len / 2, item.x0, item.x1);
     case "geyser":
       return geyserState(item, t) === 2 && Math.hypot(s - item.s, x - item.x) < r * 0.85 + item.r;
+    // монстры и их снаряды
+    case "yeti":
+    case "thrower":
+      return y < 2.2 && Math.hypot(s - item.s, x - item.x) < r * 0.9 + item.r;
+    case "imp":
+      return y < 1.2 && Math.hypot(s - item.s, x - impX(item, t)) < r * 0.9 + item.r;
+    case "snowball": {
+      const p = throwPos(item, t);
+      return !!p && Math.hypot(s - item.s, x - p.x, y + r - p.y) < r * 0.9 + 0.45;
+    }
+    case "volley":
+      return y < 1.5 && volleyState(item, t).hot && Math.hypot(s - item.s, x - item.x) < r * 0.85 + item.r;
   }
   return false;
 }

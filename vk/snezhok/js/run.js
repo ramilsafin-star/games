@@ -1,16 +1,21 @@
 // Заезд «Снежного кома»: движение кома по трассе, ворота, подбор, удары, финал.
 // Чистая логика без графики. Время заезда на трассе — путь / скорость, поэтому положение
 // движущихся препятствий в каждой точке трассы заранее известно (и проверкам, и роботу).
-import { HALF, LATERAL, GRAVITY, JUMP, BRIDGE_HALF, MAX_SIZE, START, radiusOf, applyGate, isGood, damage, touches, clamp } from "./rules.js?v=8ae2940b";
-import { bridgeAt } from "./levels.js?v=8ae2940b";
+import { HALF, LATERAL, GRAVITY, JUMP, BRIDGE_HALF, MAX_SIZE, START, radiusOf, applyGate, isGood, damage, touches, clamp, MONSTER, WEAPON, AVALANCHE, DRAIN, isMonster, impX, shotDamage, crushGain, bonkDamage } from "./rules.js?v=51f23175";
+import { bridgeAt } from "./levels.js?v=51f23175";
 
-const HAZARD_KINDS = new Set(["rock", "fence", "spikes", "log", "hole", "crusher", "geyser"]);
+const HAZARD_KINDS = new Set(["rock", "fence", "spikes", "log", "hole", "crusher", "geyser", "snowball", "volley"]);
 
 export class Run {
   constructor(level, opts = {}) {
     this.level = level;
     this.startSize = Math.max(1, Math.round(opts.start ?? START));
     this.magnet = opts.magnet ?? 0;
+    // оружие: длительности и скорострельность — из улучшений; ammo — снежки пушки «с собой» (ролик)
+    this.gunTime = opts.gunTime ?? WEAPON.gun.time;
+    this.gunRate = opts.gunRate ?? WEAPON.gun.rate;
+    this.spikeTime = opts.spikeTime ?? WEAPON.spike.time;
+    this.ammo0 = opts.ammo ?? 0;
     this.reset();
   }
 
@@ -51,7 +56,36 @@ export class Run {
     this.events = [];
     this.checkpoints = [];
     this.checkGate = 0;
+    // монстры: сколько снега у каждого осталось (пушка отбивает понемногу), сколько побеждено
+    this.hp = new Float32Array(L.items.length);
+    L.items.forEach((it, i) => isMonster(it) && (this.hp[i] = it.hp));
+    this.kills = { imp: 0, yeti: 0, thrower: 0, spirit: 0, all: 0 };
+    this.gunT = 0;
+    this.ammo = this.ammo0;
+    this.spikeT = 0;
+    this.boostT = 0;
+    this.shotCD = 0;
+    this.shots = []; // летящие снежки пушки
+    this.shotN = 0;
+    this.spirit = null; // дух, который сейчас тянет снег
+    this.drainAcc = 0;
+    this.drainShown = 0;
+    this.chase = null; // идущая погоня лавины
+    this.chaseDone = 0; // сколько погонь уже позади
+    this.bossHp = L.finale.boss ? L.finale.boss.hp : 0;
     this.save();
+  }
+  get armed() {
+    return this.gunT > 0 || this.ammo > 0;
+  }
+  get questProgress() {
+    const q = this.level.quest;
+    if (!q) return 0;
+    return q.kind === "any" ? this.kills.all : this.kills[q.kind];
+  }
+  get questDone() {
+    const q = this.level.quest;
+    return !!q && this.questProgress >= q.need;
   }
 
   get radius() {
@@ -72,7 +106,7 @@ export class Run {
   }
 
   save() {
-    this.checkpoints.push({ s: this.s, x: this.x, size: this.size, coins: this.coins, used: this.used.slice(), lo: this.lo, gate: this.checkGate });
+    this.checkpoints.push({ s: this.s, x: this.x, size: this.size, coins: this.coins, used: this.used.slice(), lo: this.lo, gate: this.checkGate, hp: this.hp?.slice(), kills: this.kills && { ...this.kills }, chaseDone: this.chaseDone });
   }
 
   emit(e) {
@@ -121,6 +155,7 @@ export class Run {
     const s0 = this.s;
     let v = L.speed;
     if (this.mode === "finale") v = this.stair > 0 ? 10 : 13;
+    else if (this.boostT > 0) v *= WEAPON.boost.k;
     if (this.slow > 0) {
       this.slow -= dt;
       v *= 0.45;
@@ -149,6 +184,7 @@ export class Run {
 
     if (this.mode === "run") this.track(s0, r);
     else this.finale(r);
+    if (this.mode === "run" || this.mode === "finale") this.weapons(dt);
   }
 
   track(s0, r) {
@@ -187,10 +223,36 @@ export class Run {
             this.emit({ type: "jump", id: i });
           }
           break;
+        case "gun":
+        case "spike":
+        case "wave":
+        case "boost":
+          if (this.y < 2 && Math.abs(it.s - s) < r + 0.7 && Math.abs(it.x - this.x) < r + 0.8) this.pickup(it, i);
+          break;
+        case "yeti":
+        case "thrower":
+        case "imp":
+          if (touches(it, s, this.x, this.y, r, this.time)) this.meet(it, i);
+          break;
+        case "spirit":
+          if (!this.spirit && s >= it.s - 16) {
+            this.spirit = { i, it, life: it.life, tick: 0.5 };
+            this.emit({ type: "spirit", id: i });
+          }
+          break;
+        case "snowball":
+          if (this.used[it.owner]) break; // страшила разбита — снежков больше нет
+        // fall through
         default:
           if (this.invuln <= 0 && HAZARD_KINDS.has(it.t) && touches(it, s, this.x, this.y, r, this.time)) this.hit(it, i);
       }
       if (this.mode !== "run") return;
+    }
+    // лавина-йети: погоня начинается на своём участке
+    const ch = L.chases?.[this.chaseDone];
+    if (!this.chase && ch && s >= ch.s0) {
+      this.chase = { gap: AVALANCHE.gap, s1: ch.s1 };
+      this.emit({ type: "chase", gap: this.chase.gap });
     }
     // мост: центр кома должен быть над ним
     if (!this.air && Math.abs(this.x) > BRIDGE_HALF + 0.15 && bridgeAt(L, s)) {
@@ -232,7 +294,9 @@ export class Run {
   }
 
   hit(it, i) {
-    this.used[i] = 1;
+    // снежки страшилы и снежища снеговика летят снова и снова; остальное — один раз
+    if (it.t !== "snowball" && it.t !== "volley") this.used[i] = 1;
+    if (this.chase) this.chase.gap -= AVALANCHE.stumble;
     const dmg = Math.min(this.size, damage(it.t, this.size));
     this.size -= dmg;
     this.lost += dmg;
@@ -289,8 +353,10 @@ export class Run {
     } else if (!this.bossDown) {
       const b = F.boss;
       if (s + r >= b.s - 2.6) {
-        if (this.size > b.hp) {
-          this.size -= b.hp;
+        // ледяные шипы пробивают снеговика на четверть легче
+        const need = Math.ceil(this.bossHp * (this.spikeT > 0 ? 0.75 : 1));
+        if (this.size > need) {
+          this.size -= need;
           this.bossDown = true;
           this.slow = 0.35;
           this.emit({ type: "boss", win: true, size: this.size });
@@ -332,6 +398,238 @@ export class Run {
     }
   }
 
+  // ---------- Монстры ----------
+  // ком встретил монстра: шипы и размер больше числа — сминает, иначе бесёнок кусает, а йети отбрасывает
+  meet(it, i) {
+    if (it.t === "imp") {
+      if (this.spikeT > 0) return this.kill(i, "spike");
+      const dmg = Math.min(this.size, it.v);
+      this.size -= dmg;
+      this.lost += dmg;
+      this.hits++;
+      if (this.chase) this.chase.gap -= AVALANCHE.stumble * 0.5;
+      this.kill(i, "bite");
+      this.emit({ type: "bite", id: i, dmg, size: this.size });
+      if (this.size <= 0) this.melt();
+      return;
+    }
+    if (this.spikeT > 0 || this.size > this.hp[i]) return this.kill(i, this.spikeT > 0 ? "spike" : "crush");
+    const dmg = Math.min(this.size, bonkDamage(this.size));
+    this.used[i] = 1;
+    this.size -= dmg;
+    this.lost += dmg;
+    this.hits++;
+    this.invuln = 0.4;
+    this.slow = 0.25;
+    this.vx += Math.sign(this.x - it.x || 1) * 9;
+    if (this.chase) this.chase.gap -= AVALANCHE.stumble;
+    this.emit({ type: "bonk", id: i, dmg, size: this.size });
+    if (this.size <= 0) this.melt();
+  }
+  kill(i, how) {
+    const it = this.level.items[i];
+    this.used[i] = 1;
+    this.hp[i] = 0;
+    this.kills[it.t]++;
+    this.kills.all++;
+    let gain = 0;
+    // смятый ком йети или страшилы отдаёт часть снега; разбитый снежками или волной — только снежинки
+    if ((it.t === "yeti" || it.t === "thrower") && (how === "crush" || how === "spike")) {
+      gain = crushGain(it.hp);
+      this.grow(gain);
+    }
+    const coins = MONSTER[it.t].coins - (how === "bite" ? 1 : 0);
+    this.coins += coins;
+    if (this.spirit && this.spirit.i === i) this.spirit = null;
+    this.emit({ type: "kill", id: i, kind: it.t, how, gain, coins, size: this.size });
+  }
+  pickup(it, i) {
+    this.used[i] = 1;
+    if (it.t === "gun") this.gunT = this.gunTime;
+    else if (it.t === "spike") this.spikeT = this.spikeTime;
+    else if (it.t === "boost") this.boostT = WEAPON.boost.time;
+    this.emit({ type: "pickup", id: i, kind: it.t });
+    if (it.t === "wave") this.wave();
+  }
+  // снежная волна: все монстры рядом разлетаются
+  wave() {
+    const items = this.level.items;
+    const W = WEAPON.wave;
+    for (let i = this.lo; i < items.length; i++) {
+      const it = items[i];
+      if (it.s > this.s + W.ahead) break;
+      if (it.s < this.s - W.behind || this.used[i] || !isMonster(it) || it.t === "spirit") continue;
+      this.kill(i, "wave");
+    }
+    if (this.spirit) this.kill(this.spirit.i, "wave");
+    this.emit({ type: "wave" });
+  }
+  // где сейчас дух: летит чуть впереди кома и покачивается
+  spiritPos() {
+    const sp = this.spirit;
+    if (!sp) return null;
+    return { s: this.s + 4.5, x: this.x * 0.4 + Math.sin(sp.life * 2.2) * 2, y: 2.6 + Math.sin(sp.life * 3.1) * 0.4 };
+  }
+
+  // ---------- Оружие, дух и лавина ----------
+  weapons(dt) {
+    const L = this.level;
+    this.gunT = Math.max(0, this.gunT - dt);
+    this.spikeT = Math.max(0, this.spikeT - dt);
+    this.boostT = Math.max(0, this.boostT - dt);
+    // пушка стреляет сама по ближайшей цели, которую ком сам не сомнёт
+    this.shotCD -= dt;
+    if (this.armed && this.shotCD <= 0) {
+      const tgt = this.target();
+      if (tgt) {
+        this.shotCD = 1 / this.gunRate;
+        if (this.gunT <= 0) this.ammo--;
+        const shot = { n: ++this.shotN, s: this.s + this.radius * 0.6, x: this.x, y: this.y + this.radius * 1.6, tgt, life: 1.5 };
+        this.shots.push(shot);
+        this.emit({ type: "shot", n: shot.n });
+      }
+    }
+    for (let k = this.shots.length - 1; k >= 0; k--) {
+      const sh = this.shots[k];
+      sh.life -= dt;
+      const p = this.aim(sh.tgt);
+      if (!p || sh.life <= 0) {
+        this.shots.splice(k, 1);
+        continue;
+      }
+      sh.s += (this.v + WEAPON.gun.speed) * dt;
+      const f = Math.min(1, dt * 12);
+      sh.x += (p.x - sh.x) * f;
+      sh.y += (p.y - sh.y) * f;
+      if (sh.s >= p.s - 0.6) {
+        this.shots.splice(k, 1);
+        this.impact(sh, p);
+        if (this.mode === "fail") return;
+      }
+    }
+    // метельный дух тянет снег, пока его не собьют или он не улетит
+    const sp = this.spirit;
+    if (sp && this.mode !== "run") {
+      this.used[sp.i] = 1;
+      this.spirit = null;
+    } else if (sp) {
+      sp.life -= dt;
+      if (sp.life <= 0) {
+        this.used[sp.i] = 1;
+        this.spirit = null;
+        this.emit({ type: "spirit-away", id: sp.i });
+      } else {
+        this.drainAcc += this.size * DRAIN * dt;
+        if (this.drainAcc >= 1) {
+          const dmg = Math.min(this.size, Math.floor(this.drainAcc));
+          this.drainAcc -= dmg;
+          this.size -= dmg;
+          this.lost += dmg;
+          this.drainShown += dmg;
+        }
+        sp.tick -= dt;
+        if (sp.tick <= 0 && this.drainShown) {
+          sp.tick = 0.5;
+          this.emit({ type: "drain", dmg: this.drainShown, size: this.size });
+          this.drainShown = 0;
+        }
+        if (this.size <= 0) return this.melt();
+      }
+    }
+    // лавина: она чуть быстрее кома; удары её подпускают, ускорения отрывают
+    const ch = this.chase;
+    if (ch && this.mode === "run") {
+      ch.gap += (this.v - L.speed * AVALANCHE.k) * dt;
+      if (ch.gap <= 0) {
+        const dmg = Math.min(this.size, Math.max(1, Math.ceil(this.size * AVALANCHE.bite)));
+        this.size -= dmg;
+        this.lost += dmg;
+        this.chase = null;
+        this.chaseDone++;
+        this.emit({ type: "chase-end", caught: true, dmg, size: this.size });
+        if (this.size <= 0) this.melt();
+      } else if (this.s >= ch.s1) {
+        this.coins += AVALANCHE.coins;
+        this.chase = null;
+        this.chaseDone++;
+        this.emit({ type: "chase-end", caught: false, coins: AVALANCHE.coins });
+      }
+    } else if (ch) this.chase = null;
+  }
+  // цель для пушки: дух, бесята, страшилы, слишком крупные йети, камень или забор прямо на пути;
+  // в финале — снеговик или ближняя стена
+  target() {
+    const L = this.level;
+    const s = this.s;
+    if (this.mode === "finale") {
+      const F = L.finale;
+      if (F.kind === "boss") return !this.bossDown && s < F.boss.s - 4 ? { kind: "boss" } : null;
+      const w = this.walls[this.wall];
+      return w && !w.broken && w.s - s < 24 && w.s - s > 2 ? { kind: "wall", k: this.wall } : null;
+    }
+    if (this.spirit) return { kind: "spirit" };
+    const items = L.items;
+    const r = this.radius;
+    for (let i = this.lo; i < items.length; i++) {
+      const it = items[i];
+      if (it.s > s + WEAPON.gun.range) break;
+      if (it.s < s + 1.5 || this.used[i]) continue;
+      let want = false;
+      if (it.t === "imp" || it.t === "thrower") want = true;
+      else if (it.t === "yeti") want = this.spikeT <= 0 && this.hp[i] >= this.size;
+      else if (it.t === "rock") want = it.s < s + 16 && Math.abs(it.x - this.x) < r + it.r + 0.6;
+      else if (it.t === "fence") want = it.s < s + 16 && this.x > it.x0 - r && this.x < it.x1 + r;
+      if (want) return { kind: "item", i };
+    }
+    return null;
+  }
+  // где цель сейчас (null — цели уже нет)
+  aim(tgt) {
+    const L = this.level;
+    if (tgt.kind === "spirit") return this.spiritPos();
+    if (tgt.kind === "boss") return this.bossDown ? null : { s: L.finale.boss.s, x: 0, y: 5 };
+    if (tgt.kind === "wall") {
+      const w = this.walls[tgt.k];
+      return w && !w.broken ? { s: w.s, x: this.x, y: 2 } : null;
+    }
+    if (this.used[tgt.i]) return null;
+    const it = L.items[tgt.i];
+    if (it.t === "imp") return { s: it.s, x: impX(it, this.time), y: 0.6 };
+    if (it.t === "fence") return { s: it.s, x: clamp(this.x, it.x0, it.x1), y: 0.8 };
+    return { s: it.s, x: it.x, y: it.t === "rock" ? 0.5 : 1.6 };
+  }
+  impact(sh, p) {
+    const tgt = sh.tgt;
+    const L = this.level;
+    const dmg = shotDamage(this.size);
+    if (tgt.kind === "boss") {
+      const k = Math.max(1, Math.ceil(L.finale.boss.hp * 0.03));
+      this.bossHp = Math.max(1, this.bossHp - k);
+      this.emit({ type: "pow", boss: true, dmg: k, n: sh.n, s: p.s, x: p.x, y: p.y });
+    } else if (tgt.kind === "wall") {
+      const w = this.walls[tgt.k];
+      const k = Math.max(1, Math.ceil(w.hp * 0.06));
+      w.left = Math.max(1, w.left - k);
+      this.emit({ type: "pow", wall: tgt.k, left: w.left, dmg: k, n: sh.n, s: p.s, x: p.x, y: p.y });
+    } else if (tgt.kind === "spirit") {
+      const i = this.spirit.i;
+      this.hp[i] -= dmg;
+      this.emit({ type: "pow", id: i, dmg, n: sh.n, s: p.s, x: p.x, y: p.y });
+      if (this.hp[i] <= 0) this.kill(i, "shot");
+    } else {
+      const i = tgt.i;
+      const it = L.items[i];
+      if (it.t === "rock" || it.t === "fence") {
+        this.used[i] = 1;
+        this.emit({ type: "smash", id: i, n: sh.n, s: p.s, x: p.x, y: p.y });
+      } else {
+        this.hp[i] -= dmg;
+        this.emit({ type: "pow", id: i, dmg, n: sh.n, s: p.s, x: p.x, y: p.y });
+        if (this.hp[i] <= 0) this.kill(i, "shot");
+      }
+    }
+  }
+
   // ---------- «Продолжить с этого места» ----------
   canContinue() {
     return this.mode === "fail" && !this.continued;
@@ -349,7 +647,13 @@ export class Run {
     this.checkGate = cp.gate;
     this.checkpoints = this.checkpoints.filter((c) => c.s <= cp.s);
     let size = Math.max(3, Math.round(cp.size * 1.3));
-    if (this.failReason === "boss") size = Math.max(size, Math.ceil(L.finale.boss.hp * 1.15));
+    if (this.failReason === "boss") size = Math.max(size, Math.ceil(this.bossHp * 1.15));
+    if (cp.hp) this.hp = cp.hp.slice();
+    if (cp.kills) this.kills = { ...cp.kills };
+    this.chaseDone = cp.chaseDone ?? this.chaseDone;
+    this.chase = this.spirit = null;
+    this.gunT = this.spikeT = this.boostT = 0;
+    this.shots.length = 0;
     this.size = size;
     this.peak = Math.max(this.peak, size);
     this.y = this.vy = this.vx = 0;

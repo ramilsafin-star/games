@@ -44,7 +44,8 @@ button:focus-visible {
 /* ---------- Табло ---------- */
 .top {
   position: fixed;
-  z-index: 5;
+  /* Над экранами меню: звук, музыка, монетки и настройки нажимаются и на заставке */
+  z-index: 12;
   left: 0;
   right: 0;
   top: 0;
@@ -358,6 +359,8 @@ button:focus-visible {
   transform: translateY(3px);
 }
 .dim {
+  /* Сверху место под кнопки звука и монетки */
+  padding-top: calc(64px + var(--safe-t));
   background: #1f3a5a88;
   backdrop-filter: blur(5px);
   -webkit-backdrop-filter: blur(5px);
@@ -584,5 +587,813 @@ button:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .logo {
     animation: none;
+  }
+}
+
+/* ---------- Лига, испытания, раздевалка, награды ---------- */
+.coins {
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  border-radius: 22px;
+  background: #fffffff0;
+  box-shadow: 0 4px 0 #1f3a5a44;
+  font-weight: 900;
+  font-size: 19px;
+  white-space: nowrap;
+}
+.coins[hidden] {
+  display: none;
+}
+.fx {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 900;
+  border-radius: 10px;
+  padding: 0 5px;
+  color: #1f3a5a;
+  white-space: nowrap;
+}
+.fx:empty {
+  display: none;
+}
+.solo .team.right,
+.solo #pic1 {
+  visibility: hidden;
+}
+.solo .team .meter {
+  display: none;
+}
+.score b.pop {
+  animation: scorePop 0.5s cubic-bezier(0.2, 1.8, 0.4, 1);
+}
+@keyframes scorePop {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.55);
+    color: #ffe066;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.toast {
+  position: fixed;
+  z-index: 7;
+  left: 50%;
+  top: calc(80px + var(--safe-t));
+  translate: -50% 0;
+  pointer-events: none;
+  background: #1f3a5af0;
+  color: #fff;
+  font-weight: 900;
+  font-size: 18px;
+  padding: 8px 18px;
+  border-radius: 20px;
+  box-shadow: 0 4px 0 #0003;
+  opacity: 0;
+  white-space: nowrap;
+}
+.toast.show {
+  animation: toast 2.2s ease both;
+}
+@keyframes toast {
+  0% {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.8);
+  }
+  12% {
+    opacity: 1;
+    transform: translateY(0) scale(1.06);
+  }
+  20% {
+    transform: scale(1);
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+/* Вспышка после гола */
+.flash {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 45%, #ffffffee, #fff6c055 60%, transparent 85%);
+  opacity: 0;
+}
+.flash.on {
+  animation: flash 0.55s ease-out;
+}
+.flash.strong {
+  background: radial-gradient(circle at 50% 45%, #ffffff, #ffd6f2aa 55%, #b0f0ff33 85%);
+}
+@keyframes flash {
+  0% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.extras {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.pill {
+  height: 50px;
+  padding: 0 18px;
+  border-radius: 25px;
+  background: #fffffff0;
+  box-shadow: 0 5px 0 #1f3a5a44;
+  font-weight: 900;
+  font-size: 19px;
+}
+.pill b {
+  color: #ff8a3d;
+}
+.pill.on {
+  background: linear-gradient(#ffd25f, #ff9f1f);
+  color: #fff;
+  box-shadow: 0 5px 0 #c86a10;
+}
+.pill.reward {
+  margin: 0 0 12px;
+  background: linear-gradient(#a8ffcf, #3fdc8a);
+  box-shadow: 0 5px 0 #1f9a5a;
+  color: #10462a;
+}
+.pill.reward[hidden] {
+  display: none;
+}
+.sheet,
+.screen .card {
+  animation: pop 0.45s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+.tier-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+.tier-head h2 {
+  margin: 4px 0;
+}
+.tier-head .round:disabled {
+  opacity: 0.3;
+}
+.tier-sub {
+  margin: 0 0 10px;
+  font-weight: 800;
+  opacity: 0.8;
+}
+.tip {
+  margin: 0 0 12px;
+  font-weight: 800;
+  font-size: 16px;
+  color: #3a5a7a;
+}
+.tip:empty {
+  display: none;
+}
+.steps {
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.step {
+  width: 112px;
+  font-size: 15px;
+  position: relative;
+}
+.step img {
+  width: 84px;
+  height: 84px;
+}
+.step .ico {
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 84px;
+  font-size: 48px;
+}
+.step.trial {
+  background: #fff6d8;
+}
+.step.boss {
+  background: linear-gradient(#fff3b0, #ffd25f);
+}
+.step.boss::before {
+  content: "👑";
+  position: absolute;
+  top: -12px;
+  font-size: 24px;
+}
+.step.now {
+  animation: nowPulse 1.2s ease-in-out infinite alternate;
+}
+@keyframes nowPulse {
+  to {
+    transform: translateY(-4px);
+  }
+}
+.step.done::after {
+  content: "✓";
+  font-size: 18px;
+}
+#go:disabled {
+  filter: grayscale(1);
+  opacity: 0.6;
+}
+.hero {
+  position: relative;
+}
+.hero small {
+  font-size: 12px;
+  color: #6a7a8a;
+}
+.hero.locked img {
+  filter: grayscale(1) brightness(1.1);
+  opacity: 0.55;
+}
+.heroes {
+  grid-template-columns: repeat(4, 1fr);
+}
+.trial-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.trial-card {
+  border-radius: 22px;
+  background: linear-gradient(#ffffff, #fff4d8);
+  box-shadow: 0 5px 0 #c86a1055;
+  padding: 10px 8px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 19px;
+}
+.trial-card .ico {
+  font-size: 46px;
+  line-height: 1.1;
+}
+.trial-card small {
+  font-size: 13px;
+  font-weight: 700;
+  color: #4a6a8a;
+}
+.mini-stars i,
+.result-stars i {
+  font-style: normal;
+  color: #c8d2e0;
+  font-size: 26px;
+  text-shadow: 0 2px 0 #0002;
+}
+.mini-stars i.on {
+  color: #ffc533;
+}
+.result-stars {
+  margin: -8px 0 6px;
+}
+.result-stars i {
+  display: inline-block;
+  font-size: 48px;
+  margin: 0 2px;
+}
+.result-stars i.on {
+  color: #ffc533;
+  animation: starIn 0.5s cubic-bezier(0.2, 1.8, 0.4, 1) both;
+}
+@keyframes starIn {
+  from {
+    transform: scale(0) rotate(-90deg);
+  }
+}
+.result-coins {
+  margin: -6px 0 10px;
+  font-size: 30px;
+  font-weight: 900;
+  color: #c86a10;
+}
+.result-coins[hidden],
+.result-stars[hidden],
+.result-note[hidden] {
+  display: none;
+}
+.result-coins.bump i {
+  display: inline-block;
+  animation: coinBump 0.5s cubic-bezier(0.2, 1.8, 0.4, 1);
+}
+@keyframes coinBump {
+  40% {
+    transform: translateY(-12px) scale(1.4) rotate(-12deg);
+  }
+}
+.result-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+.result-badges:empty {
+  display: none;
+}
+.chip {
+  background: #fff3c8;
+  border-radius: 14px;
+  padding: 4px 10px;
+  font-weight: 900;
+  font-size: 15px;
+  animation: pop 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) 0.6s both;
+}
+.chip b {
+  color: #c86a10;
+}
+.result-note {
+  margin: 0 0 12px;
+  font-weight: 900;
+  font-size: 19px;
+  color: #8f3fd0;
+}
+/* Кнопка «В меню» на листах — в левом верхнем углу, чтобы лист помещался на телефоне боком */
+.sheet {
+  position: relative;
+}
+.sheet .back {
+  position: absolute;
+  left: 10px;
+  top: 8px;
+  width: 50px;
+  height: 50px;
+  font-size: 24px;
+  padding: 0;
+}
+.badge {
+  font: inherit;
+  color: inherit;
+}
+.card-confetti {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 11;
+  pointer-events: none;
+}
+.shop-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+.shop-head h2 {
+  margin: 4px 0;
+}
+.tabs {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+.tabs button {
+  padding: 8px 16px;
+  border-radius: 18px;
+  background: #e8f2fc;
+  font-weight: 900;
+  font-size: 17px;
+}
+.tabs button.on {
+  background: #3f8cff;
+  color: #fff;
+}
+.shop-items {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.shop-item {
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 5px 0 #1f3a5a33;
+  padding: 10px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 16px;
+}
+.shop-item span {
+  font-weight: 900;
+  font-size: 15px;
+  color: #c86a10;
+}
+.shop-item.on {
+  box-shadow: 0 5px 0 #1f9a5a, 0 0 0 3px #3fdc8a;
+}
+.shop-item.on span {
+  color: #1f9a5a;
+}
+.shop-item.poor {
+  opacity: 0.6;
+}
+.shop-item.shake {
+  animation: shake 0.4s;
+}
+@keyframes shake {
+  25% {
+    transform: translateX(-6px);
+  }
+  75% {
+    transform: translateX(6px);
+  }
+}
+.ball-ico,
+.kit-ico,
+.decor-ico {
+  display: block;
+  width: 58px;
+  height: 58px;
+  font-style: normal;
+}
+.ball-ico {
+  border-radius: 50%;
+  box-shadow: inset -6px -8px 0 #0002, 0 3px 0 #0002;
+}
+.kit-ico {
+  border-radius: 14px 14px 10px 10px;
+  clip-path: polygon(22% 0, 78% 0, 100% 22%, 86% 38%, 80% 32%, 80% 100%, 20% 100%, 20% 32%, 14% 38%, 0 22%);
+}
+.decor-ico {
+  font-size: 46px;
+  line-height: 58px;
+}
+.badges {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.badge {
+  border-radius: 16px;
+  background: #eef2f6;
+  padding: 6px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 12px;
+  opacity: 0.6;
+}
+.badge.got {
+  background: linear-gradient(#fff9e0, #ffe8a0);
+  opacity: 1;
+  box-shadow: 0 3px 0 #c86a1044;
+}
+.badge .ico {
+  font-size: 30px;
+}
+.badge b {
+  font-size: 13px;
+}
+.badge small {
+  font-size: 11px;
+  font-weight: 700;
+  color: #5a6f8a;
+}
+.quality {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin: 8px 0 10px;
+}
+@media (max-height: 500px), (max-width: 700px) {
+  .title {
+    gap: 12px;
+  }
+  .logo h1 span:first-child {
+    font-size: min(11vw, 15vh);
+  }
+  .logo h1 span:last-child {
+    font-size: min(13vw, 17vh);
+  }
+  .logo p {
+    margin-top: 6px;
+    font-size: 15px;
+    padding: 5px 14px;
+  }
+  .big {
+    height: 60px;
+    min-width: 170px;
+    font-size: 25px;
+  }
+  .pill {
+    height: 42px;
+    font-size: 16px;
+    padding: 0 14px;
+  }
+  .coins {
+    height: 44px;
+    font-size: 17px;
+  }
+  .sheet {
+    padding: 10px 14px 14px;
+  }
+  .sheet h2 {
+    font-size: 24px;
+    margin: 2px 0 6px;
+  }
+  .step {
+    width: 92px;
+    font-size: 13px;
+    padding: 4px 4px 6px;
+  }
+  .step img,
+  .step .ico {
+    width: 58px;
+    height: 58px;
+    font-size: 34px;
+  }
+  .tip {
+    font-size: 14px;
+    margin-bottom: 8px;
+  }
+  .tier-sub {
+    margin-bottom: 6px;
+    font-size: 14px;
+  }
+  .hero img {
+    max-width: 78px;
+  }
+  .step small {
+    font-size: 12px;
+    letter-spacing: -0.3px;
+  }
+  .sheet .back {
+    width: 42px;
+    height: 42px;
+    font-size: 20px;
+  }
+  .hero {
+    font-size: 15px;
+    padding: 2px 4px 6px;
+  }
+  .badges {
+    grid-template-columns: repeat(7, 1fr);
+    gap: 5px;
+  }
+  .badge small {
+    display: none;
+  }
+  .badge .ico {
+    font-size: 24px;
+  }
+  .trial-card .ico {
+    font-size: 34px;
+  }
+  .shop-items {
+    gap: 8px;
+  }
+  .result-pic {
+    font-size: 60px;
+  }
+  .result-pic img {
+    width: 96px;
+    height: 96px;
+  }
+  .card {
+    padding: 12px 22px 16px;
+  }
+  .card h2 {
+    font-size: 28px;
+  }
+  .result-stars i {
+    font-size: 38px;
+  }
+  .result-coins {
+    font-size: 24px;
+    margin-bottom: 6px;
+  }
+  .toast {
+    top: calc(64px + var(--safe-t));
+    font-size: 16px;
+  }
+}
+@media (max-width: 560px) {
+  .heroes,
+  .shop-items {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .trial-cards {
+    grid-template-columns: 1fr;
+  }
+  .badges {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .step.now,
+  .sheet,
+  .screen .card {
+    animation: none;
+  }
+}
+/* Невысокие окна (ноутбук, VK с баннером): карточка итогов пониже */
+@media (max-height: 640px) {
+  .result-pic {
+    font-size: 56px;
+  }
+  .result-pic img {
+    width: 84px;
+    height: 84px;
+  }
+  .card {
+    padding: 14px 26px 18px;
+  }
+  .result-score {
+    margin-bottom: 8px;
+  }
+}
+/* Телефон боком: карточка итогов целиком, без прокрутки */
+@media (max-height: 430px) {
+  .dim {
+    padding-top: calc(58px + var(--safe-t));
+    padding-bottom: 8px;
+  }
+  .result-pic {
+    font-size: 40px;
+  }
+  .result-pic img {
+    width: 64px;
+    height: 64px;
+  }
+  .card h2 {
+    font-size: 24px;
+    margin: 0;
+  }
+  .result-score {
+    font-size: 20px;
+    margin: 0 0 4px;
+  }
+  .result-stars {
+    margin: -4px 0 0;
+  }
+  .result-stars i {
+    font-size: 30px;
+  }
+  .result-coins {
+    font-size: 21px;
+    margin: 0 0 4px;
+  }
+  .result-note {
+    font-size: 16px;
+    margin: 0 0 6px;
+  }
+  .pill.reward {
+    height: 40px;
+    margin-bottom: 8px;
+  }
+  .round.wide {
+    width: 60px;
+    height: 60px;
+    font-size: 28px;
+  }
+}
+/* Самые низкие телефоны (568×320): заставка под кнопками звука, итог без картинки */
+@media (max-height: 340px) {
+  .title {
+    padding-top: 56px;
+    gap: 8px;
+  }
+  .logo p {
+    display: none;
+  }
+  .logo h1 span:first-child {
+    font-size: 13vh;
+  }
+  .logo h1 span:last-child {
+    font-size: 15vh;
+  }
+  .dim {
+    padding-top: calc(54px + var(--safe-t));
+  }
+  .result-pic {
+    display: none;
+  }
+  /* Листы целиком, без прокрутки */
+  .sheet {
+    padding: 6px 10px 8px;
+  }
+  .sheet h2,
+  .tier-head h2 {
+    font-size: 20px;
+    margin: 0 0 2px;
+  }
+  .tier-head .round {
+    width: 36px;
+    height: 36px;
+    padding: 6px;
+    font-size: 16px;
+  }
+  .tier-sub,
+  .tip {
+    font-size: 12px;
+    margin-bottom: 3px;
+  }
+  .steps {
+    gap: 5px;
+    margin-bottom: 4px;
+  }
+  .screen {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  .step {
+    width: 66px;
+    font-size: 11px;
+    padding: 2px 2px 4px;
+  }
+  .step small {
+    font-size: 9px;
+    letter-spacing: -0.4px;
+  }
+  .step img,
+  .step .ico {
+    width: 40px;
+    height: 40px;
+    font-size: 26px;
+  }
+  .big {
+    height: 48px;
+    font-size: 21px;
+    min-width: 150px;
+  }
+  .round.wide {
+    width: 48px;
+    height: 48px;
+    font-size: 22px;
+  }
+  .heroes {
+    gap: 6px;
+  }
+  .hero {
+    font-size: 13px;
+    padding: 0 2px 3px;
+  }
+  .hero img {
+    max-width: 50px;
+  }
+  .hero small {
+    font-size: 10px;
+  }
+  .trial-cards {
+    gap: 6px;
+    margin-bottom: 0;
+  }
+  .trial-card {
+    padding: 4px 6px 6px;
+    font-size: 15px;
+    gap: 1px;
+  }
+  .trial-card .ico {
+    font-size: 24px;
+  }
+  .trial-card small {
+    font-size: 10px;
+  }
+  .mini-stars i {
+    font-size: 18px;
+  }
+  .badges {
+    gap: 4px;
+    margin-bottom: 4px;
+  }
+  .badge {
+    padding: 2px;
+  }
+  .badge .ico {
+    font-size: 18px;
+  }
+  .badge b {
+    font-size: 10px;
+  }
+  .sheet .back {
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
+    top: 4px;
+    left: 6px;
   }
 }

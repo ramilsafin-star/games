@@ -1,6 +1,6 @@
 // Общие мелочи: three.js, сборка моделей из простых тел, хранилище.
-import * as T from "../vendor/three/three.module.min.js?v=aa0c23d8";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=aa0c23d8";
+import * as T from "../vendor/three/three.module.min.js?v=935ab875";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=935ab875";
 
 export { T };
 export const TAU = Math.PI * 2;

@@ -1,8 +1,8 @@
 // Главы и уровни «Линии спасения». Только данные и маленькие помощники — без DOM.
 // Координаты мира: 1280 × 720, y вниз. У каждого уровня есть эталон sol — ломаные,
 // которыми уровень точно проходится (проверяется тестами и показывается как подсказка).
-import { compile } from "./world.js?v=8e3275de";
-import { arc } from "./geom.js?v=8e3275de";
+import { compile } from "./world.js?v=dbaf642d";
+import { arc } from "./geom.js?v=dbaf642d";
 
 // ---------- Помощники ----------
 const R = (x, y, w, h, m, o) => ({ shape: "rect", x, y, w, h, m: m || "ground", ...o });
@@ -21,6 +21,7 @@ export const CHAPTERS = [
   { key: "snow", name: "Снежный перевал", short: "Перевал" },
   { key: "volcano", name: "Огненная гора", short: "Вулкан" },
   { key: "night", name: "Ночные крыши", short: "Крыши" },
+  { key: "grove", name: "Лунная роща", short: "Роща" },
 ];
 
 const RAW = [
@@ -1146,6 +1147,219 @@ const RAW = [
       sol: [line([170, 160], [554, 357], [758, 360], [1110, 560]), line([170, 360], [761, 259], [854, 166], [1110, 160]), line([170, 560], [758, 261], [963, 360], [1110, 360])],
     },
   ],
+  // ===== Глава 7. Лунная роща: привидения летят сквозь землю и камни, огоньки поджигают линию =====
+  [
+    {
+      type: "shield",
+      name: "Привиденьки",
+      demo: true,
+      tip: "Привидения летят сквозь камни, но сквозь линию — никак!",
+      terrain: [floor(600), R(820, 360, 110, 240, "stone")],
+      hero: [600, 600],
+      ghosts: [{ x: 1130, y: 400, n: 6, every: 0.7, speed: 1.4 }],
+      sol: [dome(600, 600, 95, 100)],
+    },
+    {
+      type: "deliver",
+      name: "Стенка на гвоздике",
+      tip: "Перекинь мостик ягоде, а вторую линию повесь на гвоздик — получится стенка",
+      strokes: 2,
+      terrain: [slope(-400, 200, 430, 450), floor(540, 650), R(1080, 300, 90, 240, "stone")],
+      nails: [[1010, 330]],
+      hero: [900, 540],
+      target: { k: "berry", x: 40, y: 300 },
+      ghosts: [{ x: 1200, y: 470, n: 5, every: 1, delay: 0.8 }],
+      sol: [line([400, 431], [760, 524]), line([1010, 336], [1010, 520])],
+    },
+    {
+      type: "home",
+      name: "Сквозь камень",
+      tip: "Привидение-дозорный проходит сквозь камень. Не попадись ему!",
+      walkers: [
+        [180, 200, 0],
+        [180, 520, 1],
+      ],
+      homes: [
+        [1100, 520, 0],
+        [1100, 200, 1],
+      ],
+      terrain: [R(560, 250, 160, 220, "stone")],
+      patrols: [{ a: [380, 360], b: [900, 360], v: 190, s0: 0.1, ghost: true }],
+      sol: [line([180, 200], [780, 220], [1100, 520]), line([180, 520], [540, 220], [1100, 200])],
+    },
+    {
+      type: "shield",
+      name: "Снизу!",
+      tip: "Привидения летят из-под земли. Положи линию-люльку на колышки под веткой",
+      terrain: [floor(690), R(250, 120, 70, 600, "wood"), R(320, 400, 470, 24, "wood")],
+      pegs: [
+        [470, 466],
+        [810, 466],
+      ],
+      hero: [640, 400],
+      ghosts: [{ x: 640, y: 680, n: 6, every: 0.7 }],
+      sol: [line([440, 446], [500, 446], [560, 540], [720, 540], [780, 446], [840, 446])],
+    },
+    {
+      type: "shield",
+      name: "Огоньки",
+      tip: "Огонёк поджигает линию, которой коснётся. Нарисуй две!",
+      strokes: 2,
+      time: 8,
+      terrain: [floor(600)],
+      hero: [640, 600],
+      ghosts: [{ x: 1120, y: 150, n: 2, every: 2.6, delay: 0.4, fire: true }],
+      sol: [dome(640, 600, 80, 90), dome(640, 600, 140, 150)],
+    },
+    {
+      type: "deliver",
+      name: "Горка и стенка",
+      tip: "Ягоде — горку, Тоше — стенку от привидений",
+      strokes: 2,
+      terrain: [floor(560, -400, 700), R(940, 430, 740, 600), R(40, 330, 100, 230, "stone")],
+      nails: [[290, 380]],
+      hero: [420, 560],
+      target: { k: "berry", x: 820, y: 150 },
+      ghosts: [{ x: 170, y: 480, n: 5, every: 0.8, delay: 0.2, speed: 1.5 }],
+      sol: [line([960, 410], [600, 546]), line([290, 386], [290, 540])],
+    },
+    {
+      type: "shield",
+      name: "Жуки и привидения",
+      terrain: [floor(600), P([[380, 600], [540, 460], [740, 460], [900, 600]]), R(1000, 420, 120, 180, "stone")],
+      hero: [640, 460],
+      bugs: [{ x: 160, y: 150, n: 9, every: 0.3 }],
+      ghosts: [{ x: 1180, y: 380, n: 5, every: 0.9, delay: 0.6 }],
+      sol: [dome(640, 460, 100, 105)],
+    },
+    {
+      type: "home",
+      name: "Хоровод",
+      tip: "Привидения кружат вокруг пня",
+      walkers: [
+        [170, 160, 0],
+        [170, 560, 1],
+      ],
+      homes: [
+        [1110, 560, 0],
+        [1110, 160, 1],
+      ],
+      terrain: [{ shape: "circle", x: 640, y: 360, r: 70, m: "wood" }],
+      patrols: [{ k: "orbit", c: [640, 360], R: 150, w: 70, a0: 0, ghost: true }],
+      sol: [line([170, 160], [454, 453], [1110, 560]), line([170, 560], [701, 460], [1110, 160])],
+    },
+    {
+      type: "shield",
+      name: "Два костра",
+      tip: "Слева два огонька, справа один",
+      strokes: 3,
+      time: 8,
+      terrain: [floor(600)],
+      hero: [360, 600],
+      friends: [[920, 600, 1]],
+      ghosts: [
+        { x: 80, y: 160, n: 2, every: 2.6, delay: 0.4, fire: true },
+        { x: 1200, y: 160, n: 1, delay: 1, fire: true },
+      ],
+      sol: [dome(360, 600, 70, 80), dome(360, 600, 125, 135), dome(920, 600, 80, 90)],
+    },
+    {
+      type: "deliver",
+      name: "Мостик над туманом",
+      tip: "Тоша свернулся клубком. Мостик заодно укроет его от привидений снизу",
+      terrain: [slope(-400, 260, 380, 400), slope(760, 570, 1000, 600), floor(600, 1000), R(-400, 690, 2080, 400)],
+      target: { k: "roll", x: 80, y: 316 },
+      house: [960, 600],
+      ghosts: [{ x: 560, y: 700, n: 5, every: 0.7, delay: 0.3 }],
+      sol: [line([394, 412], [776, 564])],
+    },
+    {
+      type: "home",
+      name: "Сквозь стены",
+      walkers: [
+        [180, 180, 0],
+        [180, 540, 1],
+      ],
+      homes: [
+        [1100, 540, 0],
+        [1100, 180, 1],
+      ],
+      terrain: [R(420, 60, 70, 230, "stone"), R(790, 430, 70, 230, "stone")],
+      patrols: [{ a: [640, 80], b: [640, 640], v: 200, s0: 0.3, ghost: true }],
+      sol: [line([180, 180], [355, 453], [857, 361], [1100, 540]), line([180, 540], [551, 560], [956, 263], [1100, 180])],
+    },
+    {
+      type: "shield",
+      name: "Сверху и снизу",
+      tip: "Огонёк сверху, привидения снизу",
+      strokes: 2,
+      time: 7,
+      terrain: [floor(690), R(250, 120, 70, 600, "wood"), R(320, 400, 470, 24, "wood")],
+      pegs: [
+        [470, 466],
+        [810, 466],
+      ],
+      hero: [640, 400],
+      ghosts: [
+        { x: 640, y: 680, n: 5, every: 0.8, delay: 0.6 },
+        { x: 1150, y: 120, n: 1, delay: 0.3, fire: true },
+      ],
+      sol: [line([440, 446], [500, 446], [560, 540], [720, 540], [780, 446], [840, 446]), dome(640, 400, 95, 100)],
+    },
+    {
+      type: "deliver",
+      name: "Ключ под луной",
+      tip: "Привидения летят к Черничке в клетке. Повесь стенку на гвоздик",
+      strokes: 2,
+      terrain: [floor(600), R(60, 200, 300, 22, "wood", { a: 24 }), R(1150, 330, 90, 270, "stone")],
+      pegs: [[430, 360]],
+      nails: [[1040, 380]],
+      target: { k: "star", x: 100, y: 128 },
+      lock: [880, 510],
+      friends: [[880, 600, 2]],
+      ghosts: [{ x: 1130, y: 500, n: 5, every: 0.8, delay: 0.3, speed: 1.5 }],
+      sol: [line([380, 326], [838, 474]), line([1040, 386], [1040, 560])],
+    },
+    {
+      type: "home",
+      name: "Лунный хоровод",
+      walkers: [
+        [170, 160, 0],
+        [170, 360, 1],
+        [170, 560, 2],
+      ],
+      homes: [
+        [1110, 560, 0],
+        [1110, 160, 1],
+        [1110, 360, 2],
+      ],
+      terrain: [R(600, 320, 80, 80, "stone")],
+      patrols: [
+        { k: "orbit", c: [640, 360], R: 160, w: -75, a0: 90, ghost: true },
+        { a: [960, 80], b: [960, 640], v: 160, s0: 0.5, ghost: true },
+      ],
+      sol: [line([170, 160], [377, 377], [1110, 560]), line([170, 360], [1011, 222], [1110, 160]), line([170, 560], [226, 539], [1110, 360])],
+    },
+    {
+      type: "shield",
+      name: "Полнолуние",
+      tip: "Все трое — и жуки, и привидения, и огоньки!",
+      strokes: 2,
+      time: 8,
+      terrain: [floor(600), R(140, 380, 100, 220, "stone")],
+      hero: [640, 600],
+      friends: [
+        [560, 600, 1],
+        [720, 600, 2],
+      ],
+      bugs: [{ x: 640, y: 110, n: 8, every: 0.35, delay: 0.5 }],
+      ghosts: [
+        { x: 40, y: 470, n: 4, every: 1, delay: 0.6 },
+        { x: 1200, y: 160, n: 1, delay: 1.2, fire: true },
+      ],
+      sol: [dome(640, 600, 150, 110), dome(640, 600, 210, 160)],
+    },
+  ],
 ];
 
 // Заставка главного меню: Тоша справа, чтобы его не закрывала карточка с названием
@@ -1165,5 +1379,55 @@ export const ATTRACT = compile(
 );
 
 export const LEVELS = [];
-RAW.forEach((list, ch) => list.forEach((raw, n) => LEVELS.push(compile(raw, LEVELS.length, ch, n))));
+const RAWS = [];
+RAW.forEach((list, ch) =>
+  list.forEach((raw, n) => {
+    RAWS.push(raw);
+    LEVELS.push(compile(raw, LEVELS.length, ch, n));
+  }),
+);
 export const PER_CHAPTER = 15;
+
+// ---------- Задача дня: знакомый уровень в зеркале ----------
+// Всё, что на уровне есть, отражается слева направо: земля, герои, опасности, скорости, углы и эталон.
+const MX = 1280;
+const mx = (x) => MX - x;
+const mpt = ([x, y, ...rest]) => [mx(x), y, ...rest];
+function mirrorPiece(p) {
+  const q = { ...p };
+  if (p.shape === "rect") (q.x = MX - p.x - p.w), (q.a = -(p.a || 0));
+  else if (p.shape === "poly") q.pts = p.pts.map(mpt).reverse();
+  else q.x = mx(p.x);
+  if (p.move) q.move = { ...p.move, dx: -(p.move.dx || 0) };
+  if (p.door != null) q.dx = -(p.dx || 0);
+  return q;
+}
+export function mirrorRaw(raw) {
+  const m = { ...raw };
+  m.terrain = (raw.terrain || []).map(mirrorPiece);
+  for (const k of ["pegs", "nails", "friends", "walkers", "homes"]) if (raw[k]) m[k] = raw[k].map(mpt);
+  for (const k of ["hero", "lock", "house"]) if (raw[k]) m[k] = mpt(raw[k]);
+  if (raw.nodraw) m.nodraw = raw.nodraw.map(([x, y, w, h]) => [MX - x - w, y, w, h]);
+  for (const k of ["bugs", "buttons", "ghosts"]) if (raw[k]) m[k] = raw[k].map((o) => ({ ...o, x: mx(o.x) }));
+  if (raw.rocks) m.rocks = raw.rocks.map((o) => ({ ...o, x0: MX - o.x1, x1: MX - o.x0, vx: -(o.vx || 0) }));
+  if (raw.cannons) m.cannons = raw.cannons.map((o) => ({ ...o, x: mx(o.x), angle: 180 - o.angle }));
+  if (raw.drops) m.drops = raw.drops.map((o) => ({ ...o, x: mx(o.x), vx: -(o.vx || 0) }));
+  if (raw.icicles) m.icicles = raw.icicles.map(mpt);
+  if (raw.balls) m.balls = raw.balls.map((o) => ({ ...o, x: mx(o.x), v: o.v ? [-o.v[0], o.v[1]] : o.v }));
+  if (raw.fans) m.fans = raw.fans.map((o) => ({ ...o, x: mx(o.x), dir: -(o.dir || 0) }));
+  if (raw.target) m.target = { ...raw.target, x: mx(raw.target.x), v: raw.target.v ? [-raw.target.v[0], raw.target.v[1]] : raw.target.v };
+  if (raw.patrols)
+    m.patrols = raw.patrols.map((p) => (p.k === "orbit" ? { ...p, c: mpt(p.c), a0: 180 - (p.a0 || 0), w: -(p.w || 60) } : { ...p, a: mpt(p.a), b: mpt(p.b) }));
+  m.sol = raw.sol.map((l) => l.map(mpt));
+  m.demo = false;
+  return m;
+}
+// Уровень задачи дня (по номеру исходного уровня)
+export function dailyLevel(i) {
+  const base = LEVELS[i];
+  const L = compile({ ...mirrorRaw(RAWS[i]), seed: base.seed }, -2, base.chapter, base.n);
+  L.daily = true;
+  L.of = i;
+  L.id = base.id;
+  return L;
+}

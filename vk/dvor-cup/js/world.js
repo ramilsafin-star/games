@@ -1,14 +1,14 @@
 // 3D «Дворового кубка»: двор с полем, ворота с сеткой, забор, домики, зрители-зверята, гирлянда флажков,
 // футболисты с большими головами, мяч, следы и искры. Игра идёт в плоскости z = 0, вид сбоку.
-import * as T from "../vendor/three/three.module.min.js?v=0c6b65d0";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=0c6b65d0";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=0c6b65d0";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=0c6b65d0";
-import { polish } from "./gfx.js?v=0c6b65d0";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=0c6b65d0";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=0c6b65d0";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=0c6b65d0";
-import { FIELD, BALL_R } from "./match.js?v=0c6b65d0";
+import * as T from "../vendor/three/three.module.min.js?v=aaeea594";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=aaeea594";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=aaeea594";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=aaeea594";
+import { polish } from "./gfx.js?v=aaeea594";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=aaeea594";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=aaeea594";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=aaeea594";
+import { FIELD, BALL_R } from "./match.js?v=aaeea594";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;
@@ -67,8 +67,52 @@ export const ANIMALS = {
   bear: { name: "Мишка", fur: "#b07a4a", belly: "#f2d6b0", ear: "round", inner: "#8a5a34", nose: "#3b2730", shirt: "#ff4f6d", shorts: "#ffffff" },
   frog: { name: "Лягушонок", fur: "#6fd35f", belly: "#efffd8", ear: "none", inner: "#ff9fb0", nose: "#2a6a2a", shirt: "#ffc533", shorts: "#3a7aff", eyesTop: true },
   panda: { name: "Панда", fur: "#ffffff", belly: "#ffffff", ear: "round", inner: "#22222e", nose: "#22222e", shirt: "#ff8f3f", shorts: "#22222e", panda: true },
+  cat: { name: "Котик", fur: "#f7b267", belly: "#fff4e6", ear: "pointy", inner: "#ff9fb0", nose: "#ff7f9a", shirt: "#ff5fa2", shorts: "#ffffff", tail: "cat", whiskers: true, stripes: "#e08a3c" },
+  koala: { name: "Коала", fur: "#a9b4c6", belly: "#eef2f8", ear: "fluffy", inner: "#f4f6fb", nose: "#3a3646", shirt: "#2fc7b8", shorts: "#2b2b3d", bigNose: true },
 };
-function footballer(kind, number) {
+// Форма из раздевалки: рисунок футболки
+function shirtTexture(color, number, kit) {
+  return canvasTexture(256, 128, (x, w, h) => {
+    x.fillStyle = kit === "gold" ? "#ffcf3f" : color;
+    x.fillRect(0, 0, w, h);
+    if (kit === "stripes") {
+      x.fillStyle = "#ffffff";
+      for (let i = 0; i < w; i += 40) x.fillRect(i + 12, 0, 14, h);
+    } else if (kit === "dots") {
+      x.fillStyle = "#fff6a8";
+      for (let i = 0; i < 18; i++) {
+        const cx = (i * 47) % w,
+          cy = 14 + ((i * 29) % (h - 20));
+        x.beginPath();
+        for (let v = 0; v < 10; v++) {
+          const a = (v * Math.PI) / 5 - Math.PI / 2,
+            r = v % 2 ? 4 : 10;
+          x.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+        }
+        x.fill();
+      }
+    } else if (kit === "gold") {
+      const g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, "#fff3b0");
+      g.addColorStop(0.5, "#ffc533");
+      g.addColorStop(1, "#d9921a");
+      x.fillStyle = g;
+      x.fillRect(0, 0, w, h);
+    }
+    x.fillStyle = kit === "gold" ? "#b0306a" : "#ffffff";
+    x.fillRect(0, 52, w, 12);
+    x.font = "900 68px system-ui, sans-serif";
+    x.textAlign = "center";
+    x.textBaseline = "middle";
+    x.lineWidth = 8;
+    x.strokeStyle = "#0004";
+    for (const cx of [64, 192]) {
+      x.strokeText(String(number), cx, 72);
+      x.fillText(String(number), cx, 72);
+    }
+  });
+}
+function footballer(kind, number, kit = "home") {
   const A = ANIMALS[kind];
   const g = new T.Group(),
     body = new T.Group();
@@ -77,18 +121,9 @@ function footballer(kind, number) {
     light = matte(A.belly),
     dark = matte(A.inner);
   // Тело в футболке с номером
-  const shirtTex = canvasTexture(128, 64, (x) => {
-    x.fillStyle = A.shirt;
-    x.fillRect(0, 0, 128, 64);
-    x.fillStyle = "#ffffff";
-    x.fillRect(0, 26, 128, 6);
-    x.font = "900 34px system-ui, sans-serif";
-    x.textAlign = "center";
-    x.textBaseline = "middle";
-    x.fillText(String(number), 96, 36);
-    x.fillText(String(number), 32, 36);
-  });
-  const torso = new T.Mesh(new T.SphereGeometry(0.46, 24, 18), new T.MeshStandardMaterial({ map: shirtTex, roughness: 0.6 }));
+  const shirtTex = shirtTexture(A.shirt, number, kit);
+  const shirtMat = kit === "gold" ? new T.MeshPhysicalMaterial({ map: shirtTex, roughness: 0.3, metalness: 0.35, clearcoat: 0.8 }) : new T.MeshStandardMaterial({ map: shirtTex, roughness: 0.6 });
+  const torso = new T.Mesh(new T.SphereGeometry(0.46, 24, 18), shirtMat);
   torso.scale.set(1, 1.05, 0.92);
   torso.position.y = 0.72;
   body.add(torso);
@@ -146,7 +181,32 @@ function footballer(kind, number) {
   }
   const nose = new T.Mesh(new T.SphereGeometry(0.075, 12, 10), glossy(A.nose, { roughness: 0.2 }));
   nose.position.set(0.66, -0.08, 0);
+  if (A.bigNose) {
+    nose.scale.set(1.4, 2.2, 1.9);
+    nose.position.set(0.66, -0.04, 0);
+  }
   head.add(nose);
+  // Усы котика
+  if (A.whiskers) {
+    const wm = matte("#5a4a4a");
+    for (const s of [-1, 1])
+      for (const k of [-1, 1]) {
+        const wsk = new T.Mesh(new T.CylinderGeometry(0.008, 0.008, 0.34, 4), wm);
+        wsk.rotation.x = pie / 2 + s * 0.15;
+        wsk.rotation.z = k * 0.12;
+        wsk.position.set(0.66, -0.16 + k * 0.03, s * 0.2);
+        head.add(wsk);
+      }
+  }
+  // Полоски на лбу котика
+  if (A.stripes) {
+    for (const k of [-1, 0, 1]) {
+      const st = new T.Mesh(new T.CapsuleGeometry(0.035, 0.16, 4, 6), matte(A.stripes));
+      st.position.set(0.3, 0.5, k * 0.13);
+      st.rotation.z = 0.9;
+      head.add(st);
+    }
+  }
   // Глаза смотрят вперёд (+x)
   const eyes = [];
   for (const s of [-1, 1]) {
@@ -190,6 +250,16 @@ function footballer(kind, number) {
         inner.position.set(0.0, 0.52, s * 0.43);
         head.add(inner);
       }
+    } else if (A.ear === "fluffy") {
+      // Коала: большие пушистые уши со светлой серединкой
+      const ear = new T.Mesh(new T.SphereGeometry(0.3, 16, 12), fur);
+      ear.scale.set(0.7, 1, 1);
+      ear.position.set(-0.12, 0.42, s * 0.56);
+      head.add(ear);
+      const inner = new T.Mesh(new T.SphereGeometry(0.18, 12, 10), light);
+      inner.scale.set(0.5, 1, 1);
+      inner.position.set(-0.02, 0.42, s * 0.6);
+      head.add(inner);
     } else if (A.ear === "long") {
       const ear = new T.Mesh(new T.CapsuleGeometry(0.11, 0.62, 6, 12), fur);
       ear.position.set(-0.12, 0.92, s * 0.2);
@@ -212,8 +282,11 @@ function footballer(kind, number) {
     tail.position.set(-0.4, 0.5, 0);
     const n = 5;
     for (let k = 0; k < n; k++) {
-      const seg = new T.Mesh(new T.SphereGeometry(0.15 + Math.sin((k / n) * pie) * 0.06, 12, 10), A.tail === "ring" && k % 2 ? dark : k === n - 1 && A.tail === "fox" ? light : fur);
-      seg.position.set(-k * 0.14, k * 0.1, 0);
+      const thin = A.tail === "cat";
+      const seg = new T.Mesh(new T.SphereGeometry(thin ? 0.09 : 0.15 + Math.sin((k / n) * pie) * 0.06, 12, 10), A.tail === "ring" && k % 2 ? dark : k === n - 1 && (A.tail === "fox" || thin) ? (thin ? matte(A.stripes) : light) : fur);
+      // Кошачий хвост — тонкий, загнут вверх
+      if (thin) seg.position.set(-k * 0.1, k * k * 0.05, 0);
+      else seg.position.set(-k * 0.14, k * 0.1, 0);
       tail.add(seg);
     }
     body.add(tail);
@@ -225,9 +298,145 @@ function footballer(kind, number) {
   return { group: g, body, head, legs, arms, eyes, shadow, kind };
 }
 
+
+// ---------- Значки бонусов ----------
+export const ITEM_COLORS = { star: "#ffd84a", speed: "#ffb02e", snow: "#7fe0ff", magnet: "#ff5f7f", big: "#ff8fd0" };
+function itemIcon(kind) {
+  return canvasTexture(128, 128, (x) => {
+    x.translate(64, 64);
+    x.lineJoin = "round";
+    x.lineCap = "round";
+    const outline = (fill) => {
+      x.fillStyle = fill;
+      x.fill();
+      x.lineWidth = 7;
+      x.strokeStyle = "#1f3a5a";
+      x.stroke();
+    };
+    if (kind === "star") {
+      x.beginPath();
+      for (let v = 0; v < 10; v++) {
+        const a = (v * Math.PI) / 5 - Math.PI / 2,
+          r = v % 2 ? 22 : 50;
+        x.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+      }
+      x.closePath();
+      outline("#ffd84a");
+    } else if (kind === "speed") {
+      x.beginPath();
+      [[8, -52], [-30, 6], [-2, 6], [-12, 52], [30, -8], [2, -8], [14, -52]].forEach(([a, b]) => x.lineTo(a, b));
+      x.closePath();
+      outline("#ffb02e");
+    } else if (kind === "snow") {
+      x.strokeStyle = "#1f3a5a";
+      x.lineWidth = 16;
+      const flake = () => {
+        for (let k = 0; k < 6; k++) {
+          x.rotate(Math.PI / 3);
+          x.beginPath();
+          x.moveTo(0, 0);
+          x.lineTo(0, -48);
+          x.moveTo(0, -30);
+          x.lineTo(-13, -42);
+          x.moveTo(0, -30);
+          x.lineTo(13, -42);
+          x.stroke();
+        }
+      };
+      flake();
+      x.strokeStyle = "#bff4ff";
+      x.lineWidth = 7;
+      flake();
+    } else if (kind === "magnet") {
+      x.beginPath();
+      x.arc(0, 0, 38, Math.PI, 0, true);
+      x.lineTo(38, -36);
+      x.lineTo(14, -36);
+      x.lineTo(14, 0);
+      x.arc(0, 0, 14, 0, Math.PI, false);
+      x.lineTo(-14, -36);
+      x.lineTo(-38, -36);
+      x.closePath();
+      x.rotate(0);
+      outline("#ff4f6d");
+      x.fillStyle = "#ffffff";
+      x.fillRect(-36, -36, 20, 14);
+      x.fillRect(16, -36, 20, 14);
+    } else {
+      // Большая голова: смешная мордочка
+      x.beginPath();
+      x.arc(0, 4, 44, 0, Math.PI * 2);
+      outline("#ff8fd0");
+      x.fillStyle = "#1f3a5a";
+      x.beginPath();
+      x.arc(-15, -4, 7, 0, 7);
+      x.arc(15, -4, 7, 0, 7);
+      x.fill();
+      x.lineWidth = 6;
+      x.beginPath();
+      x.arc(0, 12, 16, 0.2, Math.PI - 0.2);
+      x.stroke();
+    }
+  });
+}
+
 // ---------- Мяч ----------
-function ballTexture() {
+// Мячи из раздевалки: пятнистый, арбуз, солнышко, планета
+function ballTexture(kind = "classic") {
   return canvasTexture(256, 128, (x, w, h) => {
+    if (kind === "melon") {
+      x.fillStyle = "#3fae4a";
+      x.fillRect(0, 0, w, h);
+      x.strokeStyle = "#1f6a2a";
+      x.lineWidth = 9;
+      for (let i = 0; i < 8; i++) {
+        x.beginPath();
+        for (let y = 0; y <= h; y += 8) x.lineTo((i * w) / 8 + Math.sin(y * 0.15 + i) * 5, y);
+        x.stroke();
+      }
+      return;
+    }
+    if (kind === "sun") {
+      const g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, "#fff3a0");
+      g.addColorStop(0.5, "#ffc533");
+      g.addColorStop(1, "#ff8f1f");
+      x.fillStyle = g;
+      x.fillRect(0, 0, w, h);
+      x.fillStyle = "#ff7a1a";
+      for (let i = 0; i < 12; i++) {
+        x.beginPath();
+        x.moveTo((i * w) / 12, h / 2 - 22);
+        x.lineTo((i * w) / 12 + 10, h / 2);
+        x.lineTo((i * w) / 12, h / 2 + 22);
+        x.lineTo((i * w) / 12 - 10, h / 2);
+        x.fill();
+      }
+      // Улыбка солнышка на одной стороне
+      x.strokeStyle = "#a0400a";
+      x.lineWidth = 5;
+      x.beginPath();
+      x.arc(64, 62, 16, 0.2, Math.PI - 0.2);
+      x.stroke();
+      x.fillStyle = "#a0400a";
+      x.fillRect(54, 46, 6, 8);
+      x.fillRect(70, 46, 6, 8);
+      return;
+    }
+    if (kind === "planet") {
+      x.fillStyle = "#3f8cff";
+      x.fillRect(0, 0, w, h);
+      x.fillStyle = "#4fd36a";
+      for (let i = 0; i < 9; i++) {
+        x.beginPath();
+        x.ellipse((i * 61) % w, 20 + ((i * 37) % 90), 20 + (i % 3) * 8, 10 + (i % 2) * 8, i, 0, 7);
+        x.fill();
+      }
+      x.fillStyle = "#ffffffcc";
+      x.fillRect(0, 0, w, 10);
+      x.fillRect(0, h - 10, w, 10);
+      return;
+    }
     x.fillStyle = "#ffffff";
     x.fillRect(0, 0, w, h);
     // Цветные «заплатки» — как у детского мячика, а не строгого футбольного
@@ -256,10 +465,24 @@ function ballTexture() {
   });
 }
 
+// Небо и свет трёх кубков: день, закат, вечер под прожекторами
+const SKIES = {
+  day: { bot: [1.0, 0.86, 0.78], mid: [0.55, 0.82, 1.0], top: [0.3, 0.6, 1.0], hemi: [0xffffff, 0x88c870, 1.15], sun: [0xfff0d8, 2.2, -8, 16, 12], fog: [0xcfeeff, 60, 160], disc: [1.6, 1.5, 1.1, -60, 55], env: 0.45, night: 0, bg: "#7fd0ff" },
+  sunset: { bot: [1.0, 0.6, 0.36], mid: [1.0, 0.74, 0.58], top: [0.42, 0.42, 0.86], hemi: [0xffd6c0, 0x7a9860, 0.8], sun: [0xffa860, 2.7, -14, 8, 11], fog: [0xffa888, 22, 62], disc: [2.2, 1.3, 0.6, -70, 20], env: 0.42, night: 0, bg: "#ffb48a" },
+  night: { bot: [0.24, 0.18, 0.5], mid: [0.1, 0.12, 0.38], top: [0.03, 0.05, 0.2], hemi: [0x8f9cff, 0x2a4a48, 0.4], sun: [0xf2f6ff, 2.6, 2, 18, 14], fog: [0x232a62, 19, 40], disc: [1.3, 1.35, 1.5, 50, 48], env: 0.22, night: 1, bg: "#1c2358" },
+};
+// Качество графики: «Высокое» по умолчанию на сильных устройствах, авто-снижение при fps ниже 45
+export const QUALITY = {
+  high: { name: "Высокое", ratio: 2, shadows: 2048, bloom: true, fx: 1 },
+  mid: { name: "Среднее", ratio: 1.4, shadows: 1024, bloom: true, fx: 0.65 },
+  low: { name: "Низкое", ratio: 1, shadows: 0, bloom: false, fx: 0.4 },
+};
+const DOWN = { high: "mid", mid: "low", low: "low" };
+
 export class World {
-  constructor(canvas) {
+  constructor(canvas, quality = "auto") {
     this.canvas = canvas;
-    this.renderer = new T.WebGLRenderer({ canvas, antialias: true });
+    this.renderer = new T.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.6));
     this.renderer.toneMapping = T.NeutralToneMapping;
     this.renderer.shadowMap.enabled = true;
@@ -271,7 +494,8 @@ export class World {
     pmrem.dispose();
     this.scene.fog = new T.Fog(0xcfeeff, 60, 160);
     this.camera = new T.PerspectiveCamera(32, 1, 0.1, 400);
-    this.scene.add(new T.HemisphereLight(0xffffff, 0x88c870, 1.15));
+    this.hemi = new T.HemisphereLight(0xffffff, 0x88c870, 1.15);
+    this.scene.add(this.hemi);
     const sun = new T.DirectionalLight(0xfff0d8, 2.2);
     sun.position.set(-8, 16, 12);
     sun.castShadow = true;
@@ -279,6 +503,11 @@ export class World {
     Object.assign(sun.shadow.camera, { left: -14, right: 14, top: 10, bottom: -6, near: 1, far: 50 });
     sun.shadow.bias = -0.0008;
     this.scene.add(sun);
+    this.sun = sun;
+    // Вспышка света у ворот после гола
+    this.flashLight = new T.PointLight(0xfff2c0, 0, 26, 1.6);
+    this.flashLight.position.set(0, 3, 3);
+    this.scene.add(this.flashLight);
     this.time = 0;
     this.tweens = [];
     this.motion = matchMedia("(prefers-reduced-motion: reduce)");
@@ -287,9 +516,11 @@ export class World {
     this.bloom = new UnrealBloomPass(new T.Vector2(256, 256), 0.5, 0.4, 1.4);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
-    polish(this.composer);
-    this.glow = { on: true, slow: 0, seen: 0 };
+    this.grade = polish(this.composer, { vignette: 0.26, vibrance: 0.45 });
+    this.glow = { on: true };
     this.shakeAmp = 0;
+    this.punchAt = null;
+    this.fxScale = 1;
     this.build();
     this.resize = () => {
       const w = canvas.clientWidth,
@@ -302,10 +533,69 @@ export class World {
       this.fit(w / h);
     };
     new ResizeObserver(this.resize).observe(canvas);
-    this.resize();
+    // Качество: «auto» — начинаем с высокого (или среднего на слабом устройстве) и снижаем при просадке fps
+    this.auto = { on: true, frames: 0, time: 0 };
+    this.onQuality = null;
+    this.setQuality(quality);
     this.onFrame = null;
     this.last = 0;
     this.renderer.setAnimationLoop((ms) => this.frame(ms));
+  }
+  setQuality(q) {
+    this.auto.on = q === "auto";
+    if (q === "auto") {
+      const weak = (navigator.hardwareConcurrency || 8) < 6 || (navigator.deviceMemory || 8) < 4;
+      q = weak ? "mid" : "high";
+    }
+    this.auto.frames = this.auto.time = 0;
+    this.quality = q;
+    const Q = QUALITY[q];
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, Q.ratio));
+    const shadows = Q.shadows > 0;
+    if (this.renderer.shadowMap.enabled !== shadows) {
+      this.renderer.shadowMap.enabled = shadows;
+      this.scene.traverse((o) => o.material && (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => (m.needsUpdate = true)));
+    }
+    this.sun.castShadow = shadows;
+    if (shadows && this.sun.shadow.mapSize.x !== Q.shadows) {
+      this.sun.shadow.mapSize.set(Q.shadows, Q.shadows / 2);
+      this.sun.shadow.map?.dispose();
+      this.sun.shadow.map = null;
+    }
+    this.glow.on = Q.bloom;
+    this.fxScale = Q.fx;
+    if (this.grass) this.grass.visible = q === "high";
+    this.resize();
+  }
+  // Небо, свет и огни: "day" | "sunset" | "night"
+  setSky(name) {
+    const k = SKIES[name] || SKIES.day;
+    this.skyName = name;
+    const u = this.sky.material.uniforms;
+    u.bot.value.setRGB(...k.bot);
+    u.mid.value.setRGB(...k.mid);
+    u.top.value.setRGB(...k.top);
+    this.hemi.color.set(k.hemi[0]);
+    this.hemi.groundColor.set(k.hemi[1]);
+    this.hemi.intensity = k.hemi[2];
+    this.sun.color.set(k.sun[0]);
+    this.sun.intensity = k.sun[1];
+    this.sun.position.set(k.sun[2], k.sun[3], k.sun[4]);
+    this.scene.fog.color.set(k.fog[0]);
+    this.scene.fog.near = k.fog[1];
+    this.scene.fog.far = k.fog[2];
+    this.sunDisc.material.color.setRGB(k.disc[0], k.disc[1], k.disc[2]);
+    this.sunDisc.position.set(k.disc[3], k.disc[4], -150);
+    this.sunDisc.scale.setScalar(name === "sunset" ? 2.2 : name === "night" ? 0.8 : 1);
+    this.scene.environmentIntensity = k.env;
+    this.stars.visible = this.moonDetail.visible = k.night > 0;
+    this.towers.visible = k.night > 0 || name === "sunset";
+    for (const b of this.beams) b.visible = k.night > 0;
+    for (const w of this.windows) w.material.emissiveIntensity = k.night ? 1.6 : name === "sunset" ? 0.6 : 0.15;
+    for (const c of this.clouds) c.children.forEach((m) => m.material.emissive.set(name === "night" ? "#30366a" : name === "sunset" ? "#ffb08a" : "#ffffff"));
+    this.lampMat.emissiveIntensity = k.night ? 4 : name === "sunset" ? 1.2 : 0;
+    this.bloom.strength = k.night ? 0.75 : 0.5;
+    document.body.style.background = k.bg;
   }
   tween(seconds, update) {
     return new Promise((done) => this.tweens.push({ at: this.time, dur: this.motion.matches ? seconds * 0.5 : seconds, update, done }));
@@ -368,16 +658,40 @@ export class World {
         side: T.BackSide,
         depthWrite: false,
         fog: false,
+        uniforms: { bot: { value: new T.Color(1.0, 0.86, 0.78) }, mid: { value: new T.Color(0.55, 0.82, 1.0) }, top: { value: new T.Color(0.3, 0.6, 1.0) } },
         vertexShader: "varying vec3 p; void main(){ p = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
-        fragmentShader: `varying vec3 p; void main(){ float h = p.y;
-          vec3 c = mix(vec3(1.0,0.86,0.78), vec3(0.55,0.82,1.0), smoothstep(-0.05, 0.25, h));
-          c = mix(c, vec3(0.3,0.6,1.0), smoothstep(0.25, 0.8, h)); gl_FragColor = vec4(c, 1.0); }`,
+        fragmentShader: `uniform vec3 bot, mid, top; varying vec3 p; void main(){ float h = p.y;
+          vec3 c = mix(bot, mid, smoothstep(-0.05, 0.25, h));
+          c = mix(c, top, smoothstep(0.25, 0.8, h)); gl_FragColor = vec4(c, 1.0); }`,
       }),
     );
     S.add(sky);
+    this.sky = sky;
     const sunDisc = new T.Mesh(new T.CircleGeometry(6, 40), new T.MeshBasicMaterial({ color: new T.Color(1.6, 1.5, 1.1), fog: false, toneMapped: false }));
     sunDisc.position.set(-60, 55, -150);
     S.add(sunDisc);
+    this.sunDisc = sunDisc;
+    // Луна с «морями» и звёзды — только вечером
+    this.moonDetail = new T.Group();
+    for (const [x, y, r] of [[-1.5, 1.2, 1.4], [1.8, -0.6, 1.1], [0.2, -2.2, 0.8]]) {
+      const m = new T.Mesh(new T.CircleGeometry(r, 20), new T.MeshBasicMaterial({ color: new T.Color(0.9, 0.95, 1.1), fog: false, toneMapped: false }));
+      m.position.set(x, y, 0.1);
+      this.moonDetail.add(m);
+    }
+    sunDisc.add(this.moonDetail);
+    const starPos = [];
+    const SR = rng(5);
+    for (let i = 0; i < 260; i++) {
+      const a = SR() * pie * 2,
+        h = 0.12 + SR() * 0.85;
+      const r = Math.sqrt(1 - h * h);
+      starPos.push(Math.cos(a) * r * 280, h * 280, Math.sin(a) * r * 280 - 40);
+    }
+    const starGeo = new T.BufferGeometry();
+    starGeo.setAttribute("position", new T.Float32BufferAttribute(starPos, 3));
+    this.stars = new T.Points(starGeo, new T.PointsMaterial({ color: new T.Color(1.6, 1.6, 1.8), size: 2.2, sizeAttenuation: false, fog: false, toneMapped: false, transparent: true }));
+    this.stars.visible = false;
+    S.add(this.stars);
     // Облака
     this.clouds = [];
     for (let k = 0; k < 8; k++) {
@@ -464,6 +778,7 @@ export class World {
       ["#e0f0ff", "#ffb02e"],
       ["#e8ffe0", "#c85fff"],
     ];
+    this.windows = [];
     for (let k = 0; k < 7; k++) {
       const h = new T.Group();
       const [wc, rc] = houseCols[k % 4];
@@ -479,6 +794,7 @@ export class World {
         const win = new T.Mesh(new RoundedBoxGeometry(0.8, 0.9, 0.1, 2, 0.08), glossy("#9fe0ff", { emissive: "#fff3c0", emissiveIntensity: 0.15 }));
         win.position.set(-0.9 + w * 1.8, H * 0.62, 1.52);
         h.add(win);
+        this.windows.push(win);
       }
       h.position.set(-24 + k * 8 + R() * 2, 0, -12 - R() * 5);
       h.rotation.y = (R() - 0.5) * 0.4;
@@ -551,7 +867,247 @@ export class World {
     for (let i = 0; i < 40; i++) this.trail.setColorAt(i, new T.Color("#ffffff"));
     S.add(this.trail);
     this.makeParticles();
+    this.buildExtras();
     this.players = [];
+  }
+  // ---------- Огни, украшения, бонусы, шарики, подавалка, кольца ----------
+  buildExtras() {
+    const S = this.scene,
+      R = rng(23);
+    // Прожекторные мачты за забором: светятся на закате и вечером, вечером — лучи на поле
+    this.lampMat = new T.MeshStandardMaterial({ color: "#fffbe8", emissive: "#fff3c8", emissiveIntensity: 0, roughness: 0.3 });
+    this.towers = new T.Group();
+    this.beams = [];
+    for (const sx of [-1, 1]) {
+      const t = new T.Group();
+      const pole = new T.Mesh(new T.CylinderGeometry(0.16, 0.24, 11, 10), matte("#7a86a0", { metalness: 0.4, roughness: 0.5 }));
+      pole.position.y = 5.5;
+      t.add(pole);
+      const head = new T.Mesh(new RoundedBoxGeometry(2.6, 1.3, 0.4, 2, 0.1), matte("#4a5470"));
+      head.position.set(0, 11.2, 0);
+      t.add(head);
+      for (let i = 0; i < 6; i++) {
+        const lamp = new T.Mesh(new T.CircleGeometry(0.28, 16), this.lampMat);
+        lamp.position.set(-0.85 + (i % 3) * 0.85, 11.5 - Math.floor(i / 3) * 0.6, 0.21);
+        t.add(lamp);
+      }
+      t.position.set(sx * 15.5, 0, -6.8);
+      t.rotation.y = -sx * 0.3;
+      this.towers.add(t);
+      // Луч: мягкий светящийся конус от ламп к полю
+      const from = new T.Vector3(sx * 15.5, 11.2, -6.4),
+        to = new T.Vector3(sx * 4.5, 0, 0.5);
+      const dir = from.clone().sub(to);
+      const beam = new T.Mesh(
+        new T.ConeGeometry(4.2, dir.length(), 28, 1, true),
+        new T.MeshBasicMaterial({ color: new T.Color(1, 0.96, 0.8), transparent: true, opacity: 0.06, blending: T.AdditiveBlending, depthWrite: false, side: T.DoubleSide, fog: false }),
+      );
+      beam.position.copy(from).add(to).multiplyScalar(0.5);
+      beam.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), dir.normalize());
+      beam.visible = false;
+      S.add(beam);
+      this.beams.push(beam);
+    }
+    this.towers.visible = false;
+    S.add(this.towers);
+
+    // Украшения двора из раздевалки
+    this.decor = {};
+    // Шарики на заборе
+    const bal = new T.Group();
+    const balCols = ["#ff4f6d", "#ffc533", "#3fb4ff", "#3fdc7a", "#c85fff", "#ff8f3f"];
+    const balGeo = new T.SphereGeometry(0.36, 18, 14);
+    for (let i = 0; i < 8; i++) {
+      const cl = new T.Group();
+      for (let k = 0; k < 3; k++) {
+        const b = new T.Mesh(balGeo, glossy(balCols[(i + k * 2) % balCols.length], { roughness: 0.15, clearcoat: 1 }));
+        b.scale.set(1, 1.18, 1);
+        b.position.set((k - 1) * 0.42, 1.05 + (k === 1 ? 0.3 : 0), (k - 1) * 0.1);
+        cl.add(b);
+        const str = new T.Mesh(new T.CylinderGeometry(0.01, 0.01, 1, 4), matte("#ffffff"));
+        str.position.set((k - 1) * 0.21, 0.5 + (k === 1 ? 0.15 : 0), 0);
+        str.rotation.z = (k - 1) * -0.35;
+        cl.add(str);
+      }
+      cl.position.set(-17 + i * 4.9 + R(), 3.1, -4.3);
+      cl.userData.ph = R() * 6;
+      bal.add(cl);
+    }
+    bal.visible = false;
+    S.add(bal);
+    this.decor.balloons = bal;
+    // Гирлянда огоньков по верху забора: перемигивается, вечером светится сильнее
+    const bulbPos = [];
+    for (let x = -19; x <= 19; x += 0.8) {
+      const u = (((x + 19) / 4.8) % 1) - 0.5;
+      bulbPos.push([x, 3.38 - (0.25 - u * u) * 0.9, -4.3]);
+    }
+    const bulbs = new T.InstancedMesh(new T.SphereGeometry(0.1, 10, 8), new T.MeshBasicMaterial({ color: new T.Color(1, 1, 1), toneMapped: false }), bulbPos.length);
+    const wire = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(bulbPos.map((p) => new T.Vector3(p[0], p[1] + 0.08, p[2]))), 200, 0.015, 4), matte("#2a3a2a"));
+    const bulbCols = ["#ff5f7f", "#ffd84a", "#5fd8ff", "#7fff8a", "#d08fff"].map((c) => new T.Color(c));
+    bulbPos.forEach((p, i) => {
+      this.dummy0 ??= new T.Object3D();
+      this.dummy0.position.set(...p);
+      this.dummy0.updateMatrix();
+      bulbs.setMatrixAt(i, this.dummy0.matrix);
+      bulbs.setColorAt(i, bulbCols[i % 5]);
+    });
+    const lights = new T.Group();
+    lights.add(bulbs, wire);
+    lights.visible = false;
+    S.add(lights);
+    this.decor.lights = lights;
+    this.bulbs = { mesh: bulbs, cols: bulbCols };
+
+    // Трава кочками по краям поля — только на высоком качестве
+    const tuft = new T.ConeGeometry(0.07, 0.34, 4);
+    tuft.translate(0, 0.17, 0);
+    this.grass = new T.InstancedMesh(tuft, matte("#4fbf4a", { flatShading: true }), 900);
+    const gd = new T.Object3D();
+    for (let i = 0; i < 900; i++) {
+      // Кочки у забора за полем и немного у цветов спереди (спереди мельче — они ближе к камере)
+      const near = i % 5 === 0;
+      gd.position.set(-16 + R() * 32, 0, near ? 4.1 + R() * 0.5 : -2.95 - R() * 1.4);
+      gd.rotation.set((R() - 0.5) * 0.5, R() * 6, (R() - 0.5) * 0.5);
+      gd.scale.setScalar(near ? 0.35 + R() * 0.3 : 0.6 + R() * 0.9);
+      gd.updateMatrix();
+      this.grass.setMatrixAt(i, gd.matrix);
+      this.grass.setColorAt(i, new T.Color().setHSL(0.27 + R() * 0.08, 0.55, 0.38 + R() * 0.18));
+    }
+    S.add(this.grass);
+
+    // Бонусы на поле: пузырь со значком внутри
+    this.itemTex = {};
+    for (const kind of ["star", "speed", "snow", "magnet", "big"]) this.itemTex[kind] = itemIcon(kind);
+    this.itemPool = [];
+    for (let i = 0; i < 2; i++) {
+      const g = new T.Group();
+      const bubble = new T.Mesh(new T.SphereGeometry(0.58, 28, 20), new T.MeshPhysicalMaterial({ color: "#ffffff", transparent: true, opacity: 0.32, roughness: 0.05, clearcoat: 1, emissive: "#ffffff", emissiveIntensity: 0.25, depthWrite: false }));
+      const icon = new T.Sprite(new T.SpriteMaterial({ map: this.itemTex.star, depthWrite: false }));
+      icon.scale.setScalar(0.82);
+      const halo = new T.Sprite(new T.SpriteMaterial({ map: glowTex, color: "#ffe066", transparent: true, opacity: 0.8, depthWrite: false, blending: T.AdditiveBlending }));
+      halo.scale.setScalar(2.4);
+      g.add(halo, bubble, icon);
+      g.visible = false;
+      S.add(g);
+      this.itemPool.push({ g, bubble, icon, halo, id: 0 });
+    }
+
+    // Шарики-мишени (испытание «Меткий удар»)
+    this.balloonPool = [];
+    const tCols = ["#ff4f6d", "#ffc533", "#3fb4ff", "#3fdc7a", "#c85fff"];
+    for (let i = 0; i < 4; i++) {
+      const g = new T.Group();
+      const mat = glossy("#ff4f6d", { roughness: 0.12, clearcoat: 1 });
+      const ball = new T.Mesh(new T.SphereGeometry(0.55, 24, 18), mat);
+      ball.scale.set(1, 1.18, 1);
+      ball.castShadow = true;
+      const knot = new T.Mesh(new T.ConeGeometry(0.1, 0.16, 8), mat);
+      knot.position.y = -0.68;
+      const str = new T.Mesh(new T.CylinderGeometry(0.012, 0.012, 1.1, 4), matte("#ffffff"));
+      str.position.y = -1.3;
+      const shine = new T.Mesh(new T.SphereGeometry(0.1, 8, 6), new T.MeshBasicMaterial({ color: "#ffffff" }));
+      shine.position.set(0.2, 0.25, 0.42);
+      g.add(ball, knot, str, shine);
+      g.visible = false;
+      S.add(g);
+      this.balloonPool.push({ g, mat, id: 0, cols: tCols });
+    }
+
+    // Подающая машинка (испытание «Вратарь»): весёлый барабан на колёсах с глазками
+    const L = new T.Group();
+    const drum = new T.Mesh(new RoundedBoxGeometry(1.3, 1.1, 1.2, 3, 0.25), glossy("#3fb4ff"));
+    drum.position.y = 0.85;
+    const tube = new T.Mesh(new T.CylinderGeometry(0.34, 0.4, 0.8, 18), glossy("#ffc533"));
+    tube.rotation.z = pie / 2;
+    tube.position.set(-0.8, 1.0, 0);
+    const ring = new T.Mesh(new T.TorusGeometry(0.36, 0.08, 10, 20), glossy("#ff4f6d"));
+    ring.rotation.y = pie / 2;
+    ring.position.set(-1.2, 1.0, 0);
+    L.add(drum, tube, ring);
+    for (const z of [-0.45, 0.45]) {
+      const wh = new T.Mesh(new T.CylinderGeometry(0.3, 0.3, 0.16, 16), matte("#2b2b3d"));
+      wh.rotation.x = pie / 2;
+      wh.position.set(0, 0.3, z);
+      L.add(wh);
+      const eye = new T.Mesh(new T.SphereGeometry(0.15, 12, 10), matte("#ffffff"));
+      eye.position.set(-0.45, 1.25, z * 0.6);
+      const pup = new T.Mesh(new T.SphereGeometry(0.08, 10, 8), glossy("#1d1420", { roughness: 0.1 }));
+      pup.position.set(-0.58, 1.25, z * 0.6);
+      L.add(eye, pup);
+    }
+    L.traverse((o) => o.isMesh && (o.castShadow = true));
+    L.position.set(9.0, 0, 0);
+    L.visible = false;
+    S.add(L);
+    this.launcher = { g: L, kick: 0 };
+
+    // Ударные волны: плоские кольца, всегда повёрнуты к камере
+    this.rings = [];
+    for (let i = 0; i < 12; i++) {
+      const m = new T.Mesh(new T.RingGeometry(0.82, 1, 48), new T.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0, blending: T.AdditiveBlending, depthWrite: false, side: T.DoubleSide, toneMapped: false }));
+      m.visible = false;
+      S.add(m);
+      this.rings.push({ m, life: 0, max: 1, size: 1 });
+    }
+    this.ringNext = 0;
+    // Ракеты салюта
+    this.rockets = [];
+  }
+  // Ударная волна: кольцо растёт и тает
+  wave(at, color = "#ffffff", size = 3, dur = 0.5) {
+    if (this.motion.matches) size *= 0.6;
+    const r = this.rings[this.ringNext];
+    this.ringNext = (this.ringNext + 1) % this.rings.length;
+    r.m.position.copy(at);
+    r.m.material.color.set(color).multiplyScalar(1.6);
+    r.life = r.max = dur;
+    r.size = size;
+    r.m.visible = true;
+  }
+  // Салют: ракеты взлетают из-за забора и рассыпаются звёздочками
+  fireworks(n = 3) {
+    for (let k = 0; k < n; k++)
+      this.rockets.push({ p: new T.Vector3(-10 + Math.random() * 20, 2, -5), v: new T.Vector3((Math.random() - 0.5) * 2, 12 + Math.random() * 3, 0.8), life: 0.75 + Math.random() * 0.35 + k * 0.18, delay: k * 0.22, col: ["#ff5f7f", "#ffd84a", "#5fd8ff", "#7fff8a", "#d08fff"][Math.floor(Math.random() * 5)] });
+  }
+  // Украшения из раздевалки
+  setDecor(list) {
+    for (const k in this.decor) this.decor[k].visible = list.includes(k);
+    this.fireworksOn = list.includes("fireworks");
+  }
+  setBall(kind) {
+    const m = this.ballMesh.material;
+    m.map?.dispose();
+    m.map = ballTexture(kind);
+    m.emissive.set(kind === "sun" ? "#ff9f1f" : "#000000");
+    m.emissiveIntensity = kind === "sun" ? 0.35 : 0;
+    m.needsUpdate = true;
+    this.ballKind = kind;
+  }
+  // Бонус взят: вспышка цвета бонуса и кольцо
+  itemFx(x, y, kind) {
+    const col = ITEM_COLORS[kind] || "#ffffff";
+    const at = new T.Vector3(x, y, 0);
+    this.burst(at, 30, [col, "#ffffff"], 4);
+    this.wave(at, col, 2.6, 0.45);
+  }
+  balloonPop(x, y, color) {
+    const col = this.balloonPool[0].cols[color % 5];
+    const at = new T.Vector3(x, y, 0);
+    this.burst(at, 36, [col, "#ffffff", col], 5);
+    this.wave(at, col, 2.2, 0.35);
+    for (let k = 0; k < 30; k++) {
+      const s = this.confPool[this.confNext];
+      this.confNext = (this.confNext + 1) % this.confPool.length;
+      s.p.copy(at);
+      s.v.set((Math.random() - 0.5) * 7, Math.random() * 6, (Math.random() - 0.5) * 3);
+      s.r.set(Math.random() * 6, Math.random() * 6, Math.random() * 6);
+      s.life = 1.2 + Math.random();
+    }
+  }
+  launchFx() {
+    this.launcher.kick = 1;
+    this.puff(new T.Vector3(7.9, 1, 0), 6);
   }
   // Ворота: стойка на линии, перекладина до задней стенки, сетка
   goal(s) {
@@ -605,13 +1161,27 @@ export class World {
     this.scene.add(g);
     return { group: g, backNet, base: Float32Array.from(backNet.geometry.attributes.position.array), shake: 0 };
   }
-  setPlayers(kinds) {
+  // kinds — [левый, правый]; kit — форма левого игрока (из раздевалки); solo — правого нет (испытание)
+  setPlayers(kinds, kit = "home", solo = false) {
     for (const p of this.players) p.group.removeFromParent();
     this.players = kinds.map((k, i) => {
-      const f = footballer(k, i ? 7 : 10);
+      const f = footballer(k, i ? 7 : 10, i ? "home" : kit);
       f.group.scale.setScalar(1.25);
+      f.group.visible = !(solo && i === 1);
+      // Ледышка (бонус «Снежинка» у соперника) и кольцо магнита
+      const ice = new T.Mesh(new RoundedBoxGeometry(1.7, 2.6, 1.4, 3, 0.3), new T.MeshPhysicalMaterial({ color: "#c8f4ff", transparent: true, opacity: 0.5, roughness: 0.08, clearcoat: 1, emissive: "#7fdcff", emissiveIntensity: 0.25, depthWrite: false }));
+      ice.position.y = 1.25;
+      ice.visible = false;
+      f.group.add(ice);
+      const magnet = new T.Mesh(new T.TorusGeometry(0.75, 0.05, 8, 40), new T.MeshBasicMaterial({ color: new T.Color(2, 0.5, 0.7), toneMapped: false, transparent: true, opacity: 0.85 }));
+      magnet.rotation.x = pie / 2;
+      magnet.position.y = 0.06;
+      magnet.visible = false;
+      f.group.add(magnet);
+      const boots = [];
+      f.group.traverse((o) => o.isMesh && o.geometry.type === "RoundedBoxGeometry" && o !== ice && boots.push(o));
       this.scene.add(f.group);
-      return { ...f, swing: 0, stunned: 0, celebrate: 0 };
+      return { ...f, swing: 0, stunned: 0, celebrate: 0, ice, magnet, boots, bigK: 1 };
     });
   }
   // ---------- События ----------
@@ -619,8 +1189,16 @@ export class World {
     const p = this.players[side];
     if (p) p.swing = 1;
     const b = this.ballMesh.position;
-    this.burst(b, kind === "star" ? 40 : 10, kind === "star" ? ["#ffe066", "#ff8fd0", "#7fe8ff", "#ffffff"] : ["#ffffff", "#fff3a0"], kind === "star" ? 5 : 2.5);
-    if (kind === "star") this.shake(0.25);
+    const star = kind === "star";
+    this.burst(b, star ? 50 : 12, star ? ["#ffe066", "#ff8fd0", "#7fe8ff", "#ffffff"] : ["#ffffff", "#fff3a0"], star ? 6 : 2.5);
+    this.wave(b, star ? "#ffe066" : "#ffffff", star ? 3.2 : 1.5, star ? 0.5 : 0.28);
+    if (star) {
+      this.shake(0.25);
+      this.wave(b, "#ff8fd0", 4.5, 0.7);
+    }
+  }
+  header(x, y) {
+    this.wave(new T.Vector3(x, y, 0), "#ffffff", 1.3, 0.25);
   }
   swing(side) {
     const p = this.players[side];
@@ -632,11 +1210,24 @@ export class World {
     this.goals[gi].shake = 1;
     const at = new T.Vector3(gi ? 9 : -9, 1.6, 0);
     this.confetti(at);
-    this.burst(at, 50, ["#ffe066", "#ff4f6d", "#3fb4ff", "#3fdc7a", "#ffffff"], 6);
+    this.confetti(at.clone().setY(3));
+    this.burst(at, 70, ["#ffe066", "#ff4f6d", "#3fb4ff", "#3fdc7a", "#ffffff"], 7);
+    // Ударная волна, вспышка света у ворот, камера подъезжает к воротам
+    this.wave(at, "#ffffff", 6, 0.6);
+    this.wave(at, star ? "#ff8fd0" : "#ffe066", 9, 0.9);
+    this.flashLight.position.set(at.x * 0.85, 3, 2.5);
+    this.flashLight.intensity = 14;
+    this.punch(at.x * 0.55, 1.6, 0.9);
+    if (this.fireworksOn) this.fireworks(3);
     this.shake(star ? 0.45 : 0.3);
     const p = this.players[side];
     if (p) p.celebrate = 2.2;
     for (const f of this.fans) f.cheer = 2.5;
+  }
+  // Камера ненадолго подъезжает к точке (x, y)
+  punch(x, y, dur = 0.9) {
+    if (this.motion.matches) return;
+    this.punchAt = { x, y, t: 0, dur };
   }
   stun(side) {
     const p = this.players[side];
@@ -651,7 +1242,7 @@ export class World {
   }
   // ---------- Частицы ----------
   makeParticles() {
-    const n = 600;
+    const n = 900;
     this.sparks = new T.InstancedMesh(new T.OctahedronGeometry(0.08, 0), new T.MeshBasicMaterial({ color: new T.Color(2, 2, 2), toneMapped: false }), n);
     this.sparks.frustumCulled = false;
     this.pool = Array.from({ length: n }, () => ({ p: new T.Vector3(), v: new T.Vector3(), life: 0, max: 1, s: 1 }));
@@ -672,6 +1263,7 @@ export class World {
     this.dummy = new T.Object3D();
   }
   burst(at, count, colors, speed) {
+    count = Math.max(1, Math.round(count * this.fxScale));
     for (let k = 0; k < count; k++) {
       const s = this.pool[this.next];
       this.sparks.setColorAt(this.next, new T.Color(colors[k % colors.length]));
@@ -684,7 +1276,7 @@ export class World {
     this.sparks.instanceColor.needsUpdate = true;
   }
   confetti(at) {
-    for (let k = 0; k < 120; k++) {
+    for (let k = 0, n = Math.round(120 * this.fxScale); k < n; k++) {
       const s = this.confPool[this.confNext];
       this.confNext = (this.confNext + 1) % this.confPool.length;
       s.p.copy(at).add(new T.Vector3((Math.random() - 0.5) * 2, 1, (Math.random() - 0.5) * 2));
@@ -746,7 +1338,37 @@ export class World {
       for (const e of v.eyes) e.scale.y = blink ? 0.15 : 1;
       v.shadow.position.y = 0.015 - p.y;
       v.shadow.scale.setScalar(Math.max(0.4, 1 - p.y * 0.2));
+      // Бонусы: ледышка, большая голова, светящиеся бутсы, кольцо магнита
+      const fx = p.fx || {};
+      v.ice.visible = fx.snow > 0;
+      if (v.ice.visible) {
+        const k = Math.min(1, fx.snow * 4, (2.2 - fx.snow) * 8);
+        v.ice.scale.set(k, k, k);
+        if (Math.random() < 0.15) this.burst(new T.Vector3(p.x + (Math.random() - 0.5) * 1.6, p.y + Math.random() * 3, 0.6), 1, ["#ffffff", "#bff4ff"], 1);
+      }
+      v.bigK += ((fx.big > 0 ? 1.45 : 1) - v.bigK) * Math.min(1, dt * 10);
+      v.head.scale.setScalar(v.bigK);
+      v.head.position.y = 1.62 + (v.bigK - 1) * 0.62;
+      const fast = fx.speed > 0;
+      for (const b of v.boots) {
+        b.material.emissive?.set(fast ? "#ffb02e" : "#000000");
+        if (b.material.emissiveIntensity !== undefined) b.material.emissiveIntensity = fast ? 1.6 : 0;
+      }
+      if (fast && Math.abs(p.vx) > 2 && Math.random() < 0.5) this.burst(new T.Vector3(p.x - Math.sign(p.vx) * 0.4, p.y + 0.2, 0.3), 1, ["#ffd84a", "#ff8f3f"], 1.2);
+      v.magnet.visible = fx.magnet > 0;
+      if (v.magnet.visible) {
+        v.magnet.rotation.z = t * 4;
+        v.magnet.scale.setScalar(1 + Math.sin(t * 8) * 0.08);
+      }
     });
+    this.syncItems(m, t);
+    this.syncTargets(m, t);
+    this.launcher.g.visible = m.mode === "keeper";
+    if (this.launcher.g.visible) {
+      this.launcher.kick = Math.max(0, this.launcher.kick - dt * 4);
+      this.launcher.g.position.x = 9.0 + this.launcher.kick * 0.35;
+      this.launcher.g.scale.set(1 - this.launcher.kick * 0.1, 1 + this.launcher.kick * 0.15, 1);
+    }
     const b = m.ball;
     // Мяч сплющивается при отскоке от земли, от сильного удара — облачко пыли
     if (this.ballVy < -1 && b.vy > 0 && b.y < 1) {
@@ -764,27 +1386,76 @@ export class World {
     this.ballShadow.scale.setScalar(Math.max(0.3, 1 - b.y * 0.1));
     this.ballGlow.position.copy(this.ballMesh.position);
     this.ballGlow.material.opacity = b.star > 0 ? 0.9 : 0;
-    // След звёздного мяча — радуга
-    if (b.star > 0) {
+    // След: у звёздного мяча — радуга, у просто быстрого — светлая полоса
+    const speed = Math.hypot(b.vx, b.vy);
+    const fastBall = speed > 12.5 && !this.motion.matches;
+    if (b.star > 0 || fastBall) {
       this.trailPts.unshift(this.ballMesh.position.clone());
-      if (this.trailPts.length > 40) this.trailPts.pop();
+      if (this.trailPts.length > (b.star > 0 ? 40 : 16)) this.trailPts.pop();
     } else if (this.trailPts.length) this.trailPts.pop();
+    if (this.trailPts.length > 16 && b.star <= 0) this.trailPts.length = 16;
     const d = this.dummy;
+    this.trailCol ??= new T.Color();
     this.trailPts.forEach((q, k) => {
       d.position.copy(q);
       d.rotation.set(0, 0, 0);
-      d.scale.setScalar(1 - k / 40);
+      d.scale.setScalar(b.star > 0 ? 1 - k / 40 : (1 - k / 16) * 0.85);
       d.updateMatrix();
       this.trail.setMatrixAt(k, d.matrix);
-      this.trail.setColorAt(k, new T.Color().setHSL((k / 20 + t) % 1, 1, 0.6).multiplyScalar(1.8));
+      if (b.star > 0) this.trailCol.setHSL((k / 20 + t) % 1, 1, 0.6).multiplyScalar(1.8);
+      else this.trailCol.setRGB(0.8, 0.95, 1.3).multiplyScalar(0.9 - k / 20);
+      this.trail.setColorAt(k, this.trailCol);
     });
     this.trail.count = this.trailPts.length;
     this.trail.instanceMatrix.needsUpdate = true;
     if (this.trail.instanceColor) this.trail.instanceColor.needsUpdate = true;
   }
+  // Пузыри-бонусы на поле
+  syncItems(m, t) {
+    const items = m.items || [];
+    this.itemPool.forEach((v, i) => {
+      const it = items[i];
+      v.g.visible = !!it;
+      if (!it) return (v.id = 0);
+      if (v.id !== it.id) {
+        v.id = it.id;
+        v.icon.material.map = this.itemTex[it.kind];
+        v.halo.material.color.set(ITEM_COLORS[it.kind]);
+        v.bubble.material.emissive.set(ITEM_COLORS[it.kind]);
+        v.born = t;
+      }
+      // Появляется с пружинкой, покачивается, мигает перед тем как исчезнуть
+      const age = t - v.born;
+      const pop = Math.min(1, age * 3);
+      const k = pop < 1 ? Math.sin(pop * pie * 0.5) * (1 + Math.sin(pop * pie) * 0.25) : 1;
+      v.g.position.set(it.x, it.y + Math.sin(t * 3 + i) * 0.12, 0.2);
+      v.g.scale.setScalar(k * (1 + Math.sin(t * 6) * 0.04));
+      v.g.visible = it.life > 2 || Math.sin(t * 20) > -0.3;
+      v.icon.material.rotation = Math.sin(t * 2) * 0.2;
+    });
+  }
+  // Шарики-мишени в «Метком ударе»
+  syncTargets(m, t) {
+    const ts = m.mode === "targets" ? m.targets : [];
+    this.balloonPool.forEach((v, i) => {
+      const it = ts[i];
+      v.g.visible = !!it;
+      if (!it) return (v.id = 0);
+      if (v.id !== it.id) {
+        v.id = it.id;
+        v.mat.color.set(v.cols[it.color % 5]);
+        v.born = t;
+      }
+      const k = Math.min(1, (t - v.born) * 4);
+      v.g.position.set(it.x, it.y + Math.sin(t * 2 + i * 1.7) * 0.08, 0);
+      v.g.rotation.z = Math.sin(t * 1.6 + i) * 0.1;
+      v.g.scale.setScalar(k);
+    });
+  }
   frame(ms) {
     if (document.hidden) return;
-    const dt = this.last ? clamp((ms - this.last) / 1000, 0, 0.1) : 0;
+    const raw = this.last ? (ms - this.last) / 1000 : 0;
+    const dt = clamp(raw, 0, 0.1);
     this.last = ms;
     this.time += dt;
     const t = this.time,
@@ -814,6 +1485,47 @@ export class World {
       f.arms[0].rotation.x = f.cheer > 0 ? 2.6 : -0.5;
       f.arms[1].rotation.x = f.cheer > 0 ? -2.6 : 0.5;
     }
+    // Украшения: шарики на заборе покачиваются, огоньки перемигиваются
+    if (this.decor.balloons.visible) this.decor.balloons.children.forEach((c) => (c.rotation.z = Math.sin(t * 1.4 + c.userData.ph) * 0.12 * calm));
+    if (this.decor.lights.visible) {
+      const { mesh, cols } = this.bulbs;
+      const night = this.skyName === "night" ? 2.6 : this.skyName === "sunset" ? 1.9 : 1.3;
+      this.bulbCol ??= new T.Color();
+      for (let i = 0; i < mesh.count; i++) {
+        const tw = 0.55 + 0.45 * Math.sin(t * 3 + i * 1.9) * calm;
+        mesh.setColorAt(i, this.bulbCol.copy(cols[i % 5]).multiplyScalar(night * (0.6 + tw * 0.6)));
+      }
+      mesh.instanceColor.needsUpdate = true;
+    }
+    // Ударные волны
+    for (const r of this.rings) {
+      if (r.life <= 0) continue;
+      r.life -= dt;
+      const k = 1 - Math.max(0, r.life) / r.max;
+      r.m.scale.setScalar(0.2 + r.size * (1 - (1 - k) * (1 - k)));
+      r.m.material.opacity = (1 - k) * 0.65;
+      r.m.quaternion.copy(this.camera.quaternion);
+      if (r.life <= 0) r.m.visible = false;
+    }
+    // Салют
+    for (let i = this.rockets.length - 1; i >= 0; i--) {
+      const r = this.rockets[i];
+      if (r.delay > 0) {
+        r.delay -= dt;
+        continue;
+      }
+      r.life -= dt;
+      r.v.y -= 9 * dt;
+      r.p.addScaledVector(r.v, dt);
+      this.burst(r.p, 1, ["#fff3c0", r.col], 0.6);
+      if (r.life <= 0) {
+        this.burst(r.p, 70, [r.col, "#ffffff", r.col], 6);
+        this.wave(r.p, r.col, 4, 0.5);
+        this.rockets.splice(i, 1);
+        this.onBoom?.();
+      }
+    }
+    this.flashLight.intensity *= Math.pow(0.004, dt);
     // Сетка ворот колышется после гола
     for (const g of this.goals) {
       if (g.shake <= 0) continue;
@@ -865,26 +1577,46 @@ export class World {
       this.puffs.setMatrixAt(i, d.matrix);
     });
     this.puffs.instanceMatrix.needsUpdate = true;
-    // Камера: лёгкая тряска при голе
+    // Камера: лёгкая тряска при голе и короткий наезд к воротам
     if (this.home) {
       this.camera.position.copy(this.home);
+      this.lookNow ??= new T.Vector3();
+      this.lookNow.copy(this.look);
+      if (this.punchAt) {
+        const pa = this.punchAt;
+        pa.t += dt;
+        const k = Math.sin(Math.min(1, pa.t / pa.dur) * pie) * 0.22;
+        this.camera.position.x += (pa.x - this.camera.position.x) * k;
+        this.camera.position.z += (pa.y + 6 - this.camera.position.z) * k * 0.6;
+        this.lookNow.x += (pa.x - this.lookNow.x) * k * 1.2;
+        if (pa.t >= pa.dur) this.punchAt = null;
+      }
       if (this.shakeAmp > 0.001) {
         this.camera.position.add(new T.Vector3((Math.random() - 0.5) * this.shakeAmp, (Math.random() - 0.5) * this.shakeAmp, 0));
         this.shakeAmp *= Math.pow(0.02, dt);
       }
-      this.camera.lookAt(this.look);
+      this.camera.lookAt(this.lookNow);
     }
-    if (this.glow.on) {
-      this.composer.render();
-      if (dt) {
-        this.glow.seen += dt;
-        if (dt > 1 / 36) this.glow.slow += dt;
-        if (this.glow.seen > 5) {
-          if (this.glow.slow > 1.8) this.glow.on = false;
-          this.glow.seen = this.glow.slow = 0;
+    if (this.glow.on) this.composer.render();
+    else this.renderer.render(this.scene, this.camera);
+    // Авто-качество: средний fps за 3 с ниже 45 — на ступень ниже (паузы дольше секунды — свернули, снимок — не считаем)
+    const A = this.auto;
+    if (A.on && raw > 0) {
+      if (raw > 1) A.frames = A.time = 0;
+      else {
+        A.frames++;
+        A.time += Math.min(raw, 0.25);
+        if (A.time > 3) {
+          const f = A.frames / A.time;
+          A.frames = A.time = 0;
+          if (f < 45 && this.quality !== "low") {
+            this.setQuality(DOWN[this.quality]);
+            this.auto.on = true;
+            this.onQuality?.(this.quality, Math.round(f));
+          }
         }
       }
-    } else this.renderer.render(this.scene, this.camera);
+    }
   }
   // Картинка героя для кнопки выбора
   portrait(kind, size = 256) {

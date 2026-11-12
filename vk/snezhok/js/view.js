@@ -1,22 +1,32 @@
 // Сцена «Снежного кома». Правила считают трассу прямой (s — вперёд, x — вбок), а здесь она
 // изгибается и идёт под уклон: каждая точка (s, x, y) переводится в мир через «рельсы» path.
 // Правила (rules.js, run.js) ничего не знают о графике; здесь только то, что видно.
-import { T, TAU, GEO, V, clamp, rand, hot, lit, part, at, canvasTexture, labelTexture, glowTexture } from "./kit.js?v=8ae2940b";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=8ae2940b";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=8ae2940b";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=8ae2940b";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=8ae2940b";
-import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=8ae2940b";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=8ae2940b";
-import { createFx, tone, GLOW, PUFF, STAR, RING } from "./fx.js?v=8ae2940b";
-import { firGeometry, spireGeometry, rockGeometry, pileGeometry, rampGeometry, snowTexture, flakeTexture, crackTexture, bricksTexture, signTexture, gateModel, snowmanModel, skinMaterial, skinGeometry, GATE_H } from "./models.js?v=8ae2940b";
-import { Hero } from "./hero.js?v=8ae2940b";
-import { HALF, BRIDGE_HALF, radiusOf, gateLabel, logX, crusherLift, geyserState, rng } from "./rules.js?v=8ae2940b";
-import { heading } from "./levels.js?v=8ae2940b";
-import { SKINS } from "./economy.js?v=8ae2940b";
+import { T, TAU, GEO, V, clamp, rand, hot, lit, part, at, canvasTexture, labelTexture, glowTexture } from "./kit.js?v=51f23175";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=51f23175";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=51f23175";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=51f23175";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=51f23175";
+import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=51f23175";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=51f23175";
+import { createFx, tone, GLOW, PUFF, STAR, RING } from "./fx.js?v=51f23175";
+import { firGeometry, spireGeometry, rockGeometry, pileGeometry, rampGeometry, snowTexture, flakeTexture, crackTexture, bricksTexture, signTexture, gateModel, snowmanModel, skinMaterial, skinGeometry, GATE_H } from "./models.js?v=51f23175";
+import { Hero } from "./hero.js?v=51f23175";
+import { HALF, BRIDGE_HALF, radiusOf, gateLabel, logX, crusherLift, geyserState, rng } from "./rules.js?v=51f23175";
+import { FoeView, keepFoeMaterial } from "./foes.js?v=51f23175";
+import { heading } from "./levels.js?v=51f23175";
+import { SKINS } from "./economy.js?v=51f23175";
 
 export const SLOPE = 0.12;
 const PITCH = Math.atan(SLOPE);
+
+// Уровни качества: высокое — мягкие тени, свечение, размытие на скорости, больше снега;
+// среднее — свечение без теней; низкое — без постэффектов, меньше пикселей и частиц.
+export const TIERS = {
+  high: { name: "Высокое", ratio: 2, glow: true, shadows: true, blur: true, dust: 1.35, snow: 1.7 },
+  medium: { name: "Среднее", ratio: 1.5, glow: true, shadows: false, blur: false, dust: 1, snow: 1 },
+  low: { name: "Низкое", ratio: 1, glow: false, shadows: false, blur: false, dust: 0.55, snow: 0.5 },
+};
+const ORDER = ["high", "medium", "low"];
 
 // ---------- Оформление гор ----------
 const THEMES = [
@@ -145,6 +155,8 @@ function sparkle(material, uniforms, strength = 1) {
   return material;
 }
 
+const FOE_EVENTS = new Set(["kill", "bonk", "pow", "smash", "pickup", "wave", "spirit", "spirit-away", "shot"]);
+
 export class SnowView {
   constructor(canvas) {
     this.canvas = canvas;
@@ -162,10 +174,19 @@ export class SnowView {
     this.hurt = 0;
     this.joy = 0;
     this.reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    this.perf = { glow: true, ratio: 1.75, slow: 0, seen: 0, step: 0 };
+    this.perf = { glow: true, ratio: 1.75, slow: 0, seen: 0, step: 0, tier: "high", auto: true, drops: 0 };
+    this.q = TIERS.high;
+    this.flash = 0;
+    renderer.shadowMap.type = T.PCFSoftShadowMap;
 
     this.hemi = new T.HemisphereLight("#eaf5ff", "#9cb6d8", 1.2);
     this.sun = new T.DirectionalLight("#fff1d6", 2.7);
+    // мягкая тень едет вместе с комом: квадрат вокруг него
+    this.sun.shadow.mapSize.set(1024, 1024);
+    Object.assign(this.sun.shadow.camera, { left: -16, right: 16, top: 16, bottom: -16, near: 10, far: 140 });
+    this.sun.shadow.bias = -0.0008;
+    this.sun.shadow.normalBias = 0.04;
+    this.sun.shadow.radius = 4;
     scene.add(this.hemi, this.sun, this.sun.target);
     const pmrem = new T.PMREMGenerator(renderer);
     this.env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
@@ -269,6 +290,7 @@ export class SnowView {
     this.outline.scale.setScalar(1.035);
     this.hero = new Hero();
     this.ball.add(this.ballMesh, this.outline, this.hero.root);
+    this.ballMesh.castShadow = true;
     this.glance = { t: 0, mood: "joy" }; // оглянуться на игрока в яркий момент
     this.showT = 0; // сколько камера уже показывает Снежка спереди (финиш, неудача)
     this.ballShadow = part(GEO.plane, this.shadowMat, 1, 1, 1);
@@ -301,6 +323,7 @@ export class SnowView {
 
     this.world = null;
     this.fx = createFx(scene);
+    this.foes = new FoeView(this);
     this.tmp = V();
     this.tmp2 = V();
     this.tmp3 = V();
@@ -310,7 +333,7 @@ export class SnowView {
 
     // ---------- Свечение и цветокоррекция ----------
     this.grade = new ShaderPass({
-      uniforms: { tDiffuse: { value: null }, hurt: { value: 0 }, joy: { value: 0 } },
+      uniforms: { tDiffuse: { value: null }, hurt: { value: 0 }, joy: { value: 0 }, flash: { value: 0 }, blur: { value: 0 } },
       vertexShader: /* glsl */ `
         varying vec2 vUv;
         void main() {
@@ -319,12 +342,17 @@ export class SnowView {
         }`,
       fragmentShader: /* glsl */ `
         uniform sampler2D tDiffuse;
-        uniform float hurt, joy;
+        uniform float hurt, joy, flash, blur;
         varying vec2 vUv;
         void main() {
           vec2 c = vUv - 0.5;
           float r2 = dot(c, c);
           vec3 col = texture2D(tDiffuse, vUv).rgb;
+          // лёгкое размытие на скорости: только по краям кадра, к центру
+          if (blur > 0.001) {
+            float k = blur * smoothstep(0.04, 0.3, r2);
+            col = (col + texture2D(tDiffuse, vUv - c * k * 0.03).rgb + texture2D(tDiffuse, vUv - c * k * 0.06).rgb + texture2D(tDiffuse, vUv - c * k * 0.09).rgb) * 0.25;
+          }
           // мягкий контраст в средних тонах и сочность; белый снег не пересвечивается
           col = mix(col, col * col * (3.0 - 2.0 * col), 0.22);
           float l = dot(col, vec3(0.299, 0.587, 0.114));
@@ -333,6 +361,8 @@ export class SnowView {
           col *= mix(vec3(1.0), vec3(0.8, 0.88, 1.0), smoothstep(0.16, 0.62, r2));
           col = mix(col, vec3(1.0, 0.25, 0.3), hurt * smoothstep(0.08, 0.5, r2) * 0.55);
           col = mix(col, vec3(0.6, 0.9, 1.0), joy * smoothstep(0.1, 0.5, r2) * 0.35);
+          // белая вспышка: снежная волна, победа над снеговиком
+          col = mix(col, vec3(1.0), flash * 0.55);
           gl_FragColor = vec4(col, 1.0);
         }`,
     });
@@ -350,7 +380,7 @@ export class SnowView {
     const h = this.canvas.clientHeight || innerHeight;
     this.size = { w, h };
     this.aspect = w / h;
-    const ratio = Math.min(devicePixelRatio || 1, this.perf.ratio);
+    const ratio = Math.min(devicePixelRatio || 1, this.perf.ratio, this.q.ratio);
     this.renderer.setPixelRatio(ratio);
     this.renderer.setSize(w, h, false);
     this.composer.setPixelRatio(ratio);
@@ -359,19 +389,38 @@ export class SnowView {
     this.camera.aspect = this.aspect;
     this.camera.updateProjectionMatrix();
   }
-  // Если устройство не тянет: сперва меньше пикселей, потом без свечения
+  // Уровень качества: auto — по устройству, а если кадров меньше ~45 в секунду — ступенькой ниже
+  setQuality(mode, start = "high") {
+    const p = this.perf;
+    p.auto = mode === "auto";
+    this.applyTier(p.auto ? start : mode);
+    p.seen = p.slow = 0;
+  }
+  applyTier(name) {
+    const q = (this.q = TIERS[name] || TIERS.medium);
+    const p = this.perf;
+    p.tier = name;
+    p.glow = q.glow;
+    p.ratio = q.ratio;
+    const shadows = q.shadows;
+    if (this.renderer.shadowMap.enabled !== shadows) {
+      this.renderer.shadowMap.enabled = shadows;
+      this.sun.castShadow = shadows;
+      this.scene.traverse((n) => n.material && (Array.isArray(n.material) ? n.material.forEach((m) => (m.needsUpdate = true)) : (n.material.needsUpdate = true)));
+    }
+    this.resize();
+  }
   watch(frameMs) {
     const p = this.perf;
-    if (frameMs === undefined || p.step >= 3) return;
+    if (frameMs === undefined || !p.auto || p.tier === "low" && p.ratio <= 1) return;
     p.seen++;
-    if (frameMs > 25) p.slow++;
-    if (p.seen >= 120) {
-      if (p.slow > 70) {
-        p.step++;
-        if (p.step === 1) p.ratio = 1.25;
-        else if (p.step === 2) p.glow = false;
-        else p.ratio = 1;
-        this.resize();
+    if (frameMs > 22.5) p.slow++;
+    if (p.seen >= 150) {
+      if (p.slow > 75) {
+        p.drops++;
+        const next = ORDER[ORDER.indexOf(p.tier) + 1];
+        if (next) this.applyTier(next);
+        else (p.ratio = 0.85), this.resize();
       }
       p.seen = p.slow = 0;
     }
@@ -429,6 +478,8 @@ export class SnowView {
     this.buildGround(level, path, world);
     this.buildDecor(level, path, world);
     this.buildItems(level, path, world);
+    this.foes.lines = null;
+    this.foes.build(level, path, world);
     this.buildFinale(level, path, world);
     this.trail.length = 0;
     this.fx.clear();
@@ -439,6 +490,10 @@ export class SnowView {
     this.shake = this.hurt = 0;
     this.glance.t = this.showT = 0;
     this.flow = 0;
+    // шейдеры монстров и подборов собираются сразу, а не рывком при первой встрече
+    try {
+      this.renderer.compile(this.scene, this.camera);
+    } catch {}
   }
   unload() {
     if (!this.world) return;
@@ -447,10 +502,11 @@ export class SnowView {
     // общие материалы и заготовки геометрии остаются, всё остальное уровня — освобождается
     const keep = new Set([this.snowMat, this.ballSnowMat, this.groundMat, this.pileMat, this.decorMat, this.iceMat, this.woodMat, this.flakeMat, this.crackMat, this.shadowMat]);
     const mats = new Set();
+    this.foes.disposeLabels();
     this.world.traverse((node) => {
       if (node.isInstancedMesh) node.dispose();
       if (node.isMesh && node.userData.own) node.geometry.dispose();
-      if (node.material && !keep.has(node.material)) mats.add(node.material);
+      if (node.material && !keep.has(node.material) && !keepFoeMaterial(node.material)) mats.add(node.material);
     });
     for (const w of this.walls || []) w.plaque.material.map?.dispose();
     this.boss?.sign.material.map?.dispose();
@@ -522,6 +578,7 @@ export class SnowView {
     g.setIndex(idx);
     g.computeVertexNormals();
     const ground = this.own(new T.Mesh(g, this.groundMat));
+    ground.receiveShadow = true;
     world.add(ground);
     this.height = height;
   }
@@ -896,6 +953,7 @@ export class SnowView {
         const height = 3.4 + k * 0.35;
         const body = part(GEO.box, wallMat, HALF * 2 + 3.2, height, 1.3);
         body.position.y = height / 2;
+        body.castShadow = true;
         group.add(body);
         for (let c = -HALF - 1.2; c <= HALF + 1.3; c += 1.6) group.add(at(part(GEO.box, wallMat, 0.9, 0.7, 1.4), c, height + 0.35, 0));
         // табличка с прочностью стоит на зубцах: выше кома и числа над ним
@@ -915,6 +973,7 @@ export class SnowView {
       boss.scale.setScalar(scale);
       path.place(boss, F.boss.s + 2, 0, 0, false);
       boss.rotation.y += Math.PI; // смотрит на игрока
+      boss.traverse((n) => n.isMesh && (n.castShadow = true));
       world.add(boss);
       boss.traverse((n) => n.material && this.disposables.push(n.material));
       const sign = new T.Mesh(GEO.plane, new T.MeshBasicMaterial({ transparent: true, depthWrite: false, toneMapped: false }));
@@ -1031,6 +1090,7 @@ export class SnowView {
       const used = !!run.used[id];
       if (!!rec.gone !== used || rec.kind === "flake") this.hide(id, used);
     }
+    this.foes.resync(run);
     for (const g of this.gates) {
       if (!run.used[g.it.id]) {
         g.passed = -1;
@@ -1048,6 +1108,38 @@ export class SnowView {
     const r = this.rVis;
     const bp = this.path.frame(run.s, run.x, run.y + r, this.tmp.clone());
     const fwd = this.path.forward(run.s, this.tmp2.clone());
+    // монстры, подборы и пушка — у своей части сцены
+    if (FOE_EVENTS.has(e.type)) {
+      this.foes.event(e, run);
+      if (e.type === "pow" && e.wall !== undefined) this.paintWall(this.walls[e.wall], e.left);
+      if (e.type === "kill" && e.how === "bite") fx.puff(RING, bp, null, r, r * 2.6, 0.35, tone("#ff6a7a", 2), 0.8);
+      return;
+    }
+    if (e.type === "bite" || e.type === "drain") {
+      this.hurt = Math.max(this.hurt, e.type === "bite" ? 0.7 : 0.35);
+      if (e.type === "bite") this.squash = 0.4;
+      return;
+    }
+    if (e.type === "chase") {
+      this.shake = Math.max(this.shake, 0.7);
+      this.glanceAt("surprised", 0.9);
+      return;
+    }
+    if (e.type === "chase-end") {
+      if (e.caught) {
+        this.shake = 1.3;
+        this.flash = 0.8;
+        this.hurt = 1;
+        this.hero.react(1.6);
+        for (let k = 0; k < 3; k++) fx.debris(this.path.frame(run.s - 2, rand(-5, 5), 3), ["#ffffff", "#eef6ff", "#dfeaff"], 26, 12, 0.55, { up: 0.5, life: 1.6, floor: bp.y - r, dir: fwd.clone().multiplyScalar(12) });
+        for (let i = 0; i < 16; i++) fx.puff(PUFF, this.path.frame(run.s + rand(-3, 6), rand(-6, 6), rand(0, 4)), V(rand(-2, 2), rand(0, 3), 0).addScaledVector(fwd, 8), 1.4, 3.6, 1.2, tone(this.theme.dust, 1), 0.9, tone(this.theme.dust2, 1), 1.2);
+      } else {
+        this.joy = 1;
+        this.glanceAt("joy", 1);
+        fx.burst(bp, ["#ffe27a", "#ffffff", "#7fd0ff"], 40, 14, 0.18);
+      }
+      return;
+    }
     if (e.type === "flake") {
       const rec = this.items.get(e.id);
       if (rec) {
@@ -1141,8 +1233,13 @@ export class SnowView {
         this.shake = 1;
         this.joy = 0.6;
         for (let x = -HALF; x <= HALF; x += 3.5) fx.debris(this.path.frame(w.w.s, x, 1.5), ["#e6f8ff", "#bfeaff", "#ffffff"], 10, 11, 0.55, { up: 0.6, life: 1.8, floor: p.y - w.height / 2, dir: fwd.clone().multiplyScalar(9) });
-        fx.burst(p, ["#bfeaff", "#ffffff"], 30, 16, 0.2);
-        for (let i = 0; i < 10; i++) fx.puff(PUFF, this.path.frame(w.w.s, rand(-HALF, HALF), rand(0.5, 3)), V(rand(-2, 2), rand(1, 3), rand(-2, 2)), 1, 3, 1.1, tone(this.theme.dust, 1), 0.7, tone(this.theme.dust2, 1), 1.4);
+        fx.burst(p, ["#bfeaff", "#ffffff"], Math.round(30 * this.q.dust), 16, 0.2);
+        for (let i = 0; i < Math.round(10 * this.q.dust); i++) fx.puff(PUFF, this.path.frame(w.w.s, rand(-HALF, HALF), rand(0.5, 3)), V(rand(-2, 2), rand(1, 3), rand(-2, 2)), 1, 3, 1.1, tone(this.theme.dust, 1), 0.7, tone(this.theme.dust2, 1), 1.4);
+        // ударная волна и вспышка: стена взрывается снегом
+        fx.puff(GLOW, p, null, 9, 1, 0.3, tone("#ffffff", 2.4), 1);
+        fx.puff(RING, this.path.frame(w.w.s, 0, 0.4), null, 1, 13, 0.55, tone("#bfeaff", 2.2), 1);
+        for (let i = 0; i < Math.round(8 * this.q.dust); i++) fx.puff(STAR, this.path.frame(w.w.s, rand(-HALF, HALF), rand(1, 4)), V(rand(-3, 3), rand(2, 6), rand(-3, 3)), 0.4, 0.9, 0.9, tone("#ffe27a", 2.2), 1, tone("#ffffff", 1.4), 2);
+        this.flash = Math.max(this.flash, 0.25);
       } else {
         this.paintWall(w, e.left);
         this.shake = 0.7;
@@ -1164,6 +1261,7 @@ export class SnowView {
         fx.debris(this.path.frame(this.level.finale.boss.s + 4, 0, 12 * b.scale), ["#ff8a1e", "#1d1f26", "#6b4a32"], 10, 8, 0.3, { up: 1.2, life: 2.2, floor: base.y, dir: fwd.clone().multiplyScalar(5) });
         for (let i = 0; i < 9; i++) fx.puff(PUFF, this.path.frame(this.level.finale.boss.s + 6, rand(-5, 5), rand(1, 10)), V(rand(-2, 2), rand(1, 3), 0).addScaledVector(fwd, 4), 1.5, 3.5, 1.3, tone(this.theme.dust, 1), 0.6, tone(this.theme.dust2, 1), 1);
         fx.burst(this.path.frame(this.level.finale.boss.s, 0, 6), ["#ffe27a", "#ffffff", "#7fd0ff"], 60, 22, 0.3);
+        this.flash = 1;
       } else {
         b.laugh = 1.6;
         this.shake = 0.8;
@@ -1187,6 +1285,24 @@ export class SnowView {
       fx.puff(RING, bp, null, r, r * 5, 0.8, tone("#ffe27a", 2.2), 1);
       fx.burst(bp, ["#ffe27a", "#ffffff"], 30, 10, 0.16);
     }
+  }
+
+  // снежок пушки разбил камень или забор
+  smashItem(id, run) {
+    const rec = this.items.get(id);
+    if (!rec) return;
+    const it = rec.it;
+    const fwd = this.path.forward(run.s, V());
+    this.hide(id);
+    if (it.t === "rock") {
+      const p = this.path.frame(it.s, it.x, 0.6);
+      this.fx.debris(p, [this.theme.rock, "#ffffff"], 14, 8, it.r * 0.5, { up: 0.9, life: 1.6, floor: p.y - 0.6 });
+      this.fx.puff(RING, p, null, 0.4, 3, 0.35, tone("#ffffff", 1.8), 0.9);
+    } else {
+      const p = this.path.frame(it.s, clamp(run.x, it.x0, it.x1), 0.8);
+      this.fx.debris(p, [this.theme.fence, this.theme.fenceTop], 16, 8, 0.45, { up: 0.9, life: 1.6, floor: p.y - 0.8, flat: true, dir: fwd.multiplyScalar(6) });
+    }
+    this.onFoe?.("smash");
   }
 
   // оглянуться на игрока: лицо видно из-за спины
@@ -1271,7 +1387,7 @@ export class SnowView {
         this.trail.push({ s, x, r, air: y > 0.15 || this.inGorge(s) });
         if (this.trail.length > this.trailMax) this.trail.shift();
       }
-      if (ds > 0 && y < 0.1 && Math.random() < 0.6) {
+      if (ds > 0 && y < 0.1 && Math.random() < 0.6 * this.q.dust) {
         const p = path.frame(s - r * 0.6, x + rand(-r, r) * 0.6, 0.15);
         this.fx.puff(PUFF, p, V(rand(-1, 1), rand(0.6, 2), rand(-1, 1)), r * 0.18, r * 0.7, 0.5, tone(this.theme.dust, 1), 0.55, tone(this.theme.dust2, 1), 2);
       }
@@ -1345,6 +1461,7 @@ export class SnowView {
       }
       rec.state = st;
     }
+    this.foes.update(run, dt, t, menu, camQ);
     for (const g of this.gates) {
       const panels = g.model.userData.panels;
       if (g.passed >= 0) {
@@ -1362,6 +1479,7 @@ export class SnowView {
     }
     if (this.boss && !this.boss.down) {
       const b = this.boss;
+      if (!menu) this.paintBoss(run.bossHp);
       const { body, head, arms } = b.model.userData;
       b.laugh = Math.max(0, b.laugh - dt);
       body.position.y = Math.abs(Math.sin(t * (b.laugh ? 14 : 2))) * (b.laugh ? 0.5 : 0.15);
@@ -1377,10 +1495,16 @@ export class SnowView {
       st.mat.emissiveIntensity = 0.12 + st.lit * 0.9;
     }
 
-    // ---------- падающий снег ----------
-    if (!this.reduced && this.theme.snowfall > 0 && Math.random() < this.theme.snowfall) {
+    // ---------- падающий снег (гуще на высоком качестве) ----------
+    for (let k = this.reduced ? 0 : this.theme.snowfall * this.q.snow; k > 0; k--) {
+      if (k < 1 && Math.random() > k) break;
       const p = path.frame(s + rand(-6, 45), rand(-18, 18), rand(7, 16));
       this.fx.puff(GLOW, p, V(rand(-0.5, 0.5), -rand(1.2, 2.2), rand(-0.5, 0.5)), 0.07, 0.07, 5, tone("#ffffff", 1.05), 0.9);
+    }
+    // искрящиеся снежинки из-под кома
+    if (!menu && run.mode === "run" && this.ball.visible && Math.random() < 0.25 * this.q.dust) {
+      const p = path.frame(s - r * 0.4, x + rand(-r, r), rand(0.2, r * 1.4));
+      this.fx.puff(STAR, p, V(rand(-1, 1), rand(1, 2.5), rand(-1, 1)), 0.12, 0.28, 0.6, tone("#dff6ff", 2.2), 0.9);
     }
     if (level.mountain === 3 && Math.random() < 0.35) {
       const p = path.frame(s + rand(0, 60), rand(-25, 25), rand(-1, 2));
@@ -1463,6 +1587,11 @@ export class SnowView {
     this.sun.target.position.copy(bp);
     this.grade.uniforms.hurt.value = this.hurt;
     this.grade.uniforms.joy.value = this.joy;
+    this.flash = Math.max(0, this.flash - dt * 2.4);
+    this.grade.uniforms.flash.value = this.flash;
+    const speedBlur = this.q.blur && !menu && run.mode === "run" ? clamp((run.v - 14) / 14, 0, 0.7) : 0;
+    this.blurK = (this.blurK || 0) + (speedBlur - (this.blurK || 0)) * Math.min(1, dt * 4);
+    this.grade.uniforms.blur.value = this.blurK;
 
     this.watch(frameMs);
     if (this.perf.glow) this.composer.render();

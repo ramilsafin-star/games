@@ -2,17 +2,29 @@
 // в браузере. Видит то же, что игрок: ворота, сугробы и препятствия впереди. Умение задаётся
 // временем реакции, дальностью взгляда, дрожью руки, вниманием к препятствиям и тем,
 // насколько он думает у ворот.
-import { HALF, LATERAL, GRAVITY, BRIDGE_HALF, radiusOf, applyGate, touches, rng, clamp } from "./rules.js?v=bd3554ee";
+import { HALF, LATERAL, GRAVITY, BRIDGE_HALF, radiusOf, applyGate, touches, rng, clamp, isPickup, impX } from "./rules.js?v=dba1bb88";
 
 export const SKILLS = {
   // внимательный игрок: выбирает лучшие ворота, объезжает почти всё
-  good: { think: 0.1, look: 1.15, noise: 0.15, smart: 1, avoid: 1, greed: 1, wander: 0 },
+  good: { think: 0.1, look: 1.15, noise: 0.15, smart: 1, avoid: 1, greed: 1, wander: 0, grab: 1 },
   // новичок: реагирует медленнее, иногда ошибается воротами и не замечает препятствие
-  novice: { think: 0.2, look: 0.95, noise: 0.4, smart: 0.8, avoid: 0.72, greed: 0.5, wander: 0.4 },
+  novice: { think: 0.2, look: 0.95, noise: 0.4, smart: 0.8, avoid: 0.72, greed: 0.5, wander: 0.4, grab: 0.6 },
   // небрежный: ворота почти наугад, замечает лишь часть препятствий, рука гуляет
-  careless: { think: 0.32, look: 0.75, noise: 0.75, smart: 0.4, avoid: 0.35, greed: 0.15, wander: 1.4 },
+  careless: { think: 0.32, look: 0.75, noise: 0.75, smart: 0.4, avoid: 0.35, greed: 0.15, wander: 1.4, grab: 0.25 },
 };
-const HAZARD = new Set(["rock", "fence", "spikes", "log", "hole", "crusher", "geyser"]);
+const HAZARD = new Set(["rock", "fence", "spikes", "log", "hole", "crusher", "geyser", "volley"]);
+// монстр опасен, если ком его не сомнёт: бесёнок кусает всегда (кроме шипов), йети и страшила —
+// если их число не меньше кома; снежки летят, пока страшила цела
+// бесёнок с маленьким числом не страшен, если по заданию уровня их надо давить
+const questImp = (it, run) => run.level.quest?.kind === "imp" && !run.questDone && it.v <= run.size * 0.08;
+function danger(it, i, run) {
+  if (HAZARD.has(it.t)) return true;
+  if (it.t === "snowball") return !run.used[it.owner];
+  if (run.spikeT > 0.3) return false;
+  if (it.t === "imp") return !questImp(it, run);
+  if (it.t === "yeti" || it.t === "thrower") return run.hp[i] >= run.size;
+  return false;
+}
 const STEP = 0.04;
 
 function extentS(it) {
@@ -25,6 +37,7 @@ export function makePilot(level, kind = "good", seed = 1) {
   const rnd = rng(seed * 2654435761 + 17);
   const choice = new Map(); // решение по воротам: s ворот → номер створки
   const noticed = new Map(); // заметил ли робот препятствие
+  const wants = new Map(); // хочет ли подобрать оружие или смять слабого йети
   let timer = 0;
   let target = 0;
   let wander = 0;
@@ -85,7 +98,7 @@ export function makePilot(level, kind = "good", seed = 1) {
         if (ss < a - r - 0.3 || ss > b + r + 0.3) continue;
         if (touches(it, ss, x, y, r, ss / level.speed)) {
           hit.add(it);
-          total += (it.t === "hole" || it.t === "crusher" || it.t === "geyser" ? 14 : 10) * weight;
+          total += (it.t === "hole" || it.t === "crusher" || it.t === "geyser" || it.t === "yeti" || it.t === "volley" ? 14 : it.t === "imp" ? 7 : 10) * weight;
         }
       }
       if (bridge && !air && ss >= bridge.s0 - 0.5 && ss <= bridge.s1 && Math.abs(x) > BRIDGE_HALF - 0.35) {
@@ -108,8 +121,25 @@ export function makePilot(level, kind = "good", seed = 1) {
       const pad = Math.min(1.2, (p.x1 - p.x0) / 3);
       desired = clamp((p.x0 + p.x1) / 2, p.x0 + pad, p.x1 - pad);
     }
+    // оружие и слабые йети впереди: решение принимается один раз на предмет
+    let grabbed = false;
+    if (!g || g.s - run.s > 14) {
+      for (let i = run.lo; i < level.items.length; i++) {
+        const it = level.items[i];
+        if (it.s < run.s + 2 || run.used[i]) continue;
+        if (it.s > run.s + 15) break;
+        const prey = (it.t === "yeti" && run.hp[i] < run.size * 0.9) || (it.t === "imp" && questImp(it, run));
+        if (!isPickup(it) && !prey) continue;
+        if (!wants.has(it)) wants.set(it, rnd() < sk.grab);
+        if (wants.get(it)) {
+          desired = it.t === "imp" ? impX(it, (it.s - 1) / level.speed) : it.x;
+          grabbed = true;
+          break;
+        }
+      }
+    }
     // жадность: сугробы впереди, если до ворот ещё далеко
-    if (sk.greed > 0 && (!g || g.s - run.s > 20)) {
+    if (!grabbed && sk.greed > 0 && (!g || g.s - run.s > 20)) {
       for (let i = run.lo; i < level.items.length; i++) {
         const it = level.items[i];
         if (it.s < run.s + 2) continue;
@@ -139,7 +169,7 @@ export function makePilot(level, kind = "good", seed = 1) {
       if (it.s > reach) break;
       if (it.s < run.s - 4 || run.used[i]) continue;
       if (it.t === "ramp") ramps.push(it);
-      else if (HAZARD.has(it.t)) {
+      else if (danger(it, i, run)) {
         if (sk.avoid < 1) {
           if (!noticed.has(it)) noticed.set(it, rnd() < sk.avoid);
           if (!noticed.get(it)) continue;

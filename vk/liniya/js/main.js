@@ -1,11 +1,11 @@
 // «Линия спасения»: экраны, ввод, игровой цикл, сохранение и связь с VK.
-import { LEVELS, CHAPTERS, PER_CHAPTER, ATTRACT } from "./levels.js?v=b97d5aa8";
-import { useMatter, createSim, DT } from "./sim.js?v=b97d5aa8";
-import { Pen, starsFor, W, H } from "./world.js?v=b97d5aa8";
-import { View } from "./view.js?v=b97d5aa8";
-import { Sound } from "./sound.js?v=b97d5aa8";
-import { FOLK } from "./art.js?v=b97d5aa8";
-import * as R from "./rules.js?v=b97d5aa8";
+import { LEVELS, CHAPTERS, PER_CHAPTER, ATTRACT, dailyLevel } from "./levels.js?v=80a70cba";
+import { useMatter, createSim, DT, play } from "./sim.js?v=80a70cba";
+import { Pen, starsFor, W, H, flyHit } from "./world.js?v=80a70cba";
+import { View, THEMES } from "./view.js?v=80a70cba";
+import { Sound } from "./sound.js?v=80a70cba";
+import { FOLK, critter } from "./art.js?v=80a70cba";
+import * as R from "./rules.js?v=80a70cba";
 
 useMatter(window.Matter);
 const host = window.vkGameHost;
@@ -30,8 +30,24 @@ function write(key, value) {
 let save = R.decode(read(R.SAVE_KEY), LEVELS.length);
 const persist = () => write(R.SAVE_KEY, R.encode(save));
 Sound.set(!save.mute);
+const CTX = { per: PER_CHAPTER, chapters: CHAPTERS.length }; // для наград
+const fails = {}; // сколько раз подряд не вышло на уровне (в этой игре) — для умной подсказки
 
 const view = new View($("stage"));
+// Качество графики: «Авто» — высокое, но на слабом устройстве (или если кадры проседают) — низкое
+const weakDevice = (navigator.deviceMemory && navigator.deviceMemory < 4) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2);
+let autoLow = !!weakDevice;
+const QUALITY_NAMES = ["Авто", "Высокое", "Низкое"];
+function applyQuality() {
+  view.setQuality(save.quality === 1 || (save.quality === 0 && !autoLow));
+  layout();
+}
+// Линия и шапка из Мастерской
+function applyLook() {
+  view.inkStyle = R.INKS[save.ink];
+  view.hat = R.HATS[save.hat].id;
+}
+applyLook();
 const game = {
   mode: "load",
   chapter: 0,
@@ -78,6 +94,7 @@ function layout() {
 }
 addEventListener("resize", layout);
 layout();
+if (autoLow || save.quality === 2) applyQuality();
 
 // ---------- Экраны ----------
 function screen(name) {
@@ -93,10 +110,22 @@ function showMenu() {
   screen("menu");
   Sound.music(0, true);
   startAttract();
+  paintMenu();
+}
+function paintMenu() {
   const total = R.totalStars(save),
     done = R.solved(save);
-  $("play").textContent = done ? `Продолжить · ${LEVELS[R.nextLevel(save)].id}` : "Играть";
-  $("menu-stat").textContent = done ? `Пройдено ${done} из ${LEVELS.length} · ★ ${total} из ${LEVELS.length * 3}` : "Рисуй пальцем или мышью";
+  $("play").innerHTML = done ? `Продолжить<small>уровень ${LEVELS[R.nextLevel(save)].id}</small>` : "Играть";
+  $("menu-stat").innerHTML = done
+    ? `Пройдено ${done} из ${LEVELS.length} · ★ ${total} · <span class="fly-ico"></span>${save.wallet}`
+    : "Рисуй пальцем или мышью";
+  const key = R.dayKey();
+  const streak = R.streakNow(save, key);
+  $("daily-sub").textContent = R.dailyDone(save, key) ? "решена ✓" : streak ? `серия ${streak}` : "+" + R.DAILY_REWARD;
+  $("daily").classList.toggle("done", R.dailyDone(save, key));
+  $("shop-sub").innerHTML = `<span class="fly-ico"></span>${save.wallet}`;
+  const ach = R.ACHIEVEMENTS.filter((_, i) => save.ach & (1 << i)).length;
+  $("awards-sub").textContent = `${ach} из ${R.ACHIEVEMENTS.length}`;
 }
 
 // Заставка в меню: первый уровень решается сам, по кругу
@@ -109,6 +138,8 @@ function startAttract() {
   game.hint = false;
   game.demo = false;
   game.ended = false;
+  game.fly = null;
+  game.hint = false;
   const line = L.sol[0].map(([x, y]) => [x, y]);
   game.attractLine = line;
   game.attractAt = performance.now();
@@ -140,10 +171,10 @@ function showMap(ch = game.chapter) {
   const tabs = $("chapters");
   tabs.innerHTML = CHAPTERS.map((c, i) => {
     const open = R.isOpen(save, i * PER_CHAPTER);
-    return `<button role="tab" data-ch="${i}" aria-selected="${i === ch}" class="${open ? "" : "locked"}">${open ? "" : lockIcon(14)}${i + 1}. ${c.short}</button>`;
+    return `<button role="tab" data-ch="${i}" aria-selected="${i === ch}" class="${open ? "" : "locked"}" aria-label="${i + 1}. ${c.name}">${open ? "" : lockIcon(14)}${i + 1}<span class="nm">. ${c.short}</span></button>`;
   }).join("");
   $("chapter-name").textContent = CHAPTERS[ch].name;
-  $("map-stars").textContent = `★ ${R.totalStars(save)}`;
+  $("map-stars").innerHTML = `★ ${R.totalStars(save)} · <span class="fly-ico"></span>${R.flies(save)}`;
   const now = R.nextLevel(save);
   let html = "";
   for (let n = 0; n < PER_CHAPTER; n++) {
@@ -154,7 +185,7 @@ function showMap(ch = game.chapter) {
     const open = R.isOpen(save, i);
     const cls = ["lv", st ? "done" : "", i === now && open ? "now" : ""].join(" ");
     html += open
-      ? `<button class="${cls}" data-lv="${i}" aria-label="Уровень ${L.id}${st ? ", звёзд: " + st : ""}">${typeIcon(L.type)}<b>${n + 1}</b><span class="st">${[0, 1, 2].map((k) => `<i class="${k < st ? "on" : ""}"></i>`).join("")}</span></button>`
+      ? `<button class="${cls}" data-lv="${i}" aria-label="Уровень ${L.id}${st ? ", звёзд: " + st : ""}${save.fly[i] ? ", светлячок пойман" : ""}">${typeIcon(L.type)}<i class="fl ${save.fly[i] ? "on" : ""}"></i><b>${n + 1}</b><span class="st">${[0, 1, 2].map((k) => `<i class="${k < st ? "on" : ""}"></i>`).join("")}</span></button>`
       : `<button class="lv" disabled aria-label="Уровень ${L.id} закрыт">${lockIcon(26)}</button>`;
   }
   $("grid").innerHTML = html;
@@ -169,7 +200,7 @@ function typeIcon(type) {
 
 // ---------- Уровень ----------
 function startLevel(i, opts = {}) {
-  const L = LEVELS[i];
+  const L = opts.daily ? opts.daily : LEVELS[i];
   if (!L) return showMenu();
   // название главы показываем при входе в главу (из меню, с карты или с прошлой главы)
   const newChapter = game.mode !== "level" || game.L?.chapter !== L.chapter;
@@ -188,23 +219,42 @@ function startLevel(i, opts = {}) {
     resultAt: 0,
     wonAt: 0,
     open: 0,
-    demo: !!L.demo && !save.stars[i] && !opts.hint,
+    demo: !!L.demo && !save.stars[i] && !opts.hint && !L.daily,
     levelTime: 0,
     pending: false,
+    fly: L.fly && !L.daily ? { x: L.fly[0], y: L.fly[1], state: save.fly[i] ? "old" : "free" } : null,
+    flyGot: false,
   });
-  save.last = i;
-  persist();
+  if (!L.daily) {
+    save.last = i;
+    persist();
+  }
   Sound.music(L.chapter, true);
-  $("lvl").textContent = L.id;
+  $("lvl").textContent = L.daily ? "День" : L.id;
+  $("lvl").classList.toggle("daily", !!L.daily);
+  $("hint").hidden = !!L.daily;
+  $("hint").classList.toggle("nudge", !L.daily && (fails[i] || 0) >= 2 && !game.hint);
+  $("flyhud").hidden = !game.fly;
+  $("flyhud").className = "flyhud" + (game.fly?.state === "old" ? " old" : "");
   $("timer").hidden = true;
   $("go").hidden = true;
   setTask(taskText(L));
   updateHud();
-  if (newChapter && !opts.retry && !opts.hint) banner(`<small>ГЛАВА ${L.chapter + 1}</small>${CHAPTERS[L.chapter].name}`);
+  if (L.daily && !opts.retry) banner(`<small>ЗАДАЧА ДНЯ</small>Уровень ${LEVELS[L.of].id} в зеркале`);
+  else if (newChapter && !opts.retry && !opts.hint) banner(`<small>ГЛАВА ${L.chapter + 1}</small>${CHAPTERS[L.chapter].name}`);
+}
+// Тот же уровень заново (обычный или задача дня)
+function restart(opts = {}) {
+  const L = game.L;
+  if (!L) return;
+  if (L.daily) startLevel(0, { ...opts, retry: true, daily: L });
+  else startLevel(L.index, { retry: true, hint: game.hint, ...opts });
 }
 function taskText(L) {
+  if (L.daily) return "Задача дня: знакомый уровень, только наоборот. Чернил — как обычно";
   if (L.tip) return L.tip;
   const names = [FOLK[0].name, ...L.friends.map((f) => FOLK[f[2] ?? 1].name)];
+  if (L.type === "shield" && L.ghosts) return `Защити ${names.length > 1 ? "всех" : "Тошу"} от привидений — продержись ${L.time} с`;
   if (L.type === "shield") return `Защити ${names.length > 1 ? "всех" : "Тошу"} — продержись ${L.time} с`;
   if (L.type === "home") return "Проведи каждого к домику его цвета";
   if (L.target.k === "berry") return "Помоги ягоде попасть к Тоше";
@@ -264,7 +314,7 @@ function updateHud() {
   const used = L.type === "home" ? sim.walkers.filter((w) => w.path).length : total - game.strokes;
   $("dots").innerHTML = total > 1 ? Array.from({ length: total }, (_, i) => `<i class="${i < used ? "used" : ""}"></i>`).join("") : "";
   const n = R.hintsLeft(save);
-  const free = save.hinted[L.index];
+  const free = L.daily ? 0 : save.hinted[L.index];
   $("hint-n").textContent = free ? "✓" : n;
   $("hint").classList.toggle("free", !!free);
   $("hint").classList.toggle("on", game.hint);
@@ -322,9 +372,11 @@ stage.addEventListener("pointermove", (e) => {
     Sound.scratch(pen.stop ? 0 : sp * 400);
   }
   lastMove = { p, t: now };
-  if (pen.pts.length && Math.random() < 0.4 && !pen.stop) {
+  // искры с кончика пера (в высоком качестве — гуще)
+  if (pen.pts.length && !pen.stop && Math.random() < (view.hq ? 0.95 : 0.4)) {
     const tip = pen.pts[pen.pts.length - 1];
     view.burst("ink", tip[0], tip[1]);
+    if (view.hq) view.burst("ink", tip[0], tip[1]);
   }
   updateHud();
 });
@@ -345,6 +397,14 @@ function penUp(e) {
     return;
   }
   Sound.penUp();
+  // светлячок: линия прошла через него — он летит в баночку (засчитается, если уровень пройден)
+  if (game.fly?.state === "free" && flyHit(L, res.pts)) {
+    game.fly.state = "got";
+    game.flyGot = true;
+    view.burst("flyget", game.fly.x, game.fly.y);
+    Sound.fly();
+    $("flyhud").className = "flyhud on";
+  }
   if (L.type === "home") {
     sim.addPath(res.walker, res.pts, res.len);
     game.taken.push(res.walker);
@@ -401,6 +461,8 @@ const LOSE_TEXT = {
   time: "Не успели",
   crash: "Столкнулись!",
   caught: "Попались жуку!",
+  ghost: "Бу! Привидение!",
+  wisp: "Огонёк догнал!",
   hurt: "Ой!",
   timeout: "Не успели",
 };
@@ -412,22 +474,33 @@ const LOSE_TIP = {
   lost: "Линия падает, как настоящая. Обопри её на землю или колышки.",
   stuck: "Нужен уклон, чтобы катилось дальше.",
   crash: "Все идут одновременно и с одной скоростью. Пусти кого-то в обход.",
-  caught: "Следи за жуком-дозорным: обходи его или пропусти вперёд.",
+  caught: "Следи за дозорным: обходи его или пропусти вперёд.",
+  ghost: "Привидения летят сквозь землю и камни, но не сквозь линию. Закрой Тошу с той стороны, откуда они летят.",
+  wisp: "Огонёк сжигает линию, которой коснётся. Нарисуй ещё одну — запасную.",
 };
 function finish() {
   const { sim, L } = game;
   game.ended = true;
   $("timer").hidden = true;
   const won = sim.state === "won";
+  if (L.daily) return finishDaily(won);
   const i = L.index;
-  let stars = 0;
+  let stars = 0,
+    newFly = false;
   if (won) {
     stars = starsFor(L, sim.inkUsed);
     const before = save.stars[i];
     save.stars[i] = Math.max(before, stars);
     if (i + 1 < LEVELS.length) save.last = i + 1;
-  }
+    if (game.flyGot && !save.fly[i]) {
+      save.fly[i] = 1;
+      save.wallet++;
+      newFly = true;
+    }
+    fails[i] = 0;
+  } else fails[i] = (fails[i] || 0) + 1;
   save.time += game.levelTime;
+  const awards = won ? R.grantAchievements(save, CTX) : [];
   persist();
   const pct = Math.round((sim.inkUsed / L.plan.limit) * 100);
   const p3 = Math.round((L.plan.s3 / L.plan.limit) * 100);
@@ -437,22 +510,157 @@ function finish() {
   let html;
   if (won) {
     const head = last ? "Все уровни пройдены!" : chapterDone ? `Глава «${CHAPTERS[L.chapter].name}» пройдена!` : WIN_TEXT[sim.why]?.(L) || "Готово!";
+    const fly = newFly
+      ? `<p class="flyline got"><span class="fly-ico big"></span>Светлячок пойман! <b class="bump">+1</b></p>`
+      : save.fly[i]
+        ? ""
+        : `<p class="flyline">Где-то здесь прячется светлячок — проведи линию через него</p>`;
     html = `<p class="eyebrow">УРОВЕНЬ ${L.id} · ${typeName.toUpperCase()}</p><h2 id="result-title">${head}</h2>
       <div class="stars" aria-label="Звёзд: ${stars}">${[0, 1, 2].map((k) => `<i class="${k < stars ? "on" : ""}"></i>`).join("")}</div>
       <p class="inkline">Чернил потрачено: ${pct}%${stars < 3 ? `. Три звезды — если не больше ${p3}%` : ""}</p>
+      ${fly}${awardsHtml(awards)}
       ${last ? `<p>Звёзд собрано: ${R.totalStars(save)} из ${LEVELS.length * 3}.</p>` : ""}
       <div class="row">${last ? `<button class="btn primary" data-a="map">К уровням</button>` : `<button class="btn primary" data-a="next">Дальше <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>`}</div>
       <div class="row"><button class="btn" data-a="again">Ещё раз</button><button class="btn" data-a="menu">В меню</button></div>`;
     stars && [0, 1, 2].slice(0, stars).forEach((k) => setTimeout(() => Sound.star(k), 260 + k * 250));
+    if (newFly) setTimeout(() => Sound.fly(), 1000);
+    if (awards.length) setTimeout(() => Sound.reward(), 1300);
   } else {
     const why = sim.why;
     const tip = LOSE_TIP[why] || "Попробуй нарисовать иначе.";
     const hinted = save.hinted[i];
-    html = `<p class="eyebrow">УРОВЕНЬ ${L.id} · ${typeName.toUpperCase()}</p><h2 id="result-title">${LOSE_TEXT[why] || "Ой!"}</h2><p>${tip}</p>
+    const head = why === "caught" && L.patrols?.some((p) => p.ghost) ? "Попались привидению!" : LOSE_TEXT[why] || "Ой!";
+    // умная подсказка: после двух неудач подряд кнопка подсказки становится главной
+    const nudge = fails[i] >= 2 && !(hinted && game.hint);
+    const hintBtn = hinted && game.hint ? "" : `<button class="btn ${nudge ? "gold" : ""}" data-a="hint">${hinted ? "Показать подсказку" : nudge ? "Подсказка: покажет линию" : "Подсказка"}</button>`;
+    html = `<p class="eyebrow">УРОВЕНЬ ${L.id} · ${typeName.toUpperCase()}</p><h2 id="result-title">${head}</h2><p>${tip}</p>
       <div class="row"><button class="btn primary" data-a="again">Ещё раз</button></div>
-      <div class="row">${hinted && game.hint ? "" : `<button class="btn" data-a="hint">${hinted ? "Показать подсказку" : "Подсказка"}</button>`}<button class="btn" data-a="menu">В меню</button></div>`;
+      <div class="row">${hintBtn}<button class="btn" data-a="menu">В меню</button></div>`;
   }
   showSheet(html, won ? "win" : "lose");
+}
+function awardsHtml(list) {
+  return list
+    .map((a) => `<p class="award"><b>Награда «${a.name}»</b> <span class="bump"><span class="fly-ico"></span>+${a.reward}</span></p>`)
+    .join("");
+}
+
+// ---------- Задача дня ----------
+// Знакомый уровень в зеркале. Перед показом проверяем, что отражённый эталон проходит его (почти всегда да).
+function todayDaily() {
+  const key = R.dayKey();
+  for (const i of R.dailyCandidates(save, key).slice(0, 8)) {
+    const D = dailyLevel(i);
+    if (play(D, D.sol).won) return D;
+  }
+  return dailyLevel(0);
+}
+function dailySheet() {
+  const key = R.dayKey();
+  const done = R.dailyDone(save, key);
+  const streak = R.streakNow(save, key);
+  showSheet(
+    `<p class="eyebrow">ЗАДАЧА ДНЯ</p><h2>Уровень наоборот</h2>
+    <p>Каждый день — знакомый уровень, отражённый в зеркале: всё, что было справа, теперь слева.</p>
+    <p>${done ? "Сегодня задача уже решена — можно сыграть ещё раз для удовольствия." : `Награда: <span class="chip"><span class="fly-ico"></span>+${R.DAILY_REWARD}</span>, а каждый 7-й день подряд — ещё <span class="chip"><span class="fly-ico"></span>+${R.STREAK_BONUS}</span>`}</p>
+    <p class="streak">${streak ? `Серия: ${streak} ${plural(streak, "день", "дня", "дней")} подряд` : "Серия начнётся с сегодняшней задачи"}</p>
+    <div class="row"><button class="btn primary" data-a="daily-go">${done ? "Сыграть ещё раз" : "Начать"}</button></div>
+    <div class="row"><button class="btn" data-a="close">Назад</button></div>`,
+    "daily",
+  );
+}
+function finishDaily(won) {
+  const { L } = game;
+  let got = 0,
+    awards = [];
+  if (won) {
+    got = R.solveDaily(save, R.dayKey());
+    awards = R.grantAchievements(save, CTX);
+    persist();
+  }
+  const html = won
+    ? `<p class="eyebrow">ЗАДАЧА ДНЯ · УРОВЕНЬ ${LEVELS[L.of].id} В ЗЕРКАЛЕ</p><h2 id="result-title">Задача решена!</h2>
+      ${got ? `<p class="flyline got"><span class="fly-ico big"></span>Награда <b class="bump">+${got}</b></p><p class="streak">Серия: ${save.streak} ${plural(save.streak, "день", "дня", "дней")} подряд. Приходи завтра!</p>` : `<p>Сегодня награда уже получена. Новая задача — завтра.</p>`}
+      ${awardsHtml(awards)}
+      <div class="row"><button class="btn primary" data-a="menu">В меню</button></div>
+      <div class="row"><button class="btn" data-a="again">Ещё раз</button><button class="btn" data-a="map">Уровни</button></div>`
+    : `<p class="eyebrow">ЗАДАЧА ДНЯ</p><h2 id="result-title">${LOSE_TEXT[game.sim.why] || "Ой!"}</h2><p>${LOSE_TIP[game.sim.why] || "Вспомни, как решался этот уровень, — только всё наоборот."}</p>
+      <div class="row"><button class="btn primary" data-a="again">Ещё раз</button></div>
+      <div class="row"><button class="btn" data-a="menu">В меню</button></div>`;
+  if (won && (got || awards.length)) setTimeout(() => Sound.reward(), 700);
+  showSheet(html, won ? "win" : "lose");
+}
+const plural = (n, one, few, many) => (n % 10 === 1 && n % 100 !== 11 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? few : many);
+
+// ---------- Мастерская, награды, настройки ----------
+let shopTab = "ink";
+function shopSheet(tab = shopTab) {
+  shopTab = tab;
+  const list = tab === "ink" ? R.INKS : R.HATS;
+  const chosen = tab === "ink" ? save.ink : save.hat;
+  const items = list
+    .map((it, i) => {
+      const have = R.owned(save, tab, i);
+      const act = have
+        ? i === chosen
+          ? `<span class="tag">Выбрано</span>`
+          : `<button class="btn mini" data-pick="${i}">Выбрать</button>`
+        : `<button class="btn mini gold" data-buy="${i}" ${save.wallet < it.price ? "disabled" : ""}><span class="fly-ico"></span>${it.price}</button>`;
+      return `<div class="item ${i === chosen ? "on" : ""}"><canvas class="pv" data-pv="${tab}:${i}" width="96" height="72"></canvas><b>${it.name}</b>${act}</div>`;
+    })
+    .join("");
+  showSheet(
+    `<div class="shop-head"><div><p class="eyebrow">МАСТЕРСКАЯ</p><h2>Линии и шапки</h2></div><span class="wallet"><span class="fly-ico"></span>${save.wallet}</span></div>
+    <p class="note">Светлячки ловятся на уровнях: проведи линию через светлячка. Ещё — за задачу дня и награды.</p>
+    <div class="tabs"><button class="${tab === "ink" ? "on" : ""}" data-tab="ink">Линии</button><button class="${tab === "hat" ? "on" : ""}" data-tab="hat">Шапки Тоши</button></div>
+    <div class="items">${items}</div>
+    <div class="row"><button class="btn primary" data-a="close">Готово</button></div>`,
+    "shop",
+  );
+  paintPreviews();
+}
+function paintPreviews() {
+  for (const cv of document.querySelectorAll("canvas.pv")) {
+    const [tab, i] = cv.dataset.pv.split(":");
+    const c = cv.getContext("2d");
+    const k = Math.min(2, devicePixelRatio || 1);
+    cv.width = 96 * k;
+    cv.height = 72 * k;
+    c.setTransform(k, 0, 0, k, 0, 0);
+    if (tab === "ink") {
+      const pts = [];
+      for (let x = 12; x <= 84; x += 6) pts.push([x, 40 + Math.sin(x / 11) * 14]);
+      view.drawInk.call({ hq: true, s: 0.7, dpr: k, inkStyle: R.INKS[i] }, c, pts, THEMES[0], 1, false);
+    } else critter(c, 48, 44, 22, 0, { t: performance.now() / 1000, mood: "joy", hat: R.HATS[i].id });
+  }
+}
+function awardsSheet() {
+  if (R.grantAchievements(save, CTX).length) persist();
+  const rows = R.ACHIEVEMENTS.map((a, i) => {
+    const have = !!(save.ach & (1 << i));
+    const v = R.achProgress(save, a, CTX);
+    const pct = Math.round((v / a.goal) * 100);
+    const shown = a.goal === 1 ? (have ? "готово" : `${pct}%`) : `${Math.floor(v)} / ${a.goal}`;
+    return `<div class="ach ${have ? "on" : ""}"><span class="medal">${have ? "✓" : i + 1}</span><div class="what"><b>${a.name}</b><small>${a.text}</small><i class="bar"><i style="width:${pct}%"></i></i></div><span class="rew"><span class="fly-ico"></span>+${a.reward}<small>${shown}</small></span></div>`;
+  }).join("");
+  const n = R.ACHIEVEMENTS.filter((_, i) => save.ach & (1 << i)).length;
+  showSheet(
+    `<p class="eyebrow">НАГРАДЫ · ${n} ИЗ ${R.ACHIEVEMENTS.length}</p><h2>Награды</h2>
+    <div class="achs">${rows}</div>
+    <div class="row"><button class="btn primary" data-a="close">Готово</button></div>`,
+    "awards",
+  );
+}
+function settingsSheet() {
+  const eff = view.hq ? "высокое" : "низкое";
+  showSheet(
+    `<p class="eyebrow">НАСТРОЙКИ</p><h2>Графика</h2>
+    <p>«Авто» включает высокое качество (свечение, облака, больше искр) и само снижает его, если игра начнёт подтормаживать.</p>
+    <div class="seg">${QUALITY_NAMES.map((n, q) => `<button class="${save.quality === q ? "on" : ""}" data-q="${q}">${n}</button>`).join("")}</div>
+    <p class="note">Сейчас: ${eff} качество${save.quality === 0 && autoLow ? " (снижено автоматически)" : ""}</p>
+    <div class="row"><button class="btn primary" data-a="${game.mode === "level" ? "pause-back" : "close"}">Готово</button></div>`,
+    "settings",
+  );
 }
 
 // ---------- Окна ----------
@@ -472,11 +680,14 @@ function pause() {
   if (game.mode !== "level" || game.paused || game.ended) return;
   game.paused = true;
   if (game.pen) penUp();
+  pauseSheet();
+}
+function pauseSheet() {
   showSheet(
-    `<h2>Пауза</h2><p>Уровень ${game.L.id} · ${CHAPTERS[game.L.chapter].name}</p>
+    `<h2>Пауза</h2><p>${game.L.daily ? "Задача дня" : "Уровень " + game.L.id} · ${CHAPTERS[game.L.chapter].name}</p>
     <div class="row"><button class="btn primary" data-a="resume">Продолжить</button></div>
     <div class="row"><button class="btn" data-a="restart">Заново</button><button class="btn" data-a="map">Уровни</button></div>
-    <div class="row"><button class="btn" data-a="menu">В меню</button></div>`,
+    <div class="row"><button class="btn" data-a="menu">В меню</button><button class="btn" data-a="settings">Графика</button></div>`,
     "pause",
   );
 }
@@ -531,20 +742,46 @@ function grantHint(byAd) {
 
 $("sheet-body").addEventListener("click", async (e) => {
   if (adBusy) return; // во время ролика кнопки молчат
-  const b = e.target.closest("[data-a]");
+  const b = e.target.closest("[data-a], [data-tab], [data-q], [data-buy], [data-pick]");
   if (!b || b.disabled) return;
   const a = b.dataset.a;
   Sound.unlock();
   Sound.tap();
   const L = game.L;
   if (a === "resume") resume();
-  else if (a === "restart") startLevel(L.index, { retry: true, hint: game.hint });
+  else if (a === "restart") restart();
   else if (a === "map") showMap(L ? L.chapter : game.chapter);
   else if (a === "menu") showMenu();
   else if (a === "close") {
     hideSheet();
-    game.paused = false;
-    if (game.ended) finish();
+    if (game.mode === "level") {
+      game.paused = false;
+      if (game.ended) finish();
+    } else if (game.mode === "menu") paintMenu();
+  } else if (a === "settings") settingsSheet();
+  else if (a === "pause-back") pauseSheet();
+  else if (a === "daily-go") startLevel(0, { daily: todayDaily() });
+  else if (b.dataset.tab) shopSheet(b.dataset.tab);
+  else if (b.dataset.q != null) {
+    save.quality = Number(b.dataset.q);
+    if (save.quality === 1) autoLow = false;
+    persist();
+    applyQuality();
+    settingsSheet();
+  } else if (b.dataset.buy != null) {
+    if (R.buy(save, shopTab, Number(b.dataset.buy))) {
+      Sound.buy();
+      const awards = R.grantAchievements(save, CTX);
+      persist();
+      applyLook();
+      shopSheet();
+      if (awards.length) (toast(`Награда «${awards[0].name}» +${awards[0].reward}`), Sound.reward());
+    }
+  } else if (b.dataset.pick != null) {
+    save[shopTab] = Number(b.dataset.pick);
+    persist();
+    applyLook();
+    shopSheet();
   } else if (a === "hint") {
     if (save.hinted[L.index]) startLevel(L.index, { hint: true, retry: true });
     else hintSheet();
@@ -564,7 +801,7 @@ $("sheet-body").addEventListener("click", async (e) => {
     if (!(await adBreak())) return;
     if (game.L !== L) return;
     if (a === "next") startLevel(at + 1);
-    else startLevel(at, { retry: true, hint: game.hint });
+    else restart();
     updateVisibility();
   }
 });
@@ -582,6 +819,25 @@ $("levels").onclick = () => {
   Sound.unlock();
   Sound.tap();
   showMap(LEVELS[R.nextLevel(save)].chapter);
+};
+$("daily").onclick = () => {
+  Sound.unlock();
+  Sound.tap();
+  dailySheet();
+};
+$("shop").onclick = () => {
+  Sound.unlock();
+  Sound.tap();
+  shopSheet();
+};
+$("awards").onclick = () => {
+  Sound.unlock();
+  Sound.tap();
+  awardsSheet();
+};
+$("gear").onclick = () => {
+  Sound.tap();
+  settingsSheet();
 };
 $("map-back").onclick = () => {
   Sound.back();
@@ -611,7 +867,7 @@ $("pause").onclick = () => {
 };
 $("retry").onclick = () => {
   Sound.tap();
-  if (game.L) startLevel(game.L.index, { retry: true, hint: game.hint });
+  restart();
 };
 $("hint").onclick = () => {
   Sound.tap();
@@ -633,7 +889,7 @@ addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     if (game.paused && $("sheet").dataset.kind === "pause") resume();
     else pause();
-  } else if ((e.key === "r" || e.key === "к") && $("sheet").hidden) startLevel(game.L.index, { retry: true, hint: game.hint });
+  } else if ((e.key === "r" || e.key === "к") && $("sheet").hidden) restart();
   else if ((e.key === " " || e.key === "Enter") && !$("go").hidden) launch();
 });
 // любое нажатие разрешает звук (браузеры требуют жест игрока)
@@ -689,7 +945,10 @@ for (const type of ["pointerdown", "pointerup", "pointermove", "click", "keydown
 let last = performance.now(),
   acc = 0,
   bonkAt = 0,
-  spawnAt = 0;
+  spawnAt = 0,
+  ghostAt = 0;
+// замер кадров для «Авто»: если в среднем медленнее ~45 кадров/с — снижаем качество
+const perf = { sum: 0, n: 0, skip: 90 };
 function handleFx() {
   const sim = game.sim;
   if (!sim) return;
@@ -699,11 +958,13 @@ function handleFx() {
   for (const f of list) {
     if (f.k === "thud") {
       view.burst("dust", f.x, f.y);
+      if (view.hq) view.burst("spark", f.x, f.y);
       if (audible) Sound.thud(0.7);
     } else if (f.k === "bonk") {
       if (now - bonkAt > 45) (bonkAt = now), view.burst("spark", f.x, f.y), audible && Sound.bonk();
     } else if (f.k === "knock") {
       view.burst("spark", f.x, f.y);
+      if (f.v > 4) view.shake(0.12);
       Sound.knock(f.v);
     } else if (f.k === "spawn") {
       if (now - spawnAt > 90 && audible) (spawnAt = now), Sound.spawn();
@@ -714,6 +975,20 @@ function handleFx() {
     } else if (f.k === "splash") {
       view.burst("splash", f.x, f.y, f);
       Sound.splash(f.lava);
+    } else if (f.k === "mistout") {
+      if (now - ghostAt > 400 && audible) (ghostAt = now), Sound.ghost();
+    } else if (f.k === "ghostpoof") {
+      view.burst("ghostpoof", f.x, f.y);
+      Sound.ghostPoof();
+    } else if (f.k === "fizz") {
+      view.burst("fizz", f.x, f.y);
+      Sound.ghostPoof();
+    } else if (f.k === "ignite") Sound.ignite();
+    else if (f.k === "burnt") {
+      const pts = view.linePts(f.line);
+      for (let i = 0; i < pts.length; i += 2) view.burst("smokeLine", pts[i][0], pts[i][1]);
+      view.shake(0.15);
+      Sound.burnt();
     } else if (f.k === "spring") Sound.spring();
     else if (f.k === "click") (Sound.click(), Sound.door());
     else if (f.k === "eat") (view.burst("heart", f.x, f.y), Sound.eat());
@@ -726,6 +1001,8 @@ function handleFx() {
         const home = game.L.homes?.[0];
         const p = game.sim.heroes?.[0]?.b.position || (home ? { x: home[0], y: home[1] } : { x: W / 2, y: H / 2 });
         view.burst("confetti", p.x, p.y - 60);
+        view.burst("stars", p.x, p.y - 30);
+        view.flash(p.x, p.y - 30);
         Sound.win();
       }
     } else if (f.k === "lose" && game.mode === "level") setTimeout(() => Sound.lose(), 350);
@@ -740,6 +1017,20 @@ function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
   game.dt = dt;
+  if ((game.mode === "level" || game.mode === "menu") && !document.hidden) {
+    if (perf.skip > 0) perf.skip--;
+    else {
+      perf.sum += dt;
+      perf.n++;
+      if (perf.n >= 120) {
+        if (save.quality === 0 && view.hq && perf.sum / perf.n > 1 / 45) {
+          autoLow = true;
+          applyQuality();
+        }
+        perf.sum = perf.n = 0;
+      }
+    }
+  }
   const sim = game.sim;
   if (sim && !game.paused && !adBusy && (game.mode === "level" || game.mode === "menu")) {
     if (game.mode === "menu") attractTick(now);
@@ -776,11 +1067,22 @@ window.liniya = {
   view,
   levels: LEVELS,
   start: (i, o) => startLevel(i, o),
+  daily: () => startLevel(0, { daily: todayDaily() }),
+  quality: () => ({ setting: save.quality, hq: view.hq, autoLow }),
+  // для проверок: изобразить медленное устройство (кадры по 40 мс)
+  slow: () => ((perf.skip = 0), (perf.sum = 0.04 * 119), (perf.n = 119)),
   toScreen: (x, y) => view.toScreen(x, y),
   save: () => save,
   sound: Sound,
 };
 window.Sound = Sound;
+
+// Награды за то, что уже сделано (например, у старого сохранения) — сразу при запуске
+const startAwards = R.grantAchievements(save, CTX);
+if (startAwards.length) {
+  persist();
+  setTimeout(() => toast(`Награды за прошлые успехи: +${startAwards.reduce((n, a) => n + a.reward, 0)} светлячков`), 900);
+}
 
 paintSound();
 $("loading").remove();

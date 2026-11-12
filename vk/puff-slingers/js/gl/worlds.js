@@ -1,6 +1,6 @@
 // Шесть трёхмерных миров: земля с обрывом, холмы, горы, деревья, небо и облака.
-import * as T from '../../vendor/three/three.module.min.js?v=d6bb936e';
-import { blob, boxUV, fbm3, merge, paint, place, seededRandom, tube } from './shapes.js?v=d6bb936e';
+import * as T from '../../vendor/three/three.module.min.js?v=7f585ca2';
+import { blob, boxUV, fbm3, merge, paint, place, seededRandom, tube } from './shapes.js?v=7f585ca2';
 
 // Свет, воздух и цвета каждого мира. Двумерная палитра слишком кричащая для настоящего освещения
 const LOOKS = {

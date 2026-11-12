@@ -232,6 +232,7 @@ export function critter(c, x, y, r, kind, o = {}) {
     c.quadraticCurveTo(r * 0.06, my + r * 0.08, r * 0.12, my);
     c.stroke();
   }
+  if (o.hat) hat(c, o.hat, r, t);
   c.restore();
 }
 
@@ -894,5 +895,297 @@ export function finger(c, x, y) {
   c.closePath();
   c.fill();
   c.stroke();
+  c.restore();
+}
+
+// ---------- Лунная роща ----------
+// Привиденька: белое полупрозрачное облачко с волнистым низом, румянцем и круглым ротиком «у-у».
+// Милое, а не страшное: большие глаза-бусинки, щёчки. dir — куда смотрит.
+export function ghost(c, x, y, r, t, phase = 0, dir = 1, fade = 1, glow = true) {
+  c.save();
+  c.translate(x, y + Math.sin(t * 3 + phase) * r * 0.12);
+  c.globalAlpha = 0.92 * fade;
+  if (glow) {
+    const g = c.createRadialGradient(0, 0, r * 0.3, 0, 0, r * 2.1);
+    g.addColorStop(0, "rgba(200,230,255,.45)");
+    g.addColorStop(1, "rgba(200,230,255,0)");
+    c.fillStyle = g;
+    ellipse(c, 0, 0, r * 2.1, r * 2.1);
+    c.fill();
+  }
+  // тело с волнами снизу
+  c.beginPath();
+  c.moveTo(-r, r * 0.1);
+  c.bezierCurveTo(-r, -r * 1.25, r, -r * 1.25, r, r * 0.1);
+  const n = 4;
+  for (let i = 0; i < n; i++) {
+    const x0 = r - (2 * r * i) / n,
+      x1 = r - (2 * r * (i + 0.5)) / n,
+      x2 = r - (2 * r * (i + 1)) / n;
+    const w = Math.sin(t * 6 + phase + i) * r * 0.12;
+    c.quadraticCurveTo(x0 - r * 0.1, r * 0.95 + w, x1, r * 0.75 + w);
+    c.quadraticCurveTo(x2 + r * 0.1, r * 0.55 - w, x2, r * 0.85 - w);
+  }
+  c.closePath();
+  const body = c.createLinearGradient(0, -r, 0, r);
+  body.addColorStop(0, "#ffffff");
+  body.addColorStop(1, "#dbe6ff");
+  c.fillStyle = body;
+  c.fill();
+  c.strokeStyle = "rgba(120,140,200,.7)";
+  c.lineWidth = r * 0.1;
+  c.stroke();
+  // глаза и ротик
+  const ex = r * 0.34 * dir;
+  c.fillStyle = "#2a2a52";
+  ellipse(c, -r * 0.3 + ex * 0.4, -r * 0.25, r * 0.13, r * 0.17);
+  c.fill();
+  ellipse(c, r * 0.3 + ex * 0.4, -r * 0.25, r * 0.13, r * 0.17);
+  c.fill();
+  c.fillStyle = "#fff";
+  ellipse(c, -r * 0.34 + ex * 0.4, -r * 0.31, r * 0.05, r * 0.05);
+  c.fill();
+  ellipse(c, r * 0.26 + ex * 0.4, -r * 0.31, r * 0.05, r * 0.05);
+  c.fill();
+  c.fillStyle = "rgba(255,120,160,.55)";
+  ellipse(c, -r * 0.55 + ex * 0.3, r * 0.02, r * 0.14, r * 0.08);
+  c.fill();
+  ellipse(c, r * 0.55 + ex * 0.3, r * 0.02, r * 0.14, r * 0.08);
+  c.fill();
+  c.fillStyle = "#4a3a6a";
+  ellipse(c, ex * 0.4, r * 0.08, r * 0.1, r * 0.13 + Math.sin(t * 5 + phase) * r * 0.03);
+  c.fill();
+  c.restore();
+}
+
+// Огонёк: голубое пламя с глазками (поджигает линию)
+export function wisp(c, x, y, r, t, phase = 0, glow = true) {
+  c.save();
+  c.translate(x, y);
+  if (glow) {
+    const g = c.createRadialGradient(0, 0, r * 0.2, 0, 0, r * 2.6);
+    g.addColorStop(0, "rgba(120,220,255,.7)");
+    g.addColorStop(1, "rgba(80,160,255,0)");
+    c.fillStyle = g;
+    ellipse(c, 0, 0, r * 2.6, r * 2.6);
+    c.fill();
+  }
+  const fl = (k, col, s) => {
+    c.fillStyle = col;
+    c.beginPath();
+    const tip = -r * (1.7 + Math.sin(t * 13 + phase + k) * 0.25) * s;
+    c.moveTo(0, tip);
+    c.bezierCurveTo(r * 0.9 * s, -r * 0.6 * s, r * 1.05 * s, r * 0.9 * s, 0, r * 0.95 * s);
+    c.bezierCurveTo(-r * 1.05 * s, r * 0.9 * s, -r * 0.9 * s, -r * 0.6 * s, 0, tip);
+    c.fill();
+  };
+  fl(0, "#2f8cff", 1);
+  fl(1, "#6fd8ff", 0.78);
+  fl(2, "#e6fbff", 0.5);
+  c.fillStyle = "#16306a";
+  ellipse(c, -r * 0.28, r * 0.15, r * 0.1, r * 0.14);
+  c.fill();
+  ellipse(c, r * 0.28, r * 0.15, r * 0.1, r * 0.14);
+  c.fill();
+  c.restore();
+}
+
+// Лунный туман: клубящийся сиреневый вихорёк, из которого вылетают привидения
+export function mist(c, x, y, t, fire = false, live = 1) {
+  c.save();
+  c.translate(x, y);
+  const base = fire ? [90, 170, 255] : [190, 170, 255];
+  for (let i = 0; i < 5; i++) {
+    const a = t * (0.8 + i * 0.25) + i * 1.3;
+    const rr = 30 + i * 6 + Math.sin(t * 2 + i) * 4;
+    c.fillStyle = `rgba(${base[0]},${base[1]},${base[2]},${(0.16 + 0.08 * live) * (1 - i * 0.12)})`;
+    ellipse(c, Math.cos(a) * 8, Math.sin(a) * 5, rr, rr * 0.62, a * 0.3);
+    c.fill();
+  }
+  c.strokeStyle = `rgba(255,255,255,${0.35 + 0.3 * live})`;
+  c.lineWidth = 3;
+  c.lineCap = "round";
+  for (let i = 0; i < 3; i++) {
+    const a = t * 2.2 + (i * TAU) / 3;
+    c.beginPath();
+    c.arc(0, 0, 18 + i * 6, a, a + 1.4);
+    c.stroke();
+  }
+  c.restore();
+}
+
+// Светлячок: тёплый огонёк с крылышками. caught — уже пойман раньше (бледный контур)
+export function firefly(c, x, y, t, caught = false, glow = true) {
+  c.save();
+  c.translate(x + Math.sin(t * 1.7) * 3, y + Math.sin(t * 2.3) * 4);
+  if (caught) {
+    c.globalAlpha = 0.35;
+    c.strokeStyle = "#fff6b0";
+    c.lineWidth = 2;
+    c.setLineDash([4, 4]);
+    ellipse(c, 0, 0, 13, 13);
+    c.stroke();
+    c.setLineDash([]);
+    c.restore();
+    return;
+  }
+  const pulse = 0.75 + 0.25 * Math.sin(t * 5);
+  if (glow) {
+    const g = c.createRadialGradient(0, 4, 2, 0, 4, 34);
+    g.addColorStop(0, `rgba(255,250,150,${0.75 * pulse})`);
+    g.addColorStop(1, "rgba(255,240,120,0)");
+    c.fillStyle = g;
+    ellipse(c, 0, 4, 34, 34);
+    c.fill();
+  }
+  // крылышки
+  const fl = Math.sin(t * 30) * 0.4;
+  c.fillStyle = "rgba(255,255,255,.75)";
+  ellipse(c, -7, -6, 8, 4.5, -0.5 - fl);
+  c.fill();
+  ellipse(c, 7, -6, 8, 4.5, 0.5 + fl);
+  c.fill();
+  // тельце и светящееся брюшко
+  c.fillStyle = "#4a3a2a";
+  ellipse(c, 0, -2, 5, 6);
+  c.fill();
+  c.fillStyle = "#fff36a";
+  ellipse(c, 0, 7, 6.5 * pulse + 1, 7 * pulse + 1);
+  c.fill();
+  c.fillStyle = "#ffffff";
+  ellipse(c, -1.5, 5, 2, 2);
+  c.fill();
+  c.restore();
+}
+
+// Шапки Тоши (рисуются в системе координат героя: центр — (0,0), радиус r)
+export function hat(c, kind, r, t = 0) {
+  if (!kind || kind === "none") return;
+  c.save();
+  c.lineJoin = c.lineCap = "round";
+  const top = -r * 0.92;
+  if (kind === "cap") {
+    c.fillStyle = "#e8433a";
+    c.strokeStyle = "#7a1a16";
+    c.lineWidth = r * 0.06;
+    c.beginPath();
+    c.ellipse(0, top + r * 0.12, r * 0.62, r * 0.48, 0, Math.PI, 0);
+    c.closePath();
+    c.fill();
+    c.stroke();
+    c.beginPath();
+    c.ellipse(r * 0.42, top + r * 0.12, r * 0.42, r * 0.11, 0.06, 0, TAU);
+    c.fill();
+    c.stroke();
+    c.fillStyle = "#fff";
+    ellipse(c, 0, top - r * 0.36, r * 0.08, r * 0.08);
+    c.fill();
+  } else if (kind === "bow") {
+    c.fillStyle = "#ff5aa0";
+    c.strokeStyle = "#8a1a4a";
+    c.lineWidth = r * 0.05;
+    for (const s of [-1, 1]) {
+      c.beginPath();
+      c.moveTo(r * 0.3, top);
+      c.quadraticCurveTo(r * 0.3 + s * r * 0.5, top - r * 0.4, r * 0.3 + s * r * 0.45, top + r * 0.18);
+      c.closePath();
+      c.fill();
+      c.stroke();
+    }
+    c.fillStyle = "#ffd0e6";
+    ellipse(c, r * 0.3, top, r * 0.1, r * 0.1);
+    c.fill();
+    c.stroke();
+  } else if (kind === "flower") {
+    const fx = -r * 0.25,
+      fy = top - r * 0.08;
+    c.fillStyle = "#ffffff";
+    c.strokeStyle = "#c0a0d0";
+    c.lineWidth = r * 0.03;
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * TAU + Math.sin(t) * 0.1;
+      ellipse(c, fx + Math.cos(a) * r * 0.18, fy + Math.sin(a) * r * 0.18, r * 0.13, r * 0.09, a);
+      c.fill();
+      c.stroke();
+    }
+    c.fillStyle = "#ffd23a";
+    ellipse(c, fx, fy, r * 0.1, r * 0.1);
+    c.fill();
+  } else if (kind === "phones") {
+    c.strokeStyle = "#2a2a3a";
+    c.lineWidth = r * 0.12;
+    c.beginPath();
+    c.arc(0, -r * 0.2, r * 0.86, Math.PI * 1.08, Math.PI * 1.92);
+    c.stroke();
+    for (const s of [-1, 1]) {
+      c.fillStyle = "#4fd0ff";
+      c.strokeStyle = "#1a3a5a";
+      c.lineWidth = r * 0.05;
+      c.beginPath();
+      c.roundRect(s * r * 0.88 - r * 0.14, -r * 0.42, r * 0.28, r * 0.42, r * 0.1);
+      c.fill();
+      c.stroke();
+    }
+  } else if (kind === "ushanka") {
+    c.fillStyle = "#8a5a3a";
+    c.strokeStyle = "#3a2010";
+    c.lineWidth = r * 0.06;
+    c.beginPath();
+    c.ellipse(0, top + r * 0.1, r * 0.66, r * 0.52, 0, Math.PI, 0);
+    c.closePath();
+    c.fill();
+    c.stroke();
+    c.fillStyle = "#f2e6d6";
+    c.beginPath();
+    c.roundRect(-r * 0.72, top + r * 0.02, r * 1.44, r * 0.22, r * 0.1);
+    c.fill();
+    c.stroke();
+    c.fillStyle = "#ffd23a";
+    ellipse(c, 0, top - r * 0.2, r * 0.09, r * 0.09);
+    c.fill();
+  } else if (kind === "wizard") {
+    c.fillStyle = "#5a46c8";
+    c.strokeStyle = "#221a5a";
+    c.lineWidth = r * 0.06;
+    c.beginPath();
+    c.moveTo(-r * 0.5, top + r * 0.12);
+    c.quadraticCurveTo(-r * 0.05, top - r * 0.9, r * 0.32 + Math.sin(t * 2) * r * 0.06, top - r * 1.05);
+    c.quadraticCurveTo(r * 0.12, top - r * 0.45, r * 0.5, top + r * 0.12);
+    c.closePath();
+    c.fill();
+    c.stroke();
+    c.fillStyle = "#ffe35a";
+    for (const [sx, sy] of [
+      [-0.15, -0.3],
+      [0.12, -0.6],
+      [0.2, -0.05],
+    ]) sparkle(c, sx * r, top + sy * r, r * 0.1, "#ffe35a");
+    c.fillStyle = "#7a66e8";
+    c.beginPath();
+    c.ellipse(0, top + r * 0.12, r * 0.6, r * 0.12, 0, 0, TAU);
+    c.fill();
+    c.stroke();
+  } else if (kind === "crown") {
+    c.fillStyle = "#ffcf2a";
+    c.strokeStyle = "#8a5a06";
+    c.lineWidth = r * 0.06;
+    c.beginPath();
+    const y0 = top + r * 0.12,
+      y1 = top - r * 0.38;
+    c.moveTo(-r * 0.42, y0);
+    c.lineTo(-r * 0.46, y1);
+    c.lineTo(-r * 0.22, y0 - r * 0.24);
+    c.lineTo(0, y1 - r * 0.08);
+    c.lineTo(r * 0.22, y0 - r * 0.24);
+    c.lineTo(r * 0.46, y1);
+    c.lineTo(r * 0.42, y0);
+    c.closePath();
+    c.fill();
+    c.stroke();
+    c.fillStyle = "#ff4a6a";
+    ellipse(c, 0, y0 - r * 0.12, r * 0.07, r * 0.07);
+    c.fill();
+    sparkle(c, r * 0.25, y1, r * 0.08 * (1 + Math.sin(t * 4)), "#fff");
+  }
   c.restore();
 }

@@ -1,6 +1,6 @@
 // Боты: полированный металл, тёмный визор со светящимся глазом, антенны и пропеллеры. Размер в долях радиуса.
-import * as T from '../../vendor/three/three.module.min.js?v=d6bb936e';
-import { merge, place } from './shapes.js?v=d6bb936e';
+import * as T from '../../vendor/three/three.module.min.js?v=7f585ca2';
+import { merge, place } from './shapes.js?v=7f585ca2';
 
 const SKIN = {
   plain: { hull: '#9a8cf0', band: '#4a3bb0', metal: '#c4bcff', line: '#1c1450', metalness: 0.55 },

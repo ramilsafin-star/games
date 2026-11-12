@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#1f4f9e">
   <title>Снежный ком</title>
-  <meta name="description" content="3D-раннер: снежный ком катится с горы, растёт в синих воротах и тает в красных. Объезжай камни и прессы, круши ледяные крепости и снеговиков-боссов. 40 уровней на четырёх горах.">
+  <meta name="description" content="3D-раннер: снежный ком катится с горы, растёт в воротах ×2 и ×3, давит йети и ледяных бесят, стреляет из снежной пушки. Круши ледяные крепости и снеговиков-боссов. 40 уровней на четырёх горах.">
   <link rel="icon" href="./icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="./icon-180.png">
-  <script src="./vendor/vk/vk-bridge.min.js?v=8ae2940b"></script>
-    <script src="./js/vk-host.js?v=8ae2940b" data-keys="snezhok-v1" data-ad-gap="120"></script>
-    <link rel="stylesheet" href="./style.css?v=8ae2940b">
+  <script src="./vendor/vk/vk-bridge.min.js?v=51f23175"></script>
+    <script src="./js/vk-host.js?v=51f23175" data-keys="snezhok-v1" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=51f23175">
 </head>
 <body data-screen="load">
   <canvas id="stage" aria-label="Снежный склон"></canvas>
@@ -30,11 +30,13 @@
   <div id="floats" aria-hidden="true"></div>
   <div id="banner" aria-live="polite"></div>
   <div id="hint" class="hint" hidden></div>
+  <div id="gear" class="gear" hidden></div>
+  <div id="confetti" aria-hidden="true"></div>
   <main id="title" class="title" hidden>
     <div class="title-card">
       <span class="eyebrow"><i></i> СНЕЖНЫЙ РАННЕР</span>
       <h1>Снежный <em>ком</em></h1>
-      <p class="tag">Катись с горы, расти в синих воротах и круши ледяные крепости!</p>
+      <p class="tag">Катись с горы, умножай ком в воротах, дави монстров и круши ледяные крепости!</p>
       <div class="picker">
         <button id="prev" class="round" type="button" aria-label="Предыдущий уровень">‹</button>
         <div class="pick-text"><b id="pick-level">Уровень 1</b><small id="pick-mountain">Ёлочный склон</small></div>
@@ -44,6 +46,7 @@
       <div class="row">
         <button id="open-upgrades" class="ghost" type="button">Улучшения</button>
         <button id="open-skins" class="ghost" type="button">Облики</button>
+        <button id="open-settings" class="ghost gearbtn" type="button" aria-label="Графика"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/></svg></button>
       </div>
       <small class="desktop">Мышь, A/D или ←/→ · Esc — пауза</small>
     </div>
@@ -52,6 +55,6 @@
   <section id="panel" class="veil" hidden aria-labelledby="panel-title">
     <div class="sheet" id="sheet"></div>
   </section>
-  <script type="module" src="./js/boot.js?v=8ae2940b"></script>
+  <script type="module" src="./js/boot.js?v=51f23175"></script>
 </body>
 </html>

@@ -10,6 +10,27 @@ export const SHIELD = 3; // секунд защиты после возвращ�
 export const BACK_TIME = 26; // через сколько возвращаются мелочи и животные
 export const CELL = 6; // ячейка сетки поиска, м
 
+// ---------- Бонусы, «Буря» и события раунда ----------
+// Бонусы-сферы лежат на дорогах; взял — действует несколько секунд
+export const POWERS = {
+  magnet: { name: "Магнит", note: "тянет издалека", time: 8, color: "#ff4f6a" },
+  bolt: { name: "Молния", note: "быстрее", time: 6, color: "#ffc21a" },
+  giant: { name: "Великан", note: "поднимает крупное", time: 7, color: "#a35cff" },
+};
+export const POWER_KINDS = ["magnet", "bolt", "giant"];
+export const MAGNET = 1.6; // притяжение с «Магнитом»
+export const BOLT = 1.35; // скорость с «Молнией»
+export const GIANT = 1.3; // «Великан»: во столько раз шире хватка и «вес» для поглощения
+export const POWER_LIFE = 30; // сколько секунд бонус лежит на карте
+export const POWER_MAX = 3; // бонусов на карте одновременно
+// События классического раунда (доля времени раунда)
+export const GOLD_AT = 0.35, GOLD_TIME = 20, GOLD_COUNT = 22; // «Золотой час»
+export const BOSS_AT = 0.6, BOSS_TIME = 25; // «Ураган-великан»
+export const BOSS_KEEP = 0.6; // втянутый Ураганом сохраняет 60% нажитого (обычно — 20%)
+// «Буря»: вне круга вихрь худеет
+export const STORM_DRAIN = 0.045; // доля площади в секунду
+export const STORM_FINAL = 0.55; // с этой доли раунда втянутый вихрь выбывает
+
 // Генератор случайных чисел с зерном: одинаковое зерно — одинаковый раунд
 export function makeRng(seed) {
   let a = seed >>> 0 || 1;
@@ -697,7 +718,15 @@ export function buildMap(mapIndex, seed) {
   // точки появления — перекрёстки, в том числе на кольце
   const spawns = [];
   for (const x of roadAt) for (const z of roadAt) if (!b.wet(x, z)) spawns.push({ x: clamp(x, -H + 3, H - 3), z: clamp(z, -H + 3, H - 3) });
-  return { objs: b.objs, patches: b.patches, roads: b.roads, spawns, half: H, blocks: blocks.map((q, k) => ({ ...q.r, type: assign[k] })), water: b.water };
+  // места для бонусов: середины улиц между перекрёстками (там всегда свободно)
+  const powerSpots = [];
+  for (let a = 1; a + 1 < roadAt.length; a++) {
+    for (let c = 0; c + 1 < roadAt.length; c++) {
+      const m = (roadAt[c] + roadAt[c + 1]) / 2;
+      for (const [x, z] of [[roadAt[a], m], [m, roadAt[a]]]) if (!b.wet(x, z) && Math.abs(x) < H - 3 && Math.abs(z) < H - 3) powerSpots.push({ x, z });
+    }
+  }
+  return { objs: b.objs, patches: b.patches, roads: b.roads, spawns, powerSpots, half: H, blocks: blocks.map((q, k) => ({ ...q.r, type: assign[k] })), water: b.water };
 }
 
 // ---------- Боты ----------
@@ -712,13 +741,16 @@ export const SKILL_NAMES = { easy: "лёгкий", medium: "средний", har
 // player: { name, look, speedMul, startR, pullMul, duration, auto, skill }
 // bots: [{ name, look }] — имена и цвета ботов (выбирает main.js)
 export class Round {
-  constructor({ map = 0, seed = 1, player = {}, bots = [], demo = false } = {}) {
+  constructor({ map = 0, seed = 1, player = {}, bots = [], demo = false, variant = "classic", events = true } = {}) {
     this.mapIndex = map;
     this.map = MAPS[map];
     this.kinds = this.map.kinds;
     this.seed = seed >>> 0;
     this.rand = makeRng(this.seed * 7 + 13);
+    // отдельный поток случайностей для бонусов и событий: боты ведут себя как раньше
+    this.rand2 = makeRng(this.seed * 31 + 7);
     this.demo = demo;
+    this.variant = variant === "storm" ? "storm" : "classic";
     const world = buildMap(map, this.seed);
     this.half = world.half;
     this.patches = world.patches;
@@ -726,10 +758,30 @@ export class Round {
     this.blocks = world.blocks;
     this.waterAreas = world.water;
     this.spawns = world.spawns;
+    this.powerSpots = world.powerSpots;
     this.duration = demo ? Infinity : player.duration || BASE_TIME;
     this.t = 0;
     this.mode = "play";
     this.events = [];
+    // бонусы на карте
+    this.powers = [];
+    this.powerN = 0;
+    this.nextPower = 5 + this.rand2() * 3;
+    // события классики: «Золотой час» и «Ураган-великан» (в меню-заставке и в «Буре» их нет)
+    this.withEvents = !demo && events && this.variant === "classic";
+    this.gold = { state: 0, until: 0 }; // 0 — не было, 1 — идёт, 2 — прошёл
+    this.boss = null;
+    this.bossState = 0; // 0 — не было, 1 — на карте, 2 — ушёл или втянут
+    // «Буря»: круг сужается к случайной точке
+    this.storm = null;
+    if (this.variant === "storm") {
+      const H = this.half;
+      const a = this.rand2() * TAU, r = this.rand2() * H * 0.08;
+      const a1 = this.rand2() * TAU, r1 = H * (0.12 + this.rand2() * 0.16);
+      const x0 = Math.cos(a) * r, z0 = Math.sin(a) * r;
+      this.storm = { x0, z0, x1: clamp(x0 + Math.cos(a1) * r1, -H * 0.3, H * 0.3), z1: clamp(z0 + Math.sin(a1) * r1, -H * 0.3, H * 0.3) };
+      this.zone = this.zoneAt(0);
+    }
 
     // предметы
     this.objs = world.objs.map((o, i) => {
@@ -737,7 +789,7 @@ export class Round {
       return {
         i, k: o.k, x: o.x, z: o.z, hx: o.x, hz: o.z, rot: o.rot, scale: o.scale, size: o.size, tint: o.tint,
         need: kind.need, g: kind.need * kind.need * GAIN, taken: false, by: -1, at: 0, backAt: 0, cell: -1,
-        vx: 0, vz: 0, tx: o.x, tz: o.z, wait: 0,
+        vx: 0, vz: 0, tx: o.x, tz: o.z, wait: 0, gold: 0,
       };
     });
     this.walkers = this.objs.filter((o) => this.kinds[o.k].walk);
@@ -768,6 +820,7 @@ export class Round {
         startR2: startR * startR, r2: startR * startR, R: startR, best: startR,
         speedMul: (cfg.speedMul || 1) * (bot ? SKILLS[cfg.skill || "medium"].speed : 1), pullMul: cfg.pullMul || 1,
         alive: true, back: 0, shield: 0, lifted: 0, ate: 0, eatenTimes: 0, eatenBy: -1, slow: false, next: 0,
+        pw: { magnet: 0, bolt: 0, giant: 0 }, powers: 0, golds: 0, bossWins: 0, out: false, elim: false, outAt: 0,
         ai: { clock: 0, full: 0, mode: "food", tx: chosen[i].x, tz: chosen[i].z, obj: -1, prey: -1, threat: -1, sx: chosen[i].x, sz: chosen[i].z, stuckT: 0, phase: this.rand() * 10 },
       };
       T.next = this.nextKind(T.R);
@@ -814,17 +867,47 @@ export class Round {
     while (k < this.kinds.length && this.kinds[k].need <= R) k++;
     return k;
   }
+  // действует ли бонус
+  has(T, k) {
+    return this.t < T.pw[k];
+  }
+  // «рабочий» радиус: с «Великаном» вихрь хватает и втягивает как более широкий
+  effR(T) {
+    return T.R * (this.t < T.pw.giant ? GIANT : 1);
+  }
   speed(T) {
-    return 9.6 * Math.pow(T.R, -0.06) * T.speedMul;
+    return 9.6 * Math.pow(T.R, -0.06) * T.speedMul * (this.t < T.pw.bolt ? BOLT : 1);
   }
   catchRadius(T) {
-    return T.R * T.pullMul + 0.15;
+    return this.effR(T) * T.pullMul * (this.t < T.pw.magnet ? MAGNET : 1) + 0.15;
   }
   canEat(A, B) {
-    return A !== B && A.alive && B.alive && A.R >= B.R * EAT && this.t >= B.shield;
+    return A !== B && A.alive && B.alive && this.effR(A) >= this.effR(B) * EAT && this.t >= B.shield;
   }
   standings() {
+    // в «Буре» выбывшие — в конце: кто продержался дольше, тот выше
+    if (this.storm) return [...this.tornados].sort((a, b) => (a.elim ? 1 : 0) - (b.elim ? 1 : 0) || (a.elim && b.elim ? b.outAt - a.outAt : 0) || b.r2 - a.r2 || a.i - b.i);
     return [...this.tornados].sort((a, b) => b.r2 - a.r2 || a.i - b.i);
+  }
+  // «Буря»: игрок выбыл или остался один — раунд окончен
+  checkLast() {
+    if (!this.storm || this.mode !== "play") return;
+    const left = this.tornados.filter((T) => !T.elim).length;
+    if (this.player.elim || left <= 1) {
+      this.mode = "done";
+      this.events.push({ type: "end", out: this.player.elim, last: !this.player.elim });
+    }
+  }
+  // «Буря»: в финале (второе сужение) втянутый вихрь выбывает
+  final() {
+    return !!this.storm && this.t >= this.duration * STORM_FINAL;
+  }
+  knockOut(B) {
+    if (!this.final()) return false;
+    B.elim = true;
+    B.outAt = this.t;
+    B.back = Infinity;
+    return true;
   }
   place(T = this.player) {
     return this.standings().indexOf(T) + 1;
@@ -847,6 +930,10 @@ export class Round {
       return;
     }
     const H = this.half;
+    if (this.storm) this.zone = this.zoneAt(this.t / this.duration);
+    this.powerStep();
+    if (this.withEvents) this.eventStep(dt);
+    if (this.mode !== "play") return;
     for (const T of this.tornados) {
       if (!T.alive) {
         if (this.t >= T.back) this.respawn(T);
@@ -863,15 +950,17 @@ export class Round {
       if (T.x > lim || T.x < -lim) (T.x = clamp(T.x, -lim, lim)), (T.vx *= 0.2);
       if (T.z > lim || T.z < -lim) (T.z = clamp(T.z, -lim, lim)), (T.vz *= 0.2);
       this.lift(T);
+      if (this.storm) this.stormDrain(T, dt);
     }
     this.contacts();
+    if (this.boss) this.bossStep(dt);
     this.walk(dt);
     this.returns();
   }
 
   lift(T) {
     const C = this.catchRadius(T);
-    const R = T.R;
+    const R = this.effR(T);
     let slow = false;
     this.around(T.x, T.z, C + this.map.maxSize, (o) => {
       if (o.taken) return;
@@ -891,13 +980,17 @@ export class Round {
     o.by = T.i;
     o.at = this.t;
     T.r2 += o.g;
+    // золотой предмет — двойной рост
+    const gold = o.gold > this.t;
+    if (gold) (T.r2 += o.g), T.golds++;
+    o.gold = 0;
     this.grow(T);
     T.lifted++;
     if (this.kinds[o.k].back) {
       o.backAt = this.t + BACK_TIME + this.rand() * 12;
       this.backQueue.push(o);
     }
-    this.events.push({ type: "lift", o: o.i, by: T.i });
+    this.events.push({ type: "lift", o: o.i, by: T.i, gold });
   }
   grow(T) {
     T.R = Math.sqrt(T.r2);
@@ -917,11 +1010,11 @@ export class Round {
         const dx = B.x - A.x, dz = B.z - A.z, d = Math.hypot(dx, dz);
         const ab = this.canEat(A, B), ba = !ab && this.canEat(B, A);
         if (ab) {
-          if (d < A.R * 0.9) this.eat(A, B);
+          if (d < this.effR(A) * 0.9) this.eat(A, B);
         } else if (ba) {
-          if (d < B.R * 0.9) this.eat(B, A);
+          if (d < this.effR(B) * 0.9) this.eat(B, A);
         } else {
-          const min = (A.R + B.R) * 0.55;
+          const min = (this.effR(A) + this.effR(B)) * 0.55;
           if (d < min && d > 1e-6) {
             // равные вихри отталкиваются, лёгкий отлетает дальше
             const push = min - d, nx = dx / d, nz = dz / d, wa = B.r2 / (A.r2 + B.r2), wb = 1 - wa;
@@ -941,20 +1034,26 @@ export class Round {
     this.grow(A);
     B.alive = false;
     B.back = this.t + RESPAWN;
+    const elim = this.knockOut(B);
     B.eatenBy = A.i;
     B.eatenTimes++;
     B.r2 = B.startR2 + Math.max(0, B.r2 - B.startR2) * 0.2;
     B.R = Math.sqrt(B.r2);
     B.next = this.nextKind(B.R);
     B.vx = B.vz = 0;
-    this.events.push({ type: "eat", by: A.i, victim: B.i, x: B.x, z: B.z });
+    B.pw.magnet = B.pw.bolt = B.pw.giant = 0;
+    this.events.push({ type: "eat", by: A.i, victim: B.i, x: B.x, z: B.z, elim });
+    this.checkLast();
     A.ai.full = this.t + 6; // наелся: какое-то время не охотится
     if (A.ai.prey === B.i) A.ai.clock = 0;
   }
   respawn(T) {
-    // подальше от тех, кто сильнее
+    // подальше от тех, кто сильнее (в «Буре» — только внутри круга)
     let best = this.spawns[0], bestScore = -Infinity;
-    for (const s of this.spawns) {
+    const z = this.storm ? this.zoneAt(Math.min(1, (this.t + 6) / this.duration)) : null;
+    let spots = z ? this.spawns.filter((s) => Math.hypot(s.x - z.x, s.z - z.z) < z.r - 3) : this.spawns;
+    if (!spots.length) spots = [{ x: z.x, z: z.z }];
+    for (const s of spots) {
       let score = this.rand() * 6;
       for (const O of this.tornados) {
         if (O === T || !O.alive) continue;
@@ -967,6 +1066,8 @@ export class Round {
     T.z = best.z;
     T.vx = T.vz = 0;
     T.alive = true;
+    T.out = false;
+    T.pw.magnet = T.pw.bolt = T.pw.giant = 0;
     T.shield = this.t + SHIELD;
     T.ai.clock = 0;
     T.ai.sx = T.x;
@@ -1019,6 +1120,187 @@ export class Round {
       this.bin(o);
     }
   }
+  // ---------- «Буря» ----------
+  // круг в момент u (доля раунда): ждёт, сужается, ждёт, сужается к новой точке, сжимается до конца
+  zoneAt(u) {
+    const H = this.half, s = this.storm;
+    u = clamp(u, 0, 1);
+    const k1 = clamp((u - 0.12) / 0.33, 0, 1), k2 = clamp((u - 0.55) / 0.3, 0, 1), k3 = clamp((u - 0.85) / 0.15, 0, 1);
+    let r = H * 1.45 + (H * 0.72 - H * 1.45) * k1;
+    r += (H * 0.34 - r) * k2;
+    r += (H * 0.2 - r) * k3;
+    return { x: s.x0 + (s.x1 - s.x0) * k2, z: s.z0 + (s.z1 - s.z0) * k2, r, shrinking: (k1 > 0 && k1 < 1) || (k2 > 0 && k2 < 1) || (k3 > 0 && k3 < 1) };
+  }
+  inZone(x, z, m = 0) {
+    if (!this.storm) return true;
+    return Math.hypot(x - this.zone.x, z - this.zone.z) < this.zone.r - m;
+  }
+  // вне круга вихрь худеет, но не меньше, чем был на старте
+  stormDrain(T, dt) {
+    const out = !this.inZone(T.x, T.z);
+    if (out !== T.out) {
+      T.out = out;
+      if (T.player) this.events.push({ type: "storm", out });
+    }
+    if (!out || T.r2 <= T.startR2) return;
+    T.r2 = Math.max(T.startR2, T.r2 - Math.max(0.3, T.r2 * STORM_DRAIN) * dt);
+    T.R = Math.sqrt(T.r2);
+    T.next = this.nextKind(T.R);
+  }
+
+  // ---------- Бонусы ----------
+  powerStep() {
+    for (let k = this.powers.length - 1; k >= 0; k--) {
+      const p = this.powers[k];
+      if (this.t > p.born + POWER_LIFE || !this.inZone(p.x, p.z, -2)) {
+        this.powers.splice(k, 1);
+        this.events.push({ type: "powerGone", id: p.id });
+        continue;
+      }
+      for (const T of this.tornados) {
+        if (!T.alive) continue;
+        const reach = this.effR(T) * 0.9 + 1.1;
+        if ((T.x - p.x) ** 2 + (T.z - p.z) ** 2 < reach * reach) {
+          this.powers.splice(k, 1);
+          T.pw[p.kind] = this.t + POWERS[p.kind].time;
+          T.powers++;
+          this.events.push({ type: "power", id: p.id, kind: p.kind, by: T.i, x: p.x, z: p.z });
+          break;
+        }
+      }
+    }
+    if (this.t < this.nextPower) return;
+    this.nextPower = this.t + 7 + this.rand2() * 5;
+    if (this.powers.length >= POWER_MAX || !this.powerSpots.length) return;
+    // свободное место подальше от вихрей и других бонусов (в «Буре» — внутри круга будущего)
+    const z = this.storm ? this.zoneAt(Math.min(1, (this.t + 10) / this.duration)) : null;
+    let best = null, bs = -Infinity;
+    for (let n = 0; n < 10; n++) {
+      const s = this.powerSpots[Math.floor(this.rand2() * this.powerSpots.length)];
+      if (z && Math.hypot(s.x - z.x, s.z - z.z) > z.r - 4) continue;
+      let score = this.rand2() * 8;
+      for (const T of this.tornados) if (T.alive) score += Math.min(25, Math.hypot(T.x - s.x, T.z - s.z));
+      for (const p of this.powers) score -= Math.max(0, 30 - Math.hypot(p.x - s.x, p.z - s.z)) * 3;
+      if (score > bs) (bs = score), (best = s);
+    }
+    if (!best) return;
+    const kind = POWER_KINDS[Math.floor(this.rand2() * POWER_KINDS.length)];
+    const p = { id: ++this.powerN, kind, x: best.x, z: best.z, born: this.t };
+    this.powers.push(p);
+    this.events.push({ type: "powerNew", id: p.id, kind, x: p.x, z: p.z });
+  }
+
+  // ---------- События классики ----------
+  eventStep() {
+    const u = this.t / this.duration;
+    // «Золотой час»: часть предметов по силам лидеру становится золотой
+    if (this.gold.state === 0 && u >= GOLD_AT) {
+      this.gold.state = 1;
+      this.gold.until = this.t + GOLD_TIME;
+      let top = 1;
+      for (const T of this.tornados) top = Math.max(top, T.R);
+      const pool = this.objs.filter((o) => !o.taken && o.need <= top && o.need >= 0.5);
+      const list = [];
+      for (let n = 0; n < GOLD_COUNT && pool.length; n++) {
+        const o = pool.splice(Math.floor(this.rand2() * pool.length), 1)[0];
+        o.gold = this.gold.until;
+        list.push(o.i);
+      }
+      this.events.push({ type: "gold", on: true, list });
+    } else if (this.gold.state === 1 && this.t >= this.gold.until) {
+      this.gold.state = 2;
+      for (const o of this.objs) o.gold = 0;
+      this.events.push({ type: "gold", on: false });
+    }
+    // «Ураган-великан»: чуть крупнее лидера, ездит за теми, кого может втянуть
+    if (this.bossState === 0 && u >= BOSS_AT) {
+      this.bossState = 1;
+      let top = 1;
+      for (const T of this.tornados) top = Math.max(top, T.R);
+      const R = Math.max(3.2, top * 1.05);
+      // появляется подальше от всех
+      let best = this.spawns[0], bs = -Infinity;
+      for (const s of this.spawns) {
+        let score = this.rand2() * 4, near = Infinity;
+        for (const T of this.tornados) if (T.alive) near = Math.min(near, Math.hypot(T.x - s.x, T.z - s.z));
+        score += Math.min(near, 70);
+        if (score > bs) (bs = score), (best = s);
+      }
+      this.boss = { x: best.x, z: best.z, vx: 0, vz: 0, R, r2: R * R, alive: true, until: this.t + BOSS_TIME, target: -1, clock: 0, tx: 0, tz: 0, born: this.t };
+      this.events.push({ type: "boss", on: true, x: best.x, z: best.z, R });
+    }
+  }
+  bossCanEat(T) {
+    const B = this.boss;
+    return B && B.alive && T.alive && this.t >= T.shield && B.R >= this.effR(T) * EAT;
+  }
+  canEatBoss(T) {
+    const B = this.boss;
+    return B && B.alive && T.alive && this.effR(T) >= B.R * EAT;
+  }
+  bossStep(dt) {
+    const B = this.boss, H = this.half;
+    if (!B.alive) return;
+    if (this.t >= B.until) {
+      B.alive = false;
+      this.bossState = 2;
+      this.events.push({ type: "boss", on: false, x: B.x, z: B.z });
+      return;
+    }
+    B.clock -= dt;
+    if (B.clock <= 0) {
+      B.clock = 0.5;
+      let best = null, bd = Infinity;
+      for (const T of this.tornados) {
+        if (!this.bossCanEat(T)) continue;
+        const d = Math.hypot(T.x - B.x, T.z - B.z);
+        if (d < bd) (bd = d), (best = T);
+      }
+      B.target = best ? best.i : -1;
+      if (!best && Math.hypot(B.tx - B.x, B.tz - B.z) < 4) {
+        const a = this.rand2() * TAU, r = this.rand2() * H * 0.5;
+        B.tx = Math.cos(a) * r;
+        B.tz = Math.sin(a) * r;
+      }
+    }
+    const P = B.target >= 0 ? this.tornados[B.target] : null;
+    if (P) (B.tx = P.x), (B.tz = P.z);
+    const dx = B.tx - B.x, dz = B.tz - B.z, d = Math.hypot(dx, dz) || 1;
+    const sp = 9.6 * Math.pow(B.R, -0.06) * 0.8;
+    const k = Math.min(1, dt * 3);
+    B.vx += ((dx / d) * sp - B.vx) * k;
+    B.vz += ((dz / d) * sp - B.vz) * k;
+    B.x = clamp(B.x + B.vx * dt, -H + 3, H - 3);
+    B.z = clamp(B.z + B.vz * dt, -H + 3, H - 3);
+    for (const T of this.tornados) {
+      if (!T.alive) continue;
+      const dd = Math.hypot(T.x - B.x, T.z - B.z);
+      if (this.canEatBoss(T) && dd < this.effR(T) * 0.9) {
+        // вихрь победил Урагана-великана
+        T.r2 += B.r2 * 0.25;
+        T.bossWins++;
+        this.grow(T);
+        B.alive = false;
+        this.bossState = 2;
+        this.events.push({ type: "bossDown", by: T.i, x: B.x, z: B.z });
+        return;
+      }
+      if (this.bossCanEat(T) && dd < B.R * 0.85) {
+        T.alive = false;
+        T.back = this.t + RESPAWN;
+        T.eatenBy = -2;
+        T.eatenTimes++;
+        T.r2 = T.startR2 + Math.max(0, T.r2 - T.startR2) * BOSS_KEEP;
+        T.R = Math.sqrt(T.r2);
+        T.next = this.nextKind(T.R);
+        T.vx = T.vz = 0;
+        T.pw.magnet = T.pw.bolt = T.pw.giant = 0;
+        this.events.push({ type: "eat", by: -2, victim: T.i, x: T.x, z: T.z });
+        B.clock = 0;
+      }
+    }
+  }
+
   // мелочи и животные возвращаются, если рядом нет вихря
   returns() {
     if (!this.backQueue.length) return;
@@ -1060,7 +1342,15 @@ export class Round {
   }
   inside(x, z, m = 4) {
     const lim = this.half - m;
-    return [clamp(x, -lim, lim), clamp(z, -lim, lim)];
+    x = clamp(x, -lim, lim);
+    z = clamp(z, -lim, lim);
+    // в «Буре» — ещё и внутри круга (с запасом на ближайшие секунды)
+    if (this.storm) {
+      const zn = this.zoneAt(Math.min(1, (this.t + 5) / this.duration));
+      const dx = x - zn.x, dz = z - zn.z, d = Math.hypot(dx, dz), max = Math.max(1, zn.r - m - 2);
+      if (d > max) (x = zn.x + (dx / d) * max), (z = zn.z + (dz / d) * max);
+    }
+    return [x, z];
   }
   think(T, dt) {
     const ai = T.ai;
@@ -1076,14 +1366,30 @@ export class Round {
       ai.stuckT = 0;
     }
     if (ai.mode === "food" && ai.obj >= 0 && this.objs[ai.obj].taken) ai.clock = Math.min(ai.clock, 0.08);
+    if (ai.mode === "power" && !this.powers.some((p) => p.id === ai.obj)) ai.clock = Math.min(ai.clock, 0);
     if (ai.mode !== "hunt" && ai.mode !== "flee" && Math.hypot(ai.tx - T.x, ai.tz - T.z) < Math.max(1.2, T.R * 0.5)) ai.clock = Math.min(ai.clock, 0);
-    if (ai.clock <= 0) this.decide(T);
+    // «Буря»: у края круга — сразу внутрь
+    if (this.storm) {
+      const zn = this.zone, dx = T.x - zn.x, dz = T.z - zn.z, d = Math.hypot(dx, dz);
+      if (d > zn.r - Math.min(6, T.R * 0.5 + 2.5) && ai.mode !== "zone") {
+        ai.mode = "zone";
+        ai.clock = 0.8;
+      }
+      if (ai.mode === "zone") {
+        const k = d > 1e-3 ? (zn.r * 0.4) / d : 0;
+        ai.tx = zn.x + dx * k;
+        ai.tz = zn.z + dz * k;
+        if (d < zn.r * 0.75 && ai.clock <= 0) this.decide(T);
+      }
+    }
+    if (ai.clock <= 0 && ai.mode !== "zone") this.decide(T);
+    else if (ai.clock <= 0 && ai.mode === "zone") ai.clock = 0.3;
     if (ai.mode === "hunt") {
-      const P = this.tornados[ai.prey];
-      if (!P || !this.canEat(T, P)) ai.clock = 0;
+      const P = ai.prey === -2 ? this.boss : this.tornados[ai.prey];
+      if (!P || !(ai.prey === -2 ? this.canEatBoss(T) : this.canEat(T, P))) ai.clock = 0;
       else (ai.tx = P.x + P.vx * 0.45), (ai.tz = P.z + P.vz * 0.45);
     } else if (ai.mode === "flee") {
-      const D = this.tornados[ai.threat];
+      const D = ai.threat === -2 ? this.boss : this.tornados[ai.threat];
       if (!D || !D.alive || Math.hypot(D.x - T.x, D.z - T.z) > SKILLS[T.skill].sense + D.R * 3 + 10) ai.clock = 0;
     }
     let dx = ai.tx - T.x, dz = ai.tz - T.z;
@@ -1106,12 +1412,17 @@ export class Round {
     const ai = T.ai;
     ai.clock = sk.think * (0.75 + this.rand() * 0.5);
     const wasLost = ai.mode === "lost";
-    // 1. угроза: кто может втянуть меня
+    // 1. угроза: кто может втянуть меня (и Ураган-великан)
     let threat = null, td = Infinity;
+    const myR = this.effR(T);
     for (const O of this.tornados) {
-      if (O === T || !O.alive || O.R < T.R * EAT) continue;
+      if (O === T || !O.alive || this.effR(O) < myR * EAT) continue;
       const d = Math.hypot(O.x - T.x, O.z - T.z);
       if (d < sk.sense + O.R * 2 + T.R && d < td) (td = d), (threat = O);
+    }
+    if (this.bossCanEat(T)) {
+      const B = this.boss, d = Math.hypot(B.x - T.x, B.z - T.z);
+      if (d < sk.sense + B.R * 2 + T.R && d < td) (td = d), (threat = { ...B, i: -2 });
     }
     if (threat && this.rand() < sk.alert) {
       let ax = T.x - threat.x, az = T.z - threat.z;
@@ -1132,6 +1443,20 @@ export class Round {
       ai.clock = Math.min(ai.clock, 0.5);
       return;
     }
+    // 1½. бонус неподалёку
+    let pw = null, pd = Infinity;
+    for (const p of this.powers) {
+      const d = Math.hypot(p.x - T.x, p.z - T.z);
+      if (d < sk.view * 0.5 + T.R && d < pd && this.inZone(p.x, p.z, 3)) (pd = d), (pw = p);
+    }
+    if (pw && this.rand() < 0.35 + 0.5 * sk.aim) {
+      ai.mode = "power";
+      ai.obj = pw.id;
+      ai.tx = pw.x;
+      ai.tz = pw.z;
+      ai.clock = Math.min(ai.clock, 1.5);
+      return;
+    }
     // 2. еда: несколько мест в поле зрения, ценность на расстояние
     let bestV = 0, bx = 0, bz = 0;
     for (let n = 0; n <= sk.samples; n++) {
@@ -1145,7 +1470,7 @@ export class Round {
         [px, pz] = this.inside(T.x + Math.cos(a) * r, T.z + Math.sin(a) * r, 2 + T.R * 0.3);
       }
       const d = Math.hypot(px - T.x, pz - T.z);
-      const v = this.foodValue(px, pz, T.R, 7 + T.R * 0.5) / (d + 8 + T.R);
+      const v = this.foodValue(px, pz, myR, 7 + T.R * 0.5) / (d + 8 + T.R);
       if (v > bestV) (bestV = v), (bx = px), (bz = pz);
     }
     // 3. добыча: соперник, которого можно втянуть
@@ -1156,6 +1481,12 @@ export class Round {
       if (d > sk.view * 0.8 + T.R * 2) continue;
       const v = (sk.hunt * O.r2 * 0.5) / (d + 10 + T.R);
       if (v > bestV) (bestV = v), (prey = O);
+    }
+    // Ураган-великан — самая ценная добыча
+    if (this.canEatBoss(T) && this.effR(T) >= this.boss.R * 1.25) {
+      const B = this.boss, d = Math.hypot(B.x - T.x, B.z - T.z);
+      const v = (sk.hunt * B.r2) / (d + 10 + T.R);
+      if (d < sk.view + T.R * 2 && v > bestV) (bestV = v), (prey = { i: -2 });
     }
     if (prey) {
       ai.mode = "hunt";
@@ -1177,7 +1508,7 @@ export class Round {
     ai.tx = bx;
     ai.tz = bz;
     if (this.rand() < sk.aim) {
-      const o = this.nearestFood(bx, bz, T.R, 7 + T.R * 0.5);
+      const o = this.nearestFood(bx, bz, myR, 7 + T.R * 0.5);
       if (o) {
         ai.obj = o.i;
         ai.tx = o.x;
@@ -1191,6 +1522,7 @@ export class Round {
     const order = this.standings();
     const T = this.player;
     return {
+      variant: this.variant,
       place: order.indexOf(T) + 1,
       R: T.R,
       D: T.R * 2,
@@ -1198,6 +1530,10 @@ export class Round {
       lifted: T.lifted,
       ate: T.ate,
       eaten: T.eatenTimes,
+      powers: T.powers,
+      golds: T.golds,
+      bossWins: T.bossWins,
+      inZone: this.storm ? T.alive && this.inZone(T.x, T.z) : false,
       order: order.map((O) => ({ i: O.i, name: O.name, D: O.R * 2, player: O.player, look: O.look })),
     };
   }

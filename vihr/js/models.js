@@ -1,7 +1,7 @@
 // Игрушечные модели всех предметов. Каждая — одна геометрия с цветами вершин:
 // на карте их рисуют «пачками» (InstancedMesh), один вызов отрисовки на вид предмета.
 // base — неизменная часть, paint — часть, которую красят по-разному, spin — крутящаяся деталь.
-import { T, Shape, wedge, TAU } from "./kit.js?v=cb0a50f1";
+import { T, Shape, wedge, TAU } from "./kit.js?v=ae43a6e1";
 
 const taperCache = new Map();
 const tube = (top, bottom, segs = 16) => {

@@ -3,7 +3,7 @@
 // которая вращается только по направлению трассы. Голова (лицо и шапка) умеет
 // оглядываться на камеру; шарф остаётся по трассе, и его хвосты всегда летят по ветру.
 // Всё в масштабе кома радиусом 1: сцена растягивает root вместе с комом.
-import { T, TAU, GEO, part, at, lit, canvasTexture } from "./kit.js?v=bd3554ee";
+import { T, TAU, GEO, part, at, lit, canvasTexture } from "./kit.js?v=dba1bb88";
 
 // ---------- Наряды по обликам ----------
 export const OUTFITS = {
@@ -13,6 +13,8 @@ export const OUTFITS = {
   orange: { leaf: true, scarf: "#36a84a", stripe: "#c8f07a" },
   disco: { hat: "#8a4cff", band: "#ffd23a", pom: "#ffd23a", scarf: "#ff4fc8", stripe: "#ffd23a" },
   night: { hat: "#ffcf3a", band: "#ff8a3a", pom: "#ffffff", scarf: "#ffcf3a", stripe: "#7a4cff" },
+  hunter: { hat: "#8a5a32", band: "#f0dcb0", pom: "#f4ead2", scarf: "#2e7d4f", stripe: "#ffcf3a" },
+  storm: { hat: "#3a5ae0", band: "#bff4ff", pom: "#bff4ff", scarf: "#5fd8ff", stripe: "#ffffff" },
 };
 
 // ---------- Лицо: рисунок на холсте, натянутый на кусочек сферы ----------
