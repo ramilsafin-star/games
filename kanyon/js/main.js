@@ -1,8 +1,8 @@
 // «Грозовой каньон»: управление, приборы, панели, звук и главный цикл.
-import { ZONES, Raid } from "./rules.js?v=d37e4584";
-import { CanyonView } from "./view.js?v=d37e4584";
-import { Sound } from "./sound.js?v=d37e4584";
-import { readStorage, writeStorage } from "./kit.js?v=d37e4584";
+import { LEVELS, ZONES, Raid } from "./rules.js?v=4a3b319e";
+import { CanyonView } from "./view.js?v=4a3b319e";
+import { Sound } from "./sound.js?v=4a3b319e";
+import { readStorage, writeStorage } from "./kit.js?v=4a3b319e";
 
 const id = name => document.getElementById(name);
 const canvas = id("stage");
@@ -14,7 +14,37 @@ let saved = {};
 try { saved = JSON.parse(readStorage(SAVE)) || {}; } catch {}
 let best = Number.isSafeInteger(saved.best) && saved.best > 0 ? saved.best : 0;
 let deep = Number.isSafeInteger(saved.deep) && saved.deep > 0 ? Math.min(saved.deep, ZONES.length + 1) : 0; // ZONES.length + 1 — рейд пройден
-const save = () => writeStorage(SAVE, JSON.stringify({ best, deep }));
+let level = LEVELS[saved.level] ? saved.level : "normal";
+const save = () => writeStorage(SAVE, JSON.stringify({ best, deep, level }));
+
+// Сложность: три кнопки в меню, выбор запоминается
+const LEVEL_NOTES = { easy: "полегче", normal: "очки ×1.5", hard: "очки ×2" };
+function paintLevels() {
+  const box = id("levels");
+  box.textContent = "";
+  for (const [key, info] of Object.entries(LEVELS)) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.setAttribute("role", "radio");
+    button.setAttribute("aria-checked", String(key === level));
+    button.dataset.level = key;
+    button.append(info.name);
+    const note = document.createElement("small");
+    note.textContent = LEVEL_NOTES[key];
+    button.append(note);
+    box.append(button);
+  }
+}
+id("levels").addEventListener("click", event => {
+  const key = event.target.closest("[data-level]")?.dataset.level;
+  if (!key || key === level) return;
+  level = key;
+  save();
+  paintLevels();
+  Sound.unlock();
+  Sound.tick();
+});
+paintLevels();
 
 // Модули ангара: значок, название, что даёт
 const MODULE_INFO = {
@@ -187,7 +217,7 @@ function start() {
   hasMoved = usedRockets = false;
   told = new Set();
   view.reset();
-  game.start();
+  game.start(level);
 }
 id("start").onclick = start;
 
@@ -237,7 +267,7 @@ function paintMode() {
     const seconds = String(Math.floor(game.time % 60)).padStart(2, "0");
     const facts = `<div class="facts"><span><b>${game.destroyed}</b> сбито</span><span><b>${game.collected}</b> кристаллов</span><span><b>${game.bestCombo}</b> подряд</span><span><b>${minutes}:${seconds}</b> в рейде</span></div>`;
     if (win) {
-      showPanel(`<div class="eyebrow">РЕЙД ЗАВЕРШЁН</div>
+      showPanel(`<div class="eyebrow">РЕЙД ЗАВЕРШЁН · ${LEVELS[game.level].name.toUpperCase()}</div>
         <h2 id="panel-title">Цитадель пала!</h2>
         <p class="result-score">◆ ${game.score}</p>${facts}
         <p>«Стриж» прошёл весь каньон${game.retries ? "" : " — и ни разу не был сбит"}.</p>
@@ -382,7 +412,7 @@ const STEP = 1 / 60;
 // Ручки для проверок из консоли и для роботов.
 window.kanyon = {
   game, view, Sound,
-  state: () => ({ mode: game.mode, zone: game.zone, score: game.score, health: game.player.health, enemies: game.enemies.length, offer: game.offer, time: game.zoneTime }),
+  state: () => ({ mode: game.mode, level: game.level, zone: game.zone, score: game.score, health: game.player.health, enemies: game.enemies.length, offer: game.offer, time: game.zoneTime }),
   jump(zone) {
     for (const list of [game.enemies, game.rocks, game.hazards, game.bolts, game.shots, game.rockets, game.gems]) list.length = 0;
     game.zone = Math.max(0, Math.min(ZONES.length - 1, zone - 1));

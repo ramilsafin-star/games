@@ -231,8 +231,14 @@ p { color: var(--soft); margin: 10px 0; line-height: 1.38; }
   body:not([data-mode="menu"]) .home-slot:not(:empty) ~ .tools #sound { display: none; }
 }
 @media (max-width: 360px) {
-  /* а на самом узком экране рядом с ней не помещается и счёт: он есть в итогах ночи */
-  .home-slot:not(:empty) ~ .hud .points { display: none; }
+  /* а на самом узком экране рядом с ней не помещается и счёт: он переезжает отдельной плашкой под приборы */
+  .home-slot:not(:empty) ~ .hud { position: relative; }
+  .home-slot:not(:empty) ~ .hud .points {
+    position: absolute; top: calc(100% + 6px); left: 0; padding: 4px 10px; border: 1px solid var(--edge); border-radius: 12px;
+    background: #0a1f45eb; font-size: 13px; box-shadow: 0 2px 0 #06132e7e;
+  }
+  /* подсказка уступает плашке место */
+  body:has(.home-slot:not(:empty)) #lesson { top: calc(var(--inset-top) + 92px); }
 }
 @media (max-width: 380px) {
   /* на самом узком экране кнопка звука прячется в паузу */

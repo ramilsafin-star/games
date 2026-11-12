@@ -1,5 +1,5 @@
 // Частицы «Виража»: дым, пыль, искры, конфетти, следы шин. Каждый вид — один InstancedMesh.
-import * as T from "../vendor/three/three.module.min.js?v=ef8c7672";
+import * as T from "../vendor/three/three.module.min.js?v=81afe732";
 
 const M = new T.Matrix4(), Q = new T.Quaternion(), E = new T.Euler(), S = new T.Vector3(), P = new T.Vector3();
 const C = new T.Color();

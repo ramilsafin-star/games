@@ -1,7 +1,7 @@
 // «Дворовой кубок»: футбол один на один. Кубок — три матча против всё более сильных соперников,
 // «Вдвоём» — два игрока на одном экране. Матч — match.js (проверяется tests/match.mjs), 3D — world.js.
-import { World, ANIMALS } from "./world.js?v=bb673277";
-import { Match, Bot, STEP } from "./match.js?v=bb673277";
+import { World, ANIMALS } from "./world.js?v=760b4055";
+import { Match, Bot, STEP } from "./match.js?v=760b4055";
 
 const el = (id) => document.getElementById(id);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -16,6 +16,7 @@ function load() {
   } catch {}
   return empty;
 }
+await window.vkGameHost?.ready;
 const save = load();
 function store() {
   try {
@@ -365,23 +366,41 @@ el("quit").onclick = () => {
   el("paused").hidden = true;
   toTitle();
 };
-function updateVisibility() {
-  if (document.hidden || window.vkGameHost?.hidden) {
-    pause();
-    Music.stop();
-    speakToken++;
-    if (voice) {
-      try {
-        voice.stop();
-      } catch {}
-      voice = null;
-    }
-    Sound.ctx?.suspend().catch(() => {});
+function quiet() {
+  pause();
+  Music.stop();
+  speakToken++;
+  if (voice) {
+    try {
+      voice.stop();
+    } catch {}
+    voice = null;
   }
+  Sound.ctx?.suspend().catch(() => {});
+}
+function updateVisibility() {
+  if (document.hidden || window.vkGameHost?.hidden) quiet();
   // Дальше матч и звук продолжатся по нажатию игрока.
 }
 document.addEventListener("visibilitychange", updateVisibility);
 addEventListener("vk-game-visibility", updateVisibility);
+// Во время рекламного ролика игра молчит, после него звук возвращается
+addEventListener("vk-ad", (e) => {
+  if (e.detail.on) quiet();
+  else if (!document.hidden && !window.vkGameHost?.hidden) {
+    Sound.ctx?.resume().catch(() => {});
+    if (save.music) Music.start();
+  }
+});
+// Реклама VK между матчами: не чаще раза в 2 минуты и никогда сразу после запуска
+let adBusy = false;
+async function adBreak() {
+  if (adBusy) return false;
+  adBusy = true;
+  await window.vkGameHost?.interstitial();
+  adBusy = false;
+  return true;
+}
 
 // ---------- События матча ----------
 function handle(e) {
@@ -473,14 +492,18 @@ async function finishMatch(winner) {
   Sound.fanfare();
   say(line);
 }
-el("again").onclick = () => {
+el("again").onclick = async () => {
+  if (adBusy) return; // во время ролика кнопки молчат, иначе нажатие включило бы звук
   unlock();
   Sound.tap();
+  if (!(await adBreak())) return;
   startMatch();
 };
-el("next").onclick = () => {
+el("next").onclick = async () => {
+  if (adBusy) return;
   unlock();
   Sound.tap();
+  if (!(await adBreak())) return;
   el("result").hidden = true;
   if (kind === "two" || stage >= 3) toTitle();
   else if (match.result === 0) openLadder();

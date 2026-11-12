@@ -60,8 +60,8 @@ export const NIGHTS = [
   { name: "Гирлянда", ridges: 3, cover: 0.66, gusts: "36", boats: "1:lamp,row 8:sail 14:speed 20:sail,row 27:lamp 33:speed,sail 40:speed 46:row,sail 52:speed,sail", shades: "6:blob 11:dart 16:blob 21:dart,blob 27:blob 32:dart 37:blob,dart 43:blob 48:dart,blob 54:blob" },
   { name: "Туман и ветер", ridges: 4, cover: 0.62, fog: true, gusts: "18 44", boats: "1:sail,sail 7:speed 12:row 17:ferry 23:sail,speed 29:lamp 34:speed,sail 40:sail 45:row,speed 51:sail,speed", shades: "5:blob 10:dart 15:blob 20:blob,dart 26:blob 31:dart 36:blob,blob 42:dart 47:blob,dart 53:blob 57:dart" },
   { name: "Большая тень", ridges: 4, cover: 0.64, gusts: "30 52", boats: "1:ferry,sail 7:speed 12:row,sail 18:lamp,speed 24:sail 29:speed,sail 35:ferry 40:speed,row 46:sail 51:lamp,speed", shades: "5:blob 9:big 14:dart 19:blob,blob 24:dart 28:big 33:blob,dart 38:blob 42:big,dart 47:blob 51:dart 55:blob,dart" },
-  { name: "Караван", ridges: 4, cover: 0.7, fog: true, gusts: "23 46", boats: "1:sail,sail,row 9:speed 14:lamp 19:sail,speed 25:ferry 30:speed 35:sail,sail 41:speed,lamp 47:sail 52:speed,row", shades: "4:blob 8:dart 12:blob,blob 17:big 21:dart,blob 26:blob,dart 30:dart 34:big,blob 39:blob,dart 43:blob 47:big 51:dart,blob 55:blob 58:dart" },
-  { name: "Большой шторм", ridges: 4, cover: 0.76, fog: true, gusts: "13 28 42 56", boats: "1:sail,row 7:speed 11:ferry 16:sail,lamp 22:speed,speed 27:sail 31:ferry,sail 37:speed 41:lamp,speed 46:sail,sail 51:speed 55:sail,row", shades: "4:blob 7:dart 11:blob,blob 15:big 19:dart,blob 23:blob,dart 27:big 31:dart,blob 35:blob,blob 39:big,dart 43:blob,dart 47:blob,dart 51:big 55:dart,blob 59:blob,dart" },
+  { name: "Караван", ridges: 4, cover: 0.7, fog: true, gusts: "23 46", boats: "1:sail,sail,row 9:speed 14:lamp 19:sail,speed 25:ferry 30:speed 35:sail,sail 41:speed,lamp 47:sail 52:speed,row", shades: "4:blob 9:dart 14:blob,blob 19:big 24:dart 28:blob,dart 33:blob 37:big 41:blob,dart 46:blob 50:big 54:dart 58:blob" },
+  { name: "Большой шторм", ridges: 4, cover: 0.76, fog: true, gusts: "13 28 42 56", boats: "1:sail,row 7:speed 11:ferry 16:sail,lamp 22:speed,speed 27:sail 31:ferry,sail 37:speed 41:lamp,speed 46:sail,sail 51:speed 55:sail,row", shades: "4:blob 8:dart 12:blob,blob 16:big 20:dart 24:blob,dart 28:big 32:dart,blob 36:blob 40:big,dart 44:blob 48:blob,dart 52:big 56:dart,blob 59:blob" },
 ];
 
 const AREA = 380; // площадь бухты в любых пропорциях
@@ -405,7 +405,9 @@ export class Bay {
   // ---- производные от улучшений ----
   get maxHearts() { return 3 + this.ups.heart; }
   get widthMul() { return 1 + 0.22 * this.ups.wide; }
-  get fadeMul() { return (1 + 0.25 * this.ups.long) * (1 + 0.12 * Math.min(this.ease, 3)) * (1 - this.gale); }
+  // на последнем сердечке море добрее: фонарики горят на четверть дольше, а тень в полтора раза дольше держит лодку
+  get lastHeart() { return !this.endless && this.hearts <= 1 ? 1 : 0; }
+  get fadeMul() { return (1 + 0.25 * this.ups.long) * (1 + 0.12 * Math.min(this.ease, 3)) * (1 + 0.25 * this.lastHeart) * (1 - this.gale); }
   get quickMul() { return 1 + 0.25 * this.ups.quick; }
   get flashCooldown() { return FLASH_COOLDOWN * 0.8 ** this.ups.flash; }
   get flashTime() { return FLASH_TIME + 0.4 * this.ups.flash; }
@@ -1000,7 +1002,7 @@ export class Bay {
           this.popShade(shade, true);
         } else {
           shade.state = "hold";
-          shade.holdT = spec.hold * (1 + 0.15 * Math.min(this.ease, 3)) * (1 - 0.5 * this.gale);
+          shade.holdT = spec.hold * (1 + 0.15 * Math.min(this.ease, 3)) * (1 + 0.5 * this.lastHeart) * (1 - 0.5 * this.gale);
           shade.x = target.x;
           shade.z = target.z;
           target.held = shade.id;

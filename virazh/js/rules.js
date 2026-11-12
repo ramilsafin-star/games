@@ -2,8 +2,8 @@
 // Заезд можно гонять в Node в сотни раз быстрее настоящего (tests/sim.mjs).
 // Углы: yaw — куда смотрит нос, va — куда на самом деле летит машина (в заносе они расходятся).
 // Руль: +1 — вправо. Поперёк трассы: d > 0 — левее оси.
-import { clamp, damp, wrapAngle } from "./kit.js?v=ef8c7672";
-import { rampHeight, trackPoint } from "./tracks.js?v=ef8c7672";
+import { clamp, damp, wrapAngle } from "./kit.js?v=81afe732";
+import { rampHeight, trackPoint } from "./tracks.js?v=81afe732";
 
 export const LAPS = 3;
 export const POINTS = [10, 7, 5, 3, 2, 1];
@@ -24,8 +24,9 @@ const PECKING = [3, 0, 5, 2, 1, 4];
 // top — доля предельной скорости, corner — смелость в поворотах, spread — разброс внутри пелотона,
 // slot — место игрока на старте (с нуля), slow/fast — «резинка»: насколько соперник сбавляет впереди и прибавляет позади,
 // assist — помощь рулю игрока: машина сама подруливает вдоль дороги (на «Новичке» малыш доедет, даже не трогая экран)
+// ease — помощь тормозу: машина сама притормаживает, если едет быстрее безопасной скорости поворота × ease (0 — нет помощи)
 export const DIFFS = [
-  { id: "easy", name: "Новичок", top: 0.86, corner: 0.86, spread: 0.055, slot: 3, slow: 0.1, fast: 0.02, nitro: 0.12, assist: 0.45 },
+  { id: "easy", name: "Новичок", top: 0.86, corner: 0.86, spread: 0.055, slot: 3, slow: 0.1, fast: 0.02, nitro: 0.12, assist: 0.45, ease: 1.08 },
   { id: "mid", name: "Гонщик", top: 0.93, corner: 1.0, spread: 0.05, slot: 5, slow: 0.05, fast: 0.035, nitro: 0.5, assist: 0 },
   { id: "hard", name: "Чемпион", top: 0.995, corner: 1.18, spread: 0.04, slot: 5, slow: 0.02, fast: 0.045, nitro: 0.9, assist: 0 },
 ];
@@ -306,9 +307,11 @@ export class Race {
       const car = new Car(this.cars.length, livery, false);
       const jitter = (this.random() - 0.5) * 0.016;
       const weak = (rank / 4) * this.diff.spread - jitter;
+      const pace = this.diff.id === "easy" ? (track.def?.novice ?? 1) : 1;
       car.ai = {
-        top: this.diff.top - weak,
-        corner: this.diff.corner - weak * 1.2,
+        // на «Новичке» трасса может придержать соперников (novice в описании трассы): в «Ночном городе» углы круче
+        top: (this.diff.top - weak) * pace,
+        corner: (this.diff.corner - weak * 1.2) * pace,
         line: 0.75 + this.random() * 0.25,
         lane: (this.random() * 2 - 1) * 1.5,
         offset: 0,
@@ -375,6 +378,11 @@ export class Race {
         const tr = this.track, keep = clamp(car.d, -(tr.half - 3), tr.half - 3);
         const help = steerTo(tr, car, keep, 10 + car.v * 0.4) * this.diff.assist;
         inp = { ...input, steer: clamp((input.steer || 0) + help, -1, 1) };
+        // и сама притормаживает перед крутым поворотом, если игрок летит в него слишком быстро
+        if (this.diff.ease) {
+          const k = (car.i + Math.round((car.v * 0.1) / tr.ds)) % tr.n;
+          if (car.v > tr.vp[k] * this.diff.ease) inp.brake = true;
+        }
       }
       car.update(dt, inp, this, moving);
     }

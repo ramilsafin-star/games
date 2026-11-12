@@ -1,6 +1,6 @@
 // Модели «Грозового каньона»: истребитель, роботы-стражи, скалы, кольца и кристаллы.
 // Истребитель смотрит в −z (вглубь каньона), враги — в +z (на игрока).
-import { T, GEO, TAU, part, at, along, metal, lit, flare } from "./kit.js?v=d37e4584";
+import { T, GEO, TAU, part, at, along, metal, lit, flare } from "./kit.js?v=4a3b319e";
 
 const white = metal("#e9eef6", { roughness: 0.35 });
 const orange = metal("#ff7a2e", { roughness: 0.4 });

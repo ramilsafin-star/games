@@ -1,9 +1,9 @@
 // «Вираж»: меню, управление, приборы, панели, сохранение. Правила — в rules.js, картинка — в view.js.
-import { TRACKS, buildTrack } from "./tracks.js?v=ef8c7672";
-import { Cup, DIFFS, LAPS, LIVERIES, NITRO_MAX, PHYS, Race, steerTo } from "./rules.js?v=ef8c7672";
-import { View } from "./view.js?v=ef8c7672";
-import { Sound } from "./sound.js?v=ef8c7672";
-import { clamp, clock, readStorage, writeStorage } from "./kit.js?v=ef8c7672";
+import { TRACKS, buildTrack } from "./tracks.js?v=81afe732";
+import { Cup, DIFFS, LAPS, LIVERIES, NITRO_MAX, PHYS, Race, steerTo } from "./rules.js?v=81afe732";
+import { View } from "./view.js?v=81afe732";
+import { Sound } from "./sound.js?v=81afe732";
+import { clamp, clock, readStorage, writeStorage } from "./kit.js?v=81afe732";
 
 const el = (id) => document.getElementById(id);
 const STEP = 1 / 120; // шаг правил, секунд
@@ -11,7 +11,8 @@ const KEY = "virazh-v1";
 const MAP_BG = { sea: "#2aa5dd", pine: "#4d9d47", canyon: "#cf6f40", city: "#232757" };
 
 // ---------- сохранение ----------
-const save = { open: 1, best: {}, medals: {}, cups: {}, livery: 0, diff: "easy", track: 0, races: 0 };
+// cupRun — недоигранный кубок: сложность, машина, сколько заездов пройдено и очки; null — кубка в работе нет
+const save = { open: 1, best: {}, medals: {}, cups: {}, livery: 0, diff: "easy", track: 0, races: 0, cupRun: null };
 try {
   const old = JSON.parse(readStorage(KEY) || "{}");
   for (const key of Object.keys(save)) if (typeof old[key] === typeof save[key]) save[key] = old[key];
@@ -22,6 +23,14 @@ save.open = clamp(Math.round(save.open) || 1, 1, TRACKS.length);
 save.livery = clamp(Math.round(save.livery) || 0, 0, LIVERIES.length - 1);
 if (!DIFFS.some((d) => d.id === save.diff)) save.diff = "easy";
 save.track = clamp(Math.round(save.track) || 0, 0, save.open - 1);
+{
+  // недоигранный кубок годится, только если в нём всё на месте
+  const run = save.cupRun;
+  const whole = (list) => Array.isArray(list) && list.length === LIVERIES.length && list.every(Number.isFinite);
+  const ok = run && DIFFS.some((d) => d.id === run.diff) && Number.isInteger(run.livery) && run.livery >= 0 && run.livery < LIVERIES.length &&
+    Number.isInteger(run.round) && run.round >= 1 && run.round < TRACKS.length && whole(run.points) && whole(run.last);
+  if (!ok) save.cupRun = null;
+}
 const store = () => writeStorage(KEY, JSON.stringify(save));
 
 // ---------- состояние ----------
@@ -185,6 +194,8 @@ function drawMap(canvas, track, o = {}) {
 
 const LOCK = '<svg class="lock" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.500" width="14" height="10" rx="2.500" fill="currentColor"/><path d="M8 10.500V8a4 4 0 0 1 8 0v2.500" fill="none" stroke="currentColor" stroke-width="2.400"/></svg>';
 function renderMenu() {
+  // на кнопке кубка видно, что он недоигран
+  el("cup-label").textContent = save.cupRun ? `Кубок ${save.cupRun.round}/${TRACKS.length}` : "Кубок";
   const box = el("tracks");
   box.textContent = "";
   TRACKS.forEach((def, i) => {
@@ -428,6 +439,9 @@ function showResult() {
   let actions;
   if (mode === "cup") {
     cup.add(results);
+    // кубок запоминается после каждого заезда: можно выйти в меню и продолжить позже
+    save.cupRun = cup.done ? null : { diff: save.diff, livery: save.livery, round: cup.round, points: [...cup.points], last: [...cup.last] };
+    store();
     const total = cup.standings(save.livery).find((r) => r.player);
     raceNews.unshift(`<span>В кубке: ${total.points} оч., ${ORDINAL[total.place]} место</span>`);
     actions = cup.done
@@ -485,7 +499,38 @@ function showPodium() {
 function startCup() {
   mode = "cup";
   cup = new Cup(TRACKS.length);
+  save.cupRun = null;
+  store();
   startRace(0);
+}
+
+// продолжить недоигранный кубок с той же сложностью и машиной, с какими он начат
+function resumeCup() {
+  const run = save.cupRun;
+  if (!run) return startCup();
+  mode = "cup";
+  cup = new Cup(TRACKS.length);
+  cup.round = run.round;
+  cup.points = [...run.points];
+  cup.last = [...run.last];
+  save.diff = run.diff;
+  save.livery = run.livery;
+  store();
+  startRace(cup.round);
+}
+
+function askCup() {
+  const run = save.cupRun;
+  if (!run) return startCup();
+  const diff = DIFFS.find((d) => d.id === run.diff).name;
+  const mine = Object.assign(new Cup(TRACKS.length), { points: run.points, last: run.last }).standings(run.livery).find((r) => r.player);
+  openPanel(
+    `<h2>Кубок Виража</h2><p class="sub">Пройдено заездов: ${run.round} из ${TRACKS.length} · «${diff}» · <b>${ORDINAL[mine.place]} место, ${mine.points} оч.</b></p>` +
+      `<p class="sub">Дальше — ${TRACKS[run.round].name}.</p>` +
+      `<div class="actions"><button class="primary plain" data-act="fresh">Новый кубок</button><button class="primary" data-act="go">Продолжить</button></div>` +
+      `<div class="actions one"><button class="primary plain" data-act="back">Назад</button></div>`,
+    { go: resumeCup, fresh: startCup, back: closePanel },
+  );
 }
 
 // ---------- панели ----------
@@ -556,7 +601,7 @@ onPress(el("race"), () => {
 onPress(el("cup"), () => {
   Sound.unlock();
   Sound.pick();
-  startCup();
+  askCup();
 });
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) return;

@@ -1,14 +1,14 @@
 // Сцена «Грозового каньона»: стены и дно едут навстречу, истребитель стоит в плоскости z = 0.
 // Правила (rules.js) ничего не знают о графике; здесь только то, что видно.
-import { T, GEO, TAU, V, clamp, hot, lit, part, at, flare } from "./kit.js?v=d37e4584";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=d37e4584";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=d37e4584";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=d37e4584";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=d37e4584";
-import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=d37e4584";
-import { createFx, tone, GLOW, SMOKE, FIRE, RING, STAR } from "./fx.js?v=d37e4584";
-import { jet, wingman, enemyModels, enemyColor, pillar, arch, ridge, ringGate, GEM_GEO, gemMaterial, repairKit } from "./models.js?v=d37e4584";
-import { SCROLL, FAR } from "./rules.js?v=d37e4584";
+import { T, GEO, TAU, V, clamp, hot, lit, part, at, flare } from "./kit.js?v=4a3b319e";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=4a3b319e";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=4a3b319e";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=4a3b319e";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=4a3b319e";
+import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=4a3b319e";
+import { createFx, tone, GLOW, SMOKE, FIRE, RING, STAR } from "./fx.js?v=4a3b319e";
+import { jet, wingman, enemyModels, enemyColor, pillar, arch, ridge, ringGate, GEM_GEO, gemMaterial, repairKit } from "./models.js?v=4a3b319e";
+import { SCROLL, FAR } from "./rules.js?v=4a3b319e";
 
 // Оформление зон. rock/rock2 — два оттенка скал, glow — цвет светящихся вкраплений (или null).
 const THEMES = [

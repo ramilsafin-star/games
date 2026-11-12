@@ -1,6 +1,6 @@
 // Звук «Грозового каньона»: всё синтезируется на лету, файлов нет.
 // Эффекты и тихая музыка идут через общий компрессор, чтобы взрывы не перегружали динамик.
-import { readStorage, writeStorage } from "./kit.js?v=d37e4584";
+import { readStorage, writeStorage } from "./kit.js?v=4a3b319e";
 
 const Audio = window.AudioContext || window.webkitAudioContext;
 let ctx = null,

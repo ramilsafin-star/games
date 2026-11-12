@@ -7,7 +7,7 @@
   <title>Грозовой каньон</title>
   <meta name="description" content="3D-шутер: истребитель «Стриж» летит через пять зон каньона. Уворачивайся от скал и молний, сбивай роботов-стражей, собирай модули и победи хозяев зон.">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./style.css?v=d37e4584">
+  <link rel="stylesheet" href="./style.css?v=4a3b319e">
 </head>
 <body data-mode="menu">
   <canvas id="stage" aria-label="Каньон"></canvas>
@@ -42,6 +42,7 @@
         <span><b>◆</b> Лазеры стреляют сами</span>
         <span><b>➶</b> Ракеты находят цели</span>
       </div>
+      <div id="levels" class="seg" role="radiogroup" aria-label="Сложность"></div>
       <button id="start" class="primary" disabled>На взлёт <span aria-hidden="true">↑</span></button>
       <p id="load" role="status">Прогреваем двигатели…</p>
       <small class="desktop">Клавиши WASD или стрелки · пробел — ракеты</small>
@@ -51,6 +52,6 @@
   <section id="panel" class="veil" hidden aria-labelledby="panel-title">
     <div class="sheet" id="panel-body"></div>
   </section>
-  <script type="module" src="./js/boot.js?v=d37e4584"></script>
+  <script type="module" src="./js/boot.js?v=4a3b319e"></script>
 </body>
 </html>

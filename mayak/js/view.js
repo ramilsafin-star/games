@@ -1,17 +1,17 @@
 // Сцена «Маяка»: ночная бухта-диорама. Правила живут в rules.js, здесь только картинка.
 // Координаты правил (x вправо, z от берега в море) в сцене становятся (x, 0, −z): камера стоит над берегом и смотрит в море.
-import * as T from "../vendor/three/three.module.min.js?v=b9a86e0e";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=b9a86e0e";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=b9a86e0e";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=b9a86e0e";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=b9a86e0e";
-import { makeSky, makeSea, makeFoam, makeDecals } from "./sea.js?v=b9a86e0e";
-import { Particles, Marks, DOT, BUBBLE, SPARK, PUFF, STREAK, MARK_ASK, MARK_ALARM, MARK_GRAB } from "./fx.js?v=b9a86e0e";
+import * as T from "../vendor/three/three.module.min.js?v=e4b14d4e";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=e4b14d4e";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=e4b14d4e";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=e4b14d4e";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=e4b14d4e";
+import { makeSky, makeSea, makeFoam, makeDecals } from "./sea.js?v=e4b14d4e";
+import { Particles, Marks, DOT, BUBBLE, SPARK, PUFF, STREAK, MARK_ASK, MARK_ALARM, MARK_GRAB } from "./fx.js?v=e4b14d4e";
 import {
   BOAT_LOOK, LAMP_Y, SHARED, bellGeometry, boatGeometry, harborGeometry, lifeRingGeometry, lighthouseGeometry,
   reefGeometry, shadeBodyGeometry, shadeMaterial, shoreGeometry, toyMaterial,
-} from "./models.js?v=b9a86e0e";
-import { BOATS, SHADES } from "./rules.js?v=b9a86e0e";
+} from "./models.js?v=e4b14d4e";
+import { BOATS, SHADES } from "./rules.js?v=e4b14d4e";
 
 const TAU = Math.PI * 2;
 const clamp = T.MathUtils.clamp;

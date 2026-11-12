@@ -30,6 +30,15 @@ const UNITS = {
   boss: { hp: 500, r: 5, points: 1000, hit: 24 },
 };
 
+// Сложность рейда. hp — прочность стражей, hurt — их урон, pace — паузы между их выстрелами (меньше — чаще),
+// speed — скорость их зарядов, assist — как далеко от линии огня лазеры ещё доводятся на цель,
+// extra — прибавка к числу роботов в строю, repair — ремонт перед зоной, score — множитель очков.
+export const LEVELS = {
+  easy: { name: "Прогулка", hp: 1, hurt: 1, pace: 1, speed: 1, assist: 2.5, extra: 0, repair: 15, score: 1 },
+  normal: { name: "Рейд", hp: 1.15, hurt: 1.2, pace: 0.86, speed: 1.08, assist: 2.2, extra: 1, repair: 13, score: 1.5 },
+  hard: { name: "Ас", hp: 1.45, hurt: 1.6, pace: 0.64, speed: 1.25, assist: 1.7, extra: 2, repair: 8, score: 2 },
+};
+
 // Модули ангара. Брать можно повторно, пока не упрёшься в предел.
 export const MODULES = ["rapid", "spread", "armor", "rockets", "magnet", "wing"];
 const BOLT_SPEED = 150;
@@ -43,7 +52,7 @@ function seeded(seed) {
 }
 
 // План зоны: список «что и когда долетит до игрока». Время появления считается назад от этого момента.
-function plan(index, random) {
+function plan(index, random, extra = 0) {
   const zone = ZONES[index];
   const list = [];
   let t = 3;
@@ -55,20 +64,20 @@ function plan(index, random) {
   const P = {
     // строй разведчиков: зависают впереди и стреляют
     line() {
-      const n = 4 + Math.round(hard * 2) + (random() < 0.5 ? 1 : 0);
+      const n = 4 + extra + Math.round(hard * 2) + (random() < 0.5 ? 1 : 0);
       const v = 0.45 + random() * 0.35;
       for (let i = 0; i < n; i++) enemy(i * 0.22, "scout", (i - (n - 1) / 2) / Math.max(1, n - 1) * 1.5, v + (i % 2) * 0.12, { stay: 6.5 });
       return 6;
     },
     // звено проносится поперёк каньона змейкой
     sweep() {
-      const n = 5 + Math.round(hard * 2);
+      const n = 5 + extra + Math.round(hard * 2);
       const s = side();
       for (let i = 0; i < n; i++) enemy(i * 0.35, "scout", s * 0.1, 0.35 + random() * 0.45, { stay: 7, sway: 0.75, rate: 0.9, phase: i * 0.55 * s });
       return 6.5;
     },
     darts() {
-      const n = 3 + Math.round(hard * 3);
+      const n = 3 + extra + Math.round(hard * 3);
       for (let i = 0; i < n; i++) enemy(i * 0.75, "dart", random() * 1.8 - 0.9, 0.15 + random() * 0.7);
       return n * 0.75 + 1.6;
     },
@@ -112,7 +121,7 @@ function plan(index, random) {
       return 5;
     },
     mines() {
-      const n = 6 + Math.round(hard * 5);
+      const n = 6 + extra * 2 + Math.round(hard * 5);
       for (let i = 0; i < n; i++) list.push({ at: t + i * 0.42 + FAR / SCROLL, type: "enemy", kind: "mine", u: random() * 1.8 - 0.9, v: 0.1 + random() * 0.8 });
       return n * 0.42 + 1.2;
     },
@@ -157,6 +166,8 @@ export class Raid {
 
   reset() {
     this.mode = "menu";
+    this.level ||= "easy";
+    this.tune = LEVELS[this.level];
     this.zone = 0;
     this.time = 0;
     this.zoneTime = 0;
@@ -195,9 +206,15 @@ export class Raid {
     this.events.push({ type, ...values });
   }
 
-  start() {
+  start(level = this.level) {
+    this.level = LEVELS[level] ? level : "easy";
     this.reset();
     this.nextZone();
+  }
+
+  // очки с множителем сложности
+  gain(points) {
+    this.score += Math.round(points * this.tune.score);
   }
 
   nextZone() {
@@ -209,8 +226,8 @@ export class Raid {
     this.bossDone = false;
     this.clean = true;
     const p = this.player;
-    p.health = Math.min(p.maxHealth, p.health + 15);
-    const made = plan(this.zone - 1, seeded(Math.floor(this.random() * 1e9)));
+    p.health = Math.min(p.maxHealth, p.health + this.tune.repair);
+    const made = plan(this.zone - 1, seeded(Math.floor(this.random() * 1e9)), this.tune.extra);
     this.script = made.list;
     this.planEnd = made.end;
     this.emit("zone", { zone: this.zone, name: zone.name });
@@ -275,7 +292,7 @@ export class Raid {
     const unit = UNITS[item.kind];
     const boss = item.kind === "boss";
     const scale = boss ? 1 : 1 + 0.12 * (this.zone - 1);
-    const hp = Math.round((boss ? ZONES[this.zone - 1].hp : unit.hp * scale) * this.mercy());
+    const hp = Math.round((boss ? ZONES[this.zone - 1].hp : unit.hp * scale) * this.tune.hp * this.mercy());
     const fixed = item.kind === "mine" || item.kind === "turret"; // стоят в мире и едут вместе с ним
     const enemy = {
       id: ++this.serial, kind: item.kind, r: unit.r,
@@ -357,7 +374,7 @@ export class Raid {
   // ближайшая к линии огня цель: по ней лазеры слегка доводятся
   pickAim() {
     const p = this.player;
-    const reach = 2.5 + p.magnet * 0.3;
+    const reach = this.tune.assist + p.magnet * 0.3;
     let best = null;
     let bestScore = Infinity;
     for (const e of this.enemies) {
@@ -415,6 +432,7 @@ export class Raid {
 
   // вражеский заряд летит в точку (tx, ty) на плоскости игрока
   shoot(from, tx, ty, speed = 30, heavy = false) {
+    speed *= this.tune.speed;
     const dx = tx - from.x;
     const dy = ty - from.y;
     const dz = -from.z;
@@ -447,7 +465,7 @@ export class Raid {
     const p = this.player;
     if (p.safe > 0 || this.mode !== "play") return false;
     p.safe = 1;
-    p.health = Math.max(0, p.health - Math.round(amount * (1 + 0.05 * (this.zone - 1)) * this.mercy()));
+    p.health = Math.max(0, p.health - Math.round(amount * (1 + 0.05 * (this.zone - 1)) * this.tune.hurt * this.mercy()));
     this.combo = 0;
     this.clean = false;
     this.emit("hurt");
@@ -476,7 +494,7 @@ export class Raid {
     this.comboUntil = this.time + 3;
     this.bestCombo = Math.max(this.bestCombo, this.combo);
     const boss = enemy.kind === "boss";
-    this.score += Math.round(UNITS[enemy.kind].points * (boss ? this.zone : 1) * this.multiplier());
+    this.gain(UNITS[enemy.kind].points * (boss ? this.zone : 1) * this.multiplier());
     const drops = boss ? 6 : enemy.kind === "bomber" ? 3 : this.destroyed % 2 === 0 ? 1 : 0;
     for (let i = 0; i < drops; i++) {
       this.gems.push({
@@ -502,8 +520,8 @@ export class Raid {
       if (e.kind === "turret" && e.z > -125 && e.z < -50) {
         e.fire -= dt;
         if (e.fire <= 0) {
-          e.fire = 1.3;
-          this.shoot(e, p.x, p.y, 58);
+          e.fire = 1.3 * this.tune.pace;
+          this.shoot(e, p.x, p.y, 58 / this.tune.speed); // пушка далеко: её заряд и так быстрый
           this.emit("enemy-shot", { kind: e.kind });
         }
       }
@@ -534,10 +552,10 @@ export class Raid {
         else if (e.fire <= 0) {
           if (e.kind === "bomber") {
             for (let i = -2; i <= 2; i++) this.shoot(e, p.x + i * 2.2, p.y, 20, true);
-            e.fire = 2.6;
+            e.fire = 2.6 * this.tune.pace;
           } else {
             this.shoot(e, p.x, p.y, 22);
-            e.fire = 2.2 + this.random() * 1.2 - (this.zone - 1) * 0.12;
+            e.fire = (2.2 + this.random() * 1.2 - (this.zone - 1) * 0.12) * this.tune.pace;
           }
           this.emit("enemy-shot", { kind: e.kind });
         }
@@ -567,7 +585,7 @@ export class Raid {
     if (e.fire > 0) return;
     const attacks = ZONES[this.zone - 1].attacks;
     const name = attacks[e.attack++ % attacks.length];
-    e.fire = (wild ? 1.7 : 2.4) + (name === "beam" ? 1.6 : 0);
+    e.fire = ((wild ? 1.7 : 2.4) + (name === "beam" ? 1.6 : 0)) * this.tune.pace;
     if (name === "fan") {
       const n = wild ? 7 : 5;
       for (let i = 0; i < n; i++) this.shoot(e, p.x + (i - (n - 1) / 2) * 2.1, p.y + (i % 2 ? 0.7 : -0.5), 21, true);
@@ -620,7 +638,7 @@ export class Raid {
         if (!rock.done && before < 0 && rock.z >= 0) {
           rock.done = true;
           if (Math.hypot(p.x - rock.x, p.y - rock.y) <= rock.r) {
-            this.score += Math.round(60 * this.multiplier());
+            this.gain(60 * this.multiplier());
             p.cooldown = Math.max(0, p.cooldown - 0.8);
             rock.taken = true;
             this.emit("ring", { x: rock.x, y: rock.y });
@@ -730,7 +748,7 @@ export class Raid {
       if (Math.abs(gem.z) < 1.8 && off < 1.7 + p.magnet * 0.5) {
         if (gem.kind === "repair") p.health = Math.min(p.maxHealth, p.health + 25);
         else {
-          this.score += 25;
+          this.gain(25);
           p.cooldown = Math.max(0, p.cooldown - 0.5);
         }
         this.collected++;
@@ -793,7 +811,7 @@ export class Raid {
       this.mode = "break";
       this.shots.length = this.hazards.length = 0;
       this.breakUntil = this.time + (this.zone === ZONES.length ? 3 : 2.8);
-      if (this.clean) this.score += 300;
+      if (this.clean) this.gain(300);
       this.emit("clear", { clean: this.clean });
       this.ease = 0;
     }

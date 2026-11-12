@@ -1,5 +1,5 @@
 // Частицы и значки «Маяка». Всё рисуется инстансами: один вызов на частицы, один на значки.
-import * as T from "../vendor/three/three.module.min.js?v=b9a86e0e";
+import * as T from "../vendor/three/three.module.min.js?v=e4b14d4e";
 
 // Виды частиц
 export const DOT = 0; // мягкая точка: ореолы, искры, брызги

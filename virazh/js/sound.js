@@ -1,5 +1,5 @@
 // Звук «Виража»: мотор, шины, нитро, сигналы светофора и лёгкая музыка. Всё синтезируется, файлов нет.
-import { readStorage, writeStorage } from "./kit.js?v=ef8c7672";
+import { readStorage, writeStorage } from "./kit.js?v=81afe732";
 
 const Audio = window.AudioContext || window.webkitAudioContext;
 let ctx = null, out = null, on = !!Audio && readStorage("virazh-mute") !== "1";
