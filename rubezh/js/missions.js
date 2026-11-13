@@ -271,15 +271,15 @@ export const MISSIONS = [
 
 // Время суток и погода для сцены: небо, солнце, туман, фонари
 export const TIMES = {
-  dusk: { sky: ["#1d2b4d", "#e0764a", "#ffb36b"], sun: [-0.6, 0.22, -0.4], sunColor: "#ffc49a", sunI: 1.25, hemi: ["#a8b8e0", "#5a4a44", 1.15], fog: ["#6b5a66", 18, 120], lamps: 1, exposure: 1.05 },
-  night: { sky: ["#03060f", "#0b1730", "#1c2c4a"], sun: [0.4, 0.6, 0.5], sunColor: "#9db8ff", sunI: 0.75, hemi: ["#5a78b0", "#2a3040", 1.0], fog: ["#0d1626", 10, 85], lamps: 1.25, exposure: 1.15, stars: true },
-  dawn: { sky: ["#6e8fb8", "#e8b0a0", "#ffe0c0"], sun: [0.7, 0.16, 0.5], sunColor: "#ffd2ac", sunI: 1.5, hemi: ["#b9c8e6", "#5d5248", 0.95], fog: ["#b8bcc8", 8, 70], lamps: 0.6, exposure: 1.0 },
-  day: { sky: ["#3d7fd1", "#9fd0ff", "#fff1d6"], sun: [0.45, 0.8, 0.3], sunColor: "#fff3e0", sunI: 2.6, hemi: ["#cfe6ff", "#b08a5e", 0.9], fog: ["#e9d2ab", 30, 190], lamps: 0.5, exposure: 0.9 },
-  sunset: { sky: ["#2a2c5a", "#ff7a4a", "#ffd07a"], sun: [-0.8, 0.12, 0.2], sunColor: "#ff9a5a", sunI: 2.0, hemi: ["#a08ac8", "#6a4636", 0.85], fog: ["#c67e62", 25, 160], lamps: 0.8, exposure: 1.02 },
-  metro: { sky: ["#05070a", "#0b0f14", "#10151c"], sun: [0.2, 1, 0.1], sunColor: "#b8c8e0", sunI: 0.25, hemi: ["#7a8da6", "#30343b", 1.05], fog: ["#141a22", 12, 70], lamps: 1.3, exposure: 1.2, indoor: true },
-  emergency: { sky: ["#05070a", "#0b0f14", "#10151c"], sun: [0.2, 1, 0.1], sunColor: "#ff8a6a", sunI: 0.18, hemi: ["#8a5a62", "#2a1a1c", 0.9], fog: ["#1e0e10", 9, 58], lamps: 1.4, exposure: 1.2, indoor: true, emergency: true },
-  forge: { sky: ["#05070a", "#120b08", "#1c120c"], sun: [0.2, 1, 0.1], sunColor: "#ffb080", sunI: 0.3, hemi: ["#9d8a80", "#3a2a22", 1.1], fog: ["#24140c", 14, 80], lamps: 1.4, exposure: 1.25, indoor: true },
-  range: { sky: ["#05070a", "#0b0f14", "#10151c"], sun: [0.3, 1, 0.2], sunColor: "#ffffff", sunI: 0.6, hemi: ["#c8d8f0", "#40464e", 1.1], fog: ["#1a2028", 30, 120], lamps: 1.1, exposure: 1.0, indoor: true },
+  dusk: { sky: ["#345485", "#da886e", "#ffc384"], sun: [-0.6, 0.32, -0.4], sunColor: "#ffceac", sunI: 1.55, hemi: ["#c4d9ff", "#827888", 1.75], fog: ["#827b95", 28, 145], lamps: 1.15, exposure: 1.16 },
+  night: { sky: ["#081831", "#193a62", "#355a81"], sun: [0.4, 0.6, 0.5], sunColor: "#b3d3ff", sunI: 1.12, hemi: ["#94baf2", "#5d728c", 1.7], fog: ["#273b59", 23, 116], lamps: 1.45, exposure: 1.26, stars: true },
+  dawn: { sky: ["#779dcf", "#eab5a1", "#ffe0c0"], sun: [0.7, 0.22, 0.5], sunColor: "#ffdebc", sunI: 1.55, hemi: ["#d2e3ff", "#8b8491", 1.3], fog: ["#aab9cf", 15, 88], lamps: 0.8, exposure: 1.04 },
+  day: { sky: ["#377bd4", "#90c9ff", "#fff0d0"], sun: [0.45, 0.8, 0.3], sunColor: "#fff3e0", sunI: 2.3, hemi: ["#d8eaff", "#b7a190", 1.1], fog: ["#dcd5ce", 42, 200], lamps: 0.65, exposure: 0.98 },
+  sunset: { sky: ["#494e8f", "#e67959", "#ffd593"], sun: [-0.8, 0.22, 0.2], sunColor: "#ffbb81", sunI: 1.6, hemi: ["#bfc4fa", "#9b7a77", 1.45], fog: ["#b18a8a", 32, 172], lamps: 1, exposure: 1.1 },
+  metro: { sky: ["#0c1623", "#1c2e40", "#304456"], sun: [0.2, 1, 0.1], sunColor: "#c5dcff", sunI: 0.4, hemi: ["#b5cdeb", "#657588", 1.55], fog: ["#2a3e51", 22, 84], lamps: 1.65, exposure: 1.25, indoor: true },
+  emergency: { sky: ["#0c1623", "#1c2e40", "#304456"], sun: [0.2, 1, 0.1], sunColor: "#ffac94", sunI: 0.28, hemi: ["#9cb7d5", "#6e5c66", 1.4], fog: ["#312835", 16, 78], lamps: 1.65, exposure: 1.28, indoor: true, emergency: true },
+  forge: { sky: ["#151620", "#28202a", "#3f3032"], sun: [0.2, 1, 0.1], sunColor: "#ffc69d", sunI: 0.46, hemi: ["#bac5e0", "#7e6867", 1.55], fog: ["#39323c", 24, 95], lamps: 1.65, exposure: 1.24, indoor: true },
+  range: { sky: ["#0c1623", "#1c2e40", "#304456"], sun: [0.3, 1, 0.2], sunColor: "#ffffff", sunI: 0.75, hemi: ["#d1e4ff", "#818d9d", 1.55], fog: ["#29394d", 40, 125], lamps: 1.45, exposure: 1.14, indoor: true },
 };
 
 export const MISSION_COUNT = MISSIONS.length;

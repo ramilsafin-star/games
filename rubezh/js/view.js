@@ -1,20 +1,20 @@
 // Вид «Рубежа»: рендер, уровни качества (сами снижаются, если кадров мало), пост-обработка
 // (свечение, цветокоррекция, виньетка, размытие при уроне, сглаживание FXAA — без MSAA),
 // камера от первого лица с отдачей и тряской, оружие в руках, роботы и эффекты по событиям правил.
-import { T, PRIM, glowTexture, canvasTexture, TAU } from "./kit.js?v=1434d71a";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=1434d71a";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=1434d71a";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=1434d71a";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=1434d71a";
-import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=1434d71a";
-import { buildScene, makeEnvironment } from "./scene.js?v=1434d71a";
-import { createFx } from "./fx.js?v=1434d71a";
-import { buildRobot, buildGun, modelMats } from "./models.js?v=1434d71a";
-import { Sound } from "./sound.js?v=1434d71a";
-import { TIMES } from "./missions.js?v=1434d71a";
-import { World } from "./world.js?v=1434d71a";
-import { getMap } from "./maps.js?v=1434d71a";
-import { lookDir, clamp, lerp } from "./util.js?v=1434d71a";
+import { T, PRIM, glowTexture, canvasTexture, TAU } from "./kit.js?v=fe308c19";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=fe308c19";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=fe308c19";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=fe308c19";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=fe308c19";
+import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=fe308c19";
+import { buildScene, makeEnvironment } from "./scene.js?v=fe308c19";
+import { createFx } from "./fx.js?v=fe308c19";
+import { buildRobot, buildGun, modelMats } from "./models.js?v=fe308c19";
+import { Sound } from "./sound.js?v=fe308c19";
+import { TIMES } from "./missions.js?v=fe308c19";
+import { World } from "./world.js?v=fe308c19";
+import { getMap } from "./maps.js?v=fe308c19";
+import { lookDir, clamp, lerp } from "./util.js?v=fe308c19";
 
 // ---------- Уровни качества ----------
 export const QUALITY = {
@@ -41,7 +41,7 @@ function rememberTier(t) {
 
 // Финальный проход: цвет, виньетка, урон (красные края, расслоение, размытие), вспышка ЭМИ, зерно
 const GradeShader = {
-  uniforms: { tDiffuse: { value: null }, hurt: { value: 0 }, low: { value: 0 }, flash: { value: new T.Vector3() }, time: { value: 0 }, tint: { value: new T.Vector3(1, 1, 1) }, sat: { value: 1.08 }, vig: { value: 0.42 }, res: { value: new T.Vector2(1, 1) }, scope: { value: 0 } },
+  uniforms: { tDiffuse: { value: null }, hurt: { value: 0 }, low: { value: 0 }, flash: { value: new T.Vector3() }, time: { value: 0 }, tint: { value: new T.Vector3(1, 1, 1) }, sat: { value: 1.1 }, vig: { value: 0.16 }, res: { value: new T.Vector2(1, 1) }, scope: { value: 0 } },
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
   fragmentShader: `uniform sampler2D tDiffuse; uniform float hurt, low, time, sat, vig, scope; uniform vec3 flash, tint; uniform vec2 res; varying vec2 vUv;
     void main(){
@@ -59,11 +59,13 @@ const GradeShader = {
       float l = dot(col, vec3(0.299, 0.587, 0.114));
       col = mix(vec3(l), col, sat - low * 0.6);
       col *= tint;
-      col = col * (1.0 + 0.06) - 0.03 * (1.0 - col);
+      // Раскрываем детали в тенях, сохраняя чёрную точку и яркие источники.
+      col = max(col, 0.0);
+      col += 0.22 * col * (1.0 - min(col, 1.0)) * (1.0 - min(col, 1.0));
       col *= 1.0 - smoothstep(0.18, 0.75, r2) * vig;
       col = mix(col, vec3(0.75, 0.02, 0.02), smoothstep(0.1, 0.5, r2) * (hurt * 0.55 + low * 0.35 * (0.6 + 0.4 * sin(time * 6.0))));
       col += flash;
-      col += (fract(sin(dot(vUv * res + time * 61.0, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.018;
+      col += (fract(sin(dot(vUv * res + time * 61.0, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.006;
       gl_FragColor = vec4(col, 1.0);
     }`,
 };
@@ -114,6 +116,7 @@ export class View {
     r.shadowMap.enabled = this.q.shadows;
     r.shadowMap.type = T.PCFSoftShadowMap;
     r.shadowMap.autoUpdate = false;
+    this.brightness = 100;
     this.scale = 1; // адаптивное разрешение
     this.camera = new T.PerspectiveCamera(74, 1, 0.05, 700);
     this.camera.rotation.order = "YXZ";
@@ -142,7 +145,7 @@ export class View {
     this.vmPass = new RenderPass(this.vmScene, this.vmCamera);
     this.vmPass.clear = false;
     this.vmPass.clearDepth = true;
-    this.bloom = new UnrealBloomPass(new T.Vector2(256, 256), 0.7, 0.55, 0.82);
+    this.bloom = new UnrealBloomPass(new T.Vector2(256, 256), 0.48, 0.42, 0.92);
     this.grade = new ShaderPass(GradeShader);
     this.fxaa = new ShaderPass(FxaaShader);
     this.composer.addPass(this.mainPass);
@@ -188,6 +191,11 @@ export class View {
     this.bloom.resolution.set(w / 2, h / 2);
   }
 
+  setBrightness(value) {
+    this.brightness = value;
+    this.renderer.toneMappingExposure = (this.theme?.exposure ?? 1) * value / 100;
+  }
+
   // ---------- Загрузка карты ----------
   load(world, mission, o = {}) {
     this.dispose();
@@ -200,7 +208,7 @@ export class View {
     this.world = world;
     this.env = makeEnvironment(this.renderer, theme, this.built.lamps);
     scene.environment = this.q.pbr ? this.env : null;
-    this.renderer.toneMappingExposure = theme.exposure || 1;
+    this.renderer.toneMappingExposure = theme.exposure * this.brightness / 100;
     this.mainPass.scene = scene;
     this.mainPass.camera = this.camera;
     this.fx = createFx(scene, this.camera, world, this.q);
@@ -208,9 +216,9 @@ export class View {
     this.vmCamera.clear();
     this.vmScene.clear();
     this.vmScene.add(this.vmCamera);
-    this.vmScene.add(new T.HemisphereLight(theme.hemi[0], theme.hemi[1], theme.hemi[2] * 1.2));
-    const key = new T.DirectionalLight(theme.sunColor, Math.max(0.8, theme.sunI * 0.7));
-    key.position.set(0.5, 1, 0.3);
+    this.vmScene.add(new T.HemisphereLight("#e4efff", "#78889b", 1.75));
+    const key = new T.DirectionalLight("#fff2dc", 1.65);
+    key.position.set(0.7, 1, 0.8);
     this.vmScene.add(key);
     this.vmFlash = new T.PointLight("#ffd28a", 0, 3, 2);
     this.vmFlash.position.set(0.1, -0.05, -0.8);
@@ -260,10 +268,10 @@ export class View {
     this.smokeT = 0;
     Sound.indoor(!!(theme.indoor || world.map.indoor));
     this.grade.uniforms.tint.value.set(1, 1, 1);
-    if (theme.emergency) this.grade.uniforms.tint.value.set(1.06, 0.92, 0.92);
-    if (mission.time === "night") this.grade.uniforms.tint.value.set(0.92, 0.98, 1.08);
-    if (mission.time === "sunset" || mission.time === "dusk") this.grade.uniforms.tint.value.set(1.06, 0.98, 0.92);
-    if (mission.time === "day") this.grade.uniforms.tint.value.set(1.03, 1.0, 0.95);
+    if (theme.emergency) this.grade.uniforms.tint.value.set(1.025, 0.98, 0.99);
+    if (mission.time === "night") this.grade.uniforms.tint.value.set(0.97, 1.0, 1.035);
+    if (mission.time === "sunset" || mission.time === "dusk") this.grade.uniforms.tint.value.set(1.02, 1.0, 0.97);
+    if (mission.time === "day") this.grade.uniforms.tint.value.set(1.01, 1.0, 0.98);
     this.bloom.strength = theme.stars || theme.indoor ? 0.85 : 0.6;
   }
   dispose() {
@@ -364,7 +372,7 @@ export class View {
     u.low.value = p.alive ? clamp((40 - p.hp) / 40, 0, 1) : 1;
     u.flash.value.copy(this.flashK);
     u.time.value = t;
-    u.vig.value = 0.38 + p.aim * (W.scope ? 0 : 0.2);
+    u.vig.value = 0.14 + p.aim * (W.scope ? 0 : 0.16);
     this.render(real);
   }
   render(real) {
@@ -1037,7 +1045,7 @@ export class View {
     u.low.value = 0;
     u.flash.value.set(0, 0, 0);
     u.time.value = t;
-    u.vig.value = 0.5;
+    u.vig.value = 0.18;
     this.render(dt);
   }
 }

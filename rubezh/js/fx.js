@@ -1,7 +1,7 @@
 // Эффекты боя, все из заранее созданных пулов (ничего не создаётся во время стрельбы):
 // искры и огонь (светящиеся точки), дым и масло (мягкие пятна), трассеры и лучи (ленты к камере),
 // следы пуль, обломки роботов и болты, гильзы, ударные волны, вспышки света.
-import { T, PRIM, canvasTexture, glowTexture, TAU } from "./kit.js?v=1434d71a";
+import { T, PRIM, canvasTexture, glowTexture, TAU } from "./kit.js?v=fe308c19";
 
 const V = () => new T.Vector3();
 const tmp = V(), tmp2 = V(), up = new T.Vector3(0, 1, 0);

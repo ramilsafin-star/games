@@ -1,13 +1,13 @@
 // Профиль игрока «Рубежа»: сохранение (ключ rubezh-v1, меньше 4000 байт), покупки, итоги заданий,
 // звёзды, звание и достижения. Без графики — проверяется в tests/sim.mjs.
-import { WEAPONS, GUNS, PRIMARY, SECONDARY, UPGRADES, UPGRADE_IDS, upgradePrice, GRENADES, GRENADE_IDS, GEAR, KITS, KIT_IDS, ECON, DIFFICULTY, ACHIEVEMENTS, rankOf } from "./data.js?v=1434d71a";
-import { MISSIONS } from "./missions.js?v=1434d71a";
+import { WEAPONS, GUNS, PRIMARY, SECONDARY, UPGRADES, UPGRADE_IDS, upgradePrice, GRENADES, GRENADE_IDS, GEAR, KITS, KIT_IDS, ECON, DIFFICULTY, ACHIEVEMENTS, rankOf } from "./data.js?v=fe308c19";
+import { MISSIONS } from "./missions.js?v=fe308c19";
 
 export const SAVE_KEY = "rubezh-v1";
 const N = MISSIONS.length;
 const STAT_KEYS = ["kills", "cores", "coreKills", "knife", "emp", "molot", "relays", "rescues", "shots", "hits", "missions", "secs", "matches", "rounds", "dailies", "boss", "deaths", "ghost"];
 
-export const DEFAULT_OPTIONS = { snd: 1, mus: 1, vol: 0.8, sens: 1, tsens: 1, af: 1, aa: 1, q: "auto", inv: 0, fov: 74, hints: 1 };
+export const DEFAULT_OPTIONS = { snd: 1, mus: 1, vol: 0.8, sens: 1, tsens: 1, af: 1, aa: 1, q: "auto", inv: 0, fov: 74, bright: 100, hints: 1 };
 
 export function freshSave() {
   return {
@@ -68,6 +68,7 @@ export function cleanSave(raw) {
     q: ["auto", "low", "mid", "high"].includes(o.q) ? o.q : "auto",
     inv: o.inv ? 1 : 0,
     fov: int(o.fov, 60, 95, 74),
+    bright: int(o.bright, 80, 140, DEFAULT_OPTIONS.bright),
     hints: o.hints === 0 ? 0 : 1,
   };
   const dy = raw.dy && typeof raw.dy === "object" ? raw.dy : {};

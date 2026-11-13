@@ -1,9 +1,9 @@
 // Сцена карты: коробки мира сливаются в несколько больших сеток (по рисунку поверхности),
 // свет фонарей и затенение у стен запекаются в вершины при загрузке (живых ламп почти нет).
 // Плюс стекло, украшения, небо, погода и объёмные конусы света.
-import { T, PRIM, Shape, canvasTexture, glowTexture, TAU, noiseRand } from "./kit.js?v=1434d71a";
-import { SKINS } from "./maps.js?v=1434d71a";
-import { surfaceTexture, serverGlowTexture, signTexture, TEX_SCALE, TEX_PBR } from "./tex.js?v=1434d71a";
+import { T, PRIM, Shape, canvasTexture, glowTexture, TAU, noiseRand } from "./kit.js?v=fe308c19";
+import { SKINS } from "./maps.js?v=fe308c19";
+import { surfaceTexture, serverGlowTexture, signTexture, TEX_SCALE, TEX_PBR } from "./tex.js?v=fe308c19";
 
 const col = new T.Color();
 const linear = (hex) => new T.Color(hex); // three.js сам переводит sRGB → линейный
@@ -128,7 +128,7 @@ class Baker {
         if (b.inv || b.glass || b.y1 < y + 0.4 || b.y0 > y + 0.3) continue;
         g = Math.min(g, W.gap(b, x, z));
       }
-      return 0.5 + 0.5 * Math.min(1, g / 1.6);
+      return 0.7 + 0.3 * Math.min(1, g / 1.6);
     };
     const step = this.q.step;
     this.q.step = Math.min(step, 1.5);
@@ -259,7 +259,7 @@ export function buildScene(world, theme, o) {
   for (const L of map.lamps) {
     let k = L.inside || L.relay || L.furnace || L.neon || L.emergency || L.panel ? Math.max(0.85, lampK) : lampK;
     if (L.relay) k = 0.9;
-    if (theme.emergency && L.strip) k *= 0.25;
+    if (theme.emergency && L.strip) k *= 0.45;
     if (!k) continue;
     lamps.push({ ...L, c: new T.Color(L.color), power: L.power * k * 1.15 });
   }
@@ -628,13 +628,23 @@ export function buildScene(world, theme, o) {
       }
       case "lanes": {
         for (let x = -8; x <= 8; x += 4) paint.add("box", "#e8b624", [x, F + 0.012, (d.z0 + d.z1) / 2], [0.08, 0.02, d.z1 - d.z0]);
+        for (const x of [-10, 10]) {
+          paint.add("box", "#367c9d", [x, F + 0.014, (d.z0 + d.z1) / 2], [0.16, 0.022, d.z1 - d.z0]);
+        }
         for (const z of [-12, -21, -27, -35]) paint.add("box", "#d8d4c6", [0, F + 0.012, z + 1.2], [d.x1 - d.x0, 0.02, 0.1]);
         break;
       }
       case "ceiling": {
         if (d.panels) for (let x = -25; x <= 25; x += 10) for (let z = -15; z <= 15; z += 10) glow.add("box", "#fff3dd", [x, d.y - 0.02, z], [1.6, 0.03, 1.6]);
         if (d.skylights) for (let z = d.z0 + 3; z < d.z1 - 2; z += 6) glow.add("box", theme.stars || theme.indoor ? "#2a3448" : "#cfe4ff", [(d.x0 + d.x1) / 2, d.y - 0.03, z], [(d.x1 - d.x0) * 0.7, 0.03, 1.4]);
-        if (!d.panels && map.id !== "range") break;
+        if (map.id === "range") {
+          for (let z = d.z0 + 2; z < d.z1 - 2; z += 6) {
+            for (const x of [-4.5, 4.5]) {
+              paint.add("box", "#596d86", [x, d.y - 0.11, z], [3.8, 0.16, 0.42]);
+              glow.add("box", "#cfeaff", [x, d.y - 0.2, z], [3.5, 0.025, 0.24]);
+            }
+          }
+        }
         break;
       }
       case "helipad": {
@@ -670,9 +680,11 @@ export function buildScene(world, theme, o) {
   }
   for (const m of extra) scene.add(m);
   // ---------- Свет ----------
-  const officeK = map.indoor && !theme.indoor ? 0.5 : 1; // небоскрёб: под потолком небесного света меньше
-  const hemi = new T.HemisphereLight(theme.hemi[0], map.indoor && !theme.indoor ? "#6a5a4a" : theme.hemi[1], theme.hemi[2] * officeK);
+  const officeK = map.indoor && !theme.indoor ? 0.78 : 1; // небоскрёб: под потолком небесного света меньше
+  const hemi = new T.HemisphereLight(theme.hemi[0], map.indoor && !theme.indoor ? "#8494ab" : theme.hemi[1], theme.hemi[2] * officeK);
   scene.add(hemi);
+  // Мягкий отражённый свет на вертикальных поверхностях и моделях.
+  scene.add(new T.AmbientLight("#e3edff", map.indoor ? 0.50 : 0.36));
   const sun = new T.DirectionalLight(theme.sunColor, theme.sunI);
   sun.position.copy(sunDir).multiplyScalar(80);
   const cx = (bx0 + bx1) / 2, cz = (bz0 + bz1) / 2;

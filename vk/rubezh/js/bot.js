@@ -1,9 +1,9 @@
 // Автопилот: играет за игрока теми же кнопками (вход для game.step). Нужен для проверок:
 // tests/sim.mjs проходит им все задания на каждой сложности, браузерный тест — первое задание.
 // Наводится с ограниченной скоростью поворота и стреляет, только когда прицел на роботе.
-import { GRENADES } from "./data.js?v=83cf1cc4";
-import { rng, clamp, wrap, yawTo, lookDir, TAU } from "./util.js?v=83cf1cc4";
-import { TRAINING } from "./sim.js?v=83cf1cc4";
+import { GRENADES } from "./data.js?v=76993ec7";
+import { rng, clamp, wrap, yawTo, lookDir, TAU } from "./util.js?v=76993ec7";
+import { TRAINING } from "./sim.js?v=76993ec7";
 
 export class Autopilot {
   constructor(game, o = {}) {

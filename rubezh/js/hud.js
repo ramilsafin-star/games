@@ -1,8 +1,8 @@
 // Приборы боя поверх 3D: прицел, отметки попаданий, лента отключений, направление урона,
 // щит и броня, патроны, цель задания, метки на экране, радар, рация, всплывающие награды.
-import { WEAPONS, GRENADES, KITS } from "./data.js?v=1434d71a";
-import { fmtTime, wrap, yawTo, clamp } from "./util.js?v=1434d71a";
-import { TRAINING } from "./sim.js?v=1434d71a";
+import { WEAPONS, GRENADES, KITS } from "./data.js?v=fe308c19";
+import { fmtTime, wrap, yawTo, clamp } from "./util.js?v=fe308c19";
+import { TRAINING } from "./sim.js?v=fe308c19";
 
 const $ = (id) => document.getElementById(id);
 function text(el, v) {

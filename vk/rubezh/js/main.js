@@ -1,15 +1,15 @@
 // «Рубеж: Железный бунт» — экраны, ход задания по раундам, магазин, «Схватка», задание дня, связь с VK.
-import { WEAPONS, PRIMARY, SECONDARY, GUNS, UPGRADES, UPGRADE_IDS, upgradePrice, GRENADES, GRENADE_IDS, GEAR, KITS, KIT_IDS, DIFFICULTY, ECON, ACHIEVEMENTS, DAILY_MODS, rankOf, ROBOTS } from "./data.js?v=83cf1cc4";
-import { MISSIONS, TIMES } from "./missions.js?v=83cf1cc4";
-import { MAP_INFO, MAP_IDS, getMap } from "./maps.js?v=83cf1cc4";
-import { Game, trainingMission, weaponStats } from "./sim.js?v=83cf1cc4";
-import { Autopilot, applyLook } from "./bot.js?v=83cf1cc4";
-import * as S from "./save.js?v=83cf1cc4";
-import { View, QUALITY, detectTier } from "./view.js?v=83cf1cc4";
-import { Hud } from "./hud.js?v=83cf1cc4";
-import { Input } from "./input.js?v=83cf1cc4";
-import { Sound } from "./sound.js?v=83cf1cc4";
-import { fmtNum, fmtTime, clamp, wrap, yawTo, lookDir, DEG, hashString, rng } from "./util.js?v=83cf1cc4";
+import { WEAPONS, PRIMARY, SECONDARY, GUNS, UPGRADES, UPGRADE_IDS, upgradePrice, GRENADES, GRENADE_IDS, GEAR, KITS, KIT_IDS, DIFFICULTY, ECON, ACHIEVEMENTS, DAILY_MODS, rankOf, ROBOTS } from "./data.js?v=76993ec7";
+import { MISSIONS, TIMES } from "./missions.js?v=76993ec7";
+import { MAP_INFO, MAP_IDS, getMap } from "./maps.js?v=76993ec7";
+import { Game, trainingMission, weaponStats } from "./sim.js?v=76993ec7";
+import { Autopilot, applyLook } from "./bot.js?v=76993ec7";
+import * as S from "./save.js?v=76993ec7";
+import { View, QUALITY, detectTier } from "./view.js?v=76993ec7";
+import { Hud } from "./hud.js?v=76993ec7";
+import { Input } from "./input.js?v=76993ec7";
+import { Sound } from "./sound.js?v=76993ec7";
+import { fmtNum, fmtTime, clamp, wrap, yawTo, lookDir, DEG, hashString, rng } from "./util.js?v=76993ec7";
 
 const $ = (id) => document.getElementById(id);
 const host = () => window.vkGameHost;
@@ -43,6 +43,7 @@ bootBar(0.35, "Строим порт…");
 const canvas = $("stage");
 const view = new View(canvas, save.o.q === "auto" ? detectTier() : save.o.q);
 view.fixedQuality = save.o.q !== "auto";
+view.setBrightness(save.o.bright);
 view.onTier = (t) => toast("Качество графики снижено: " + QUALITY[t].name);
 const hud = new Hud(view);
 let screen = "boot";
@@ -1068,10 +1069,10 @@ RENDER.settings = () => {
   const o = save.o;
   const box = $("set-body");
   const tog = (key, name) => `<div class="set"><span>${name}</span><button class="toggle" data-t="${key}" aria-pressed="${!!o[key]}" aria-label="${name}"></button></div>`;
-  const rng = (key, name, min, max, step) => `<div class="set"><span>${name}</span><input type="range" data-r="${key}" min="${min}" max="${max}" step="${step}" value="${o[key]}"></div>`;
+  const rng = (key, name, min, max, step) => `<div class="set"><span>${name}</span><input type="range" data-r="${key}" min="${min}" max="${max}" step="${step}" value="${o[key]}" aria-label="${name}"></div>`;
   box.innerHTML =
     tog("snd", "Звук") + tog("mus", "Музыка") + rng("vol", "Громкость", 0, 1, 0.05) + rng("sens", "Чувствительность мыши", 0.2, 3, 0.05) + rng("tsens", "Чувствительность пальца", 0.2, 3, 0.05) +
-    tog("af", "Автоогонь при наведении (телефон)") + tog("aa", "Помощь в прицеливании (телефон)") + tog("inv", "Инверсия по вертикали") + rng("fov", "Угол обзора", 60, 95, 1) +
+    tog("af", "Автоогонь при наведении (телефон)") + tog("aa", "Помощь в прицеливании (телефон)") + tog("inv", "Инверсия по вертикали") + rng("fov", "Угол обзора", 60, 95, 1) + rng("bright", "Яркость", 80, 140, 5) +
     `<div class="set"><span>Качество графики</span><div class="seg" id="q-seg">${[["auto", "Авто"], ["high", "Высокое"], ["mid", "Среднее"], ["low", "Низкое"]].map(([k, n]) => `<button data-q="${k}" class="${o.q === k ? "on" : ""}">${n}</button>`).join("")}</div></div>` +
     `<div class="set"><span>Сейчас: ${QUALITY[view.tier].name}, ${Math.round(view.fps.avg)} кадров/с</span><span></span></div>` +
     `<div class="set"><span>Сбросить прогресс</span><button class="ghost" id="reset">Сбросить</button></div>` +
@@ -1119,6 +1120,7 @@ RENDER.settings = () => {
     if (!r) return;
     o[r.dataset.r] = Number(r.value);
     if (r.dataset.r === "vol") Sound.volume(o.vol);
+    if (r.dataset.r === "bright") view.setBrightness(o.bright);
     store();
   };
 };

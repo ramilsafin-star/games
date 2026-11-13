@@ -1,5 +1,5 @@
 // Общие помощники графики: three.js, сборка моделей из простых тел, текстуры на холсте.
-import * as T from "../vendor/three/three.module.min.js?v=1434d71a";
+import * as T from "../vendor/three/three.module.min.js?v=fe308c19";
 
 export { T };
 export const TAU = Math.PI * 2;

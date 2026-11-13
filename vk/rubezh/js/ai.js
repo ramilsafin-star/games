@@ -3,8 +3,8 @@
 // В бою «Стрелки» уходят в укрытия и заходят с фланга, «Бастион» прёт щитом вперёд,
 // «Оса» перелетает между точками и бьёт заряженным лучом, «Колобок» катится и взрывается,
 // «Молот» поливает очередями и пускает ракеты. Бойцы идут за игроком и держат позицию по команде.
-import { MATE } from "./data.js?v=83cf1cc4";
-import { clamp, wrap, turnTo, yawTo, DEG, TAU, lerp } from "./util.js?v=83cf1cc4";
+import { MATE } from "./data.js?v=76993ec7";
+import { clamp, wrap, turnTo, yawTo, DEG, TAU, lerp } from "./util.js?v=76993ec7";
 
 const FOV = 2.1; // поле зрения робота без тревоги (рад)
 const FOV_COMBAT = 3.6;

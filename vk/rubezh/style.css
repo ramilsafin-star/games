@@ -235,10 +235,10 @@ body[data-screen="loading"] #loading {
 }
 /* затемнение поверх 3D на экранах меню */
 body:not([data-screen="play"]):not([data-screen="boot"]):not([data-screen="menu"]) #stage {
-  filter: brightness(0.55) saturate(0.9);
+  filter: brightness(0.72) saturate(1.02);
 }
 body[data-screen="arsenal"] #stage {
-  filter: brightness(0.75);
+  filter: brightness(0.86);
 }
 #top {
   position: fixed;

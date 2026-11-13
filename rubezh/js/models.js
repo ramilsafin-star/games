@@ -1,7 +1,7 @@
 // Модели: роботы ГОРНа, бойцы отряда, инженер и оружие в руках. Всё из простых тел,
 // детали каждой подвижной части слиты в одну сетку (цвета в вершинах), свечение — отдельной сеткой.
 // При отключении робот разваливается на эти части (см. view.js).
-import { T, PRIM, Shape } from "./kit.js?v=1434d71a";
+import { T, PRIM, Shape } from "./kit.js?v=fe308c19";
 
 // ---------- Материалы ----------
 let MATS = null;
@@ -10,8 +10,8 @@ export function modelMats(q, envMap) {
   const S = q.pbr ? T.MeshStandardMaterial : T.MeshLambertMaterial;
   const pbr = (r, m) => (q.pbr ? { roughness: r, metalness: m, envMap, envMapIntensity: 1.1 } : {});
   MATS = {
-    paint: new S({ vertexColors: true, ...pbr(0.38, 0.55) }),
-    gun: new S({ vertexColors: true, ...(q.pbr ? { roughness: 0.42, metalness: 0.45, envMap, envMapIntensity: 0.55 } : {}) }),
+    paint: new S({ vertexColors: true, ...pbr(0.42, 0.28) }),
+    gun: new S({ vertexColors: true, ...(q.pbr ? { roughness: 0.4, metalness: 0.35, envMap, envMapIntensity: 0.78 } : {}) }),
     cloth: new S({ vertexColors: true, ...pbr(0.85, 0.05) }),
     glow: new T.MeshBasicMaterial({ vertexColors: true, toneMapped: false }),
     shield: new T.MeshBasicMaterial({ color: new T.Color(0.35, 0.85, 1.6), transparent: true, opacity: 0.32, blending: T.AdditiveBlending, depthWrite: false, side: T.DoubleSide, toneMapped: false }),
@@ -54,7 +54,7 @@ function glowMat(color, k) {
   return m;
 }
 
-const DARK = "#24282e", STEEL = "#7d8792", LIGHT = "#c9d0d8", BLACK = "#15171a";
+const DARK = "#343d49", STEEL = "#95a5b6", LIGHT = "#d8e1ec", BLACK = "#232b35";
 
 // ---------- Роботы ----------
 export function buildRobot(type, q, envMap) {
@@ -103,7 +103,7 @@ export function buildRobot(type, q, envMap) {
     case "vip":
     case "mishen": {
       const big = type === "bastion";
-      const C = { strelok: "#e2552c", bastion: "#3f86d8", mate: "#2b3a52", vip: "#ee7d22", mishen: "#5a6a7c" }[type];
+      const C = { strelok: "#f36a42", bastion: "#4b9ae5", mate: "#3f5a73", vip: "#ee7d22", mishen: "#5a6a7c" }[type];
       const human = type === "mate" || type === "vip";
       const W = big ? 1.25 : 1;
       coreM = glowMat(type === "mate" ? "#4fe3ff" : type === "vip" ? "#ffd27a" : type === "mishen" ? "#5ff2ff" : big ? "#7fdcff" : "#ff8a3a", 1.8);
