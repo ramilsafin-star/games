@@ -1,7 +1,7 @@
-import { Game, WORLDS, WEAPONS, clamp } from './game.js?v=4d3622b6';
-import { View } from './view.js?v=4d3622b6';
-import { Audio } from './audio.js?v=4d3622b6';
-import { loadProfile, UPGRADES, MAX_RANK, price } from './profile.js?v=4d3622b6';
+import { Game, WORLDS, WEAPONS, clamp } from './game.js?v=d3800c69';
+import { View } from './view.js?v=d3800c69';
+import { Audio } from './audio.js?v=d3800c69';
+import { loadProfile, UPGRADES, MAX_RANK, price } from './profile.js?v=d3800c69';
 
 const $ = (id) => document.getElementById(id);
 const audio = new Audio();
@@ -128,7 +128,7 @@ function onEvent(e) {
       break;
     case 'pause':
       clearInput();
-      audio.setActive(false);
+      audio.suspend();
       break;
     case 'gems':
       profile.gems = Math.min(99999999, profile.gems + e.amount);
@@ -149,6 +149,7 @@ function onEvent(e) {
       }
       break;
     case 'resume':
+      audio.unlock();
       audio.setActive(true);
       break;
     case 'cage':
@@ -254,7 +255,7 @@ function hud() {
   $('coin-count').textContent = profile.gems;
   const w = WEAPONS[game.weapon];
   $('weapon').textContent = w.name;
-  const power = game.weapon === 'blaster' ? game.blasterPower() : game.power;
+  const power = game.weaponPower();
   $('power').textContent = `Сила ×${power.toFixed(2).replace(/0$/, '')}`;
   const box = $('weapon-box');
   box.style.setProperty('--tone', hex(w.color));
@@ -274,7 +275,9 @@ function hud() {
     $('boss-fill').style.width = `${p}%`;
     $('boss-percent').textContent = `${Math.ceil(p)}%`;
   }
-  const warning = game.attack ? ['Таран! Уйди с красной полосы', 'Кристальная стена и плеватель', 'Луч! Уйди к краю'][game.level] : game.sweep ? 'Держись у края!' : '';
+  const queenWarning = game.attack?.enraged ? 'Стена и бочки на флангах!' : 'Кристальная стена и плеватель';
+  const warnings = ['Таран! Уйди с красной полосы', queenWarning, 'Луч! Уйди к краю'];
+  const warning = game.attack ? warnings[game.level] : game.sweep ? 'Держись у края!' : '';
   $('attack-warning').classList.toggle('hidden', !warning || game.mode !== 'playing');
   if ($('attack-warning').textContent !== warning) $('attack-warning').textContent = warning;
   $('combo').innerHTML = game.combo >= 5 ? `×${Math.min(4, 1 + Math.floor(game.combo / 5))}<small>серия ${game.combo}</small>` : '';
@@ -330,25 +333,27 @@ $('shop-items').addEventListener('click', (e) => {
   if (rank >= MAX_RANK || profile.gems < cost) return;
   profile.gems -= cost;
   profile.ranks[key]++;
+  audio.unlock();
+  audio.fx({ type: 'pickup', pickupType: 'gem' });
   saveProfile();
   paintProfile();
   const next = $('shop-items').querySelector(`[data-buy="${key}"]:enabled`);
   (next || $('shop-close')).focus();
 });
 $('sound').addEventListener('click', () => {
-  audio.unlock();
+  if (game.mode !== 'paused') audio.unlock();
   const silent = audio.muted && !audio.musicEnabled;
   audio.muted = !silent;
   audio.musicEnabled = silent;
   saveSound();
 });
 $('sound-effects').addEventListener('change', (e) => {
-  audio.unlock();
+  if (game.mode !== 'paused') audio.unlock();
   audio.muted = !e.target.checked;
   saveSound();
 });
 $('music-enabled').addEventListener('change', (e) => {
-  audio.unlock();
+  if (game.mode !== 'paused') audio.unlock();
   audio.musicEnabled = e.target.checked;
   saveSound();
 });

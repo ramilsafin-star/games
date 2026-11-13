@@ -1,6 +1,6 @@
 // Монстры: мультяшные, без крови. В каждом мире свой окрас, у каждого босса свой облик. Смотрят в +Z, на героя.
-import * as T from '../../vendor/three/three.module.min.js?v=4d3622b6';
-import { Kit, group, part, toyMaterial, glowMaterial, flat, place } from './kit.js?v=4d3622b6';
+import * as T from '../../vendor/three/three.module.min.js?v=d3800c69';
+import { Kit, group, part, toyMaterial, glowMaterial, flat, place } from './kit.js?v=d3800c69';
 
 const glow = glowMaterial();
 const DARK = 0x2a1a2c;
@@ -413,7 +413,7 @@ export class MonsterView {
 
   update(dt, item) {
     const age = item.age;
-    if (this.band) this.band.material.color.setHex(item.barrelKind === 'cryo' ? 0x77ebff : item.barrelKind === 'pulse' ? 0xd99aff : 0xffca58);
+    if (this.band) this.band.material.color.setHex(item.barrelKind === 'cryo' ? 0x77ebff : item.barrelKind === 'pulse' ? 0xd99aff : item.barrelKind === 'blast' ? 0xff5136 : 0xffca58);
     if (this.charge) {
       this.charge.visible = Boolean(item.charge);
       this.charge.scale.setScalar(1 + Math.max(0, 0.4 - item.shot) * 3);

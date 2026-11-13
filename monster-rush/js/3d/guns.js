@@ -1,7 +1,7 @@
 // Оружие. У каждой пушки своя модель: она видна в клетке, в руках героя и на подборе.
 // Модель смотрит в -Z, начало координат в месте правой руки. grip и fore — куда ставить руки, muzzle — откуда летит огонь.
-import * as T from '../../vendor/three/three.module.min.js?v=4d3622b6';
-import { Kit, metalMaterial, glowMaterial, group } from './kit.js?v=4d3622b6';
+import * as T from '../../vendor/three/three.module.min.js?v=d3800c69';
+import { Kit, metalMaterial, glowMaterial, group } from './kit.js?v=d3800c69';
 
 const metal = metalMaterial();
 const glow = glowMaterial();

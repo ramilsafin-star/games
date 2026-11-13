@@ -1,11 +1,11 @@
-import { WORLDS, clamp } from './game.js?v=4d3622b6';
+import { WORLDS, clamp } from './game.js?v=d3800c69';
 
 export const UPGRADES = {
-  health: { name: 'Здоровье', step: '+10 к максимуму', cost: 160 },
-  power: { name: 'Бластер', step: '+12% к урону бластера', cost: 200 },
-  duration: { name: 'Супероружие', step: '+2 с работы', cost: 180 },
-  magnet: { name: 'Магнит', step: '+0,6 м притяжения', cost: 120 },
-  shield: { name: 'Щиты', step: 'Чаще выпадают с монстров', cost: 150 },
+  health: { name: 'Здоровье', step: '+15 к максимуму', costs: [60, 140, 260] },
+  power: { name: 'Урон', step: '+15% к урону оружия', costs: [80, 180, 320] },
+  duration: { name: 'Супероружие', step: '+1,5 с работы', costs: [70, 160, 300] },
+  magnet: { name: 'Магнит', step: '+0,9 м притяжения', costs: [50, 120, 220] },
+  shield: { name: 'Щиты', step: 'Чаще выпадают с монстров', costs: [150, 300, 450] },
 };
 export const MAX_RANK = 3;
 const amount = (n, max) => typeof n === 'number' && Number.isFinite(n) ? clamp(Math.floor(n), 0, max) : 0;
@@ -20,5 +20,5 @@ export function loadProfile(raw) {
 }
 
 export function price(key, rank) {
-  return UPGRADES[key].cost * (1 + rank);
+  return UPGRADES[key].costs[rank];
 }

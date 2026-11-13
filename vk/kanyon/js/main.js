@@ -1,8 +1,8 @@
 // «Грозовой каньон»: управление, приборы, панели, звук и главный цикл.
-import { LEVELS, ZONES, PERKS, PERK_COST, Raid } from "./rules.js?v=ec8a7f9e";
-import { CanyonView } from "./view.js?v=ec8a7f9e";
-import { Sound } from "./sound.js?v=ec8a7f9e";
-import { readStorage, writeStorage } from "./kit.js?v=ec8a7f9e";
+import { LEVELS, ZONES, PERKS, PERK_COST, Raid } from "./rules.js?v=a3d819ef";
+import { CanyonView } from "./view.js?v=a3d819ef";
+import { Sound } from "./sound.js?v=a3d819ef";
+import { readStorage, writeStorage } from "./kit.js?v=a3d819ef";
 
 const id = name => document.getElementById(name);
 const canvas = id("stage");
@@ -119,8 +119,9 @@ let earned = 0; // деталей за этот полёт
 
 // Детали начисляются по ходу: за каждую пройденную зону, задания и каждые 500 очков
 function bank(cleared = 0) {
-  const gain = Math.max(0, Math.floor((game.score - banked.score) / 500)) + (game.stars - banked.stars) * 20 + cleared * 8;
-  banked = { score: Math.max(banked.score, game.score), stars: game.stars };
+  const scoreParts = Math.max(0, Math.floor((game.score - banked.score) / 500));
+  const gain = scoreParts + (game.stars - banked.stars) * 20 + cleared * 8;
+  banked = { score: banked.score + scoreParts * 500, stars: game.stars };
   if (gain > 0) {
     parts += gain;
     earned += gain;
@@ -181,30 +182,47 @@ window.addEventListener("keydown", event => {
 });
 window.addEventListener("keyup", event => keys.delete(event.code));
 window.addEventListener("blur", clearInput);
+const host = window.vkGameHost;
+let adBusy = false;
+let doubled = false;
+let rewardNotice = "";
+
 function quiet() {
   if (active()) pause();
   Sound.hush();
 }
 function updateVisibility() {
-  if (document.hidden || window.vkGameHost?.hidden) quiet();
-  // Дальше полёт и звук продолжатся по нажатию игрока («Продолжить»).
+  if (document.hidden || host?.hidden) quiet();
 }
 document.addEventListener("visibilitychange", updateVisibility);
 addEventListener("vk-game-visibility", updateVisibility);
-// Во время рекламного ролика игра молчит, после него звук возвращается
-addEventListener("vk-ad", (e) => {
-  if (e.detail.on) quiet();
-  else if (!document.hidden && !window.vkGameHost?.hidden && game.mode !== "paused") Sound.unlock();
+addEventListener("vk-ad", event => {
+  if (event.detail.on) quiet();
+  else if (!document.hidden && !host?.hidden && game.mode !== "paused") Sound.unlock();
 });
-// Реклама VK между зонами: не чаще раза в 2 минуты и никогда сразу после запуска
-let adBusy = false;
-async function adBreak() {
-  if (adBusy) return false;
-  adBusy = true;
-  await window.vkGameHost?.interstitial();
-  adBusy = false;
-  return true;
+addEventListener("vk-reward-ready", refreshRewards);
+
+for (const type of ["pointerdown", "pointerup", "click", "keydown", "touchstart", "mousedown"]) {
+  addEventListener(type, event => {
+    if (!adBusy && !host?.adShowing) return;
+    event.stopImmediatePropagation();
+    if (event.cancelable) event.preventDefault();
+  }, { capture: true, passive: false });
 }
+
+async function showAd(kind) {
+  if (adBusy || !host?.inVk || host.adShowing) return false;
+  if (kind === "rewarded" && !host.rewardReady) return false;
+  adBusy = true;
+  try {
+    return await host[kind]();
+  } catch {
+    return false;
+  } finally {
+    adBusy = false;
+  }
+}
+
 
 function currentMove() {
   const pressed = [...keys].map(key => directions[key]);
@@ -288,6 +306,8 @@ function start() {
   told = new Set();
   banked = { score: 0, stars: 0 };
   earned = 0;
+  doubled = false;
+  rewardNotice = "";
   view.reset();
   game.start(level, { endless: flight === "endless", perks });
 }
@@ -409,7 +429,7 @@ function paintMode() {
       showPanel(`<div class="eyebrow">РЕЙД ЗАВЕРШЁН · ${LEVELS[game.level].name.toUpperCase()}</div>
         <h2 id="panel-title">Цитадель пала!</h2>
         <p class="result-score">◆ ${game.score} · <span class="star">★</span> ${game.stars} из ${ZONES.length}</p>${facts()}
-        <p>«Стриж» прошёл весь каньон${game.retries ? "" : " — и ни разу не был сбит"}. Детали за рейд: <b class="gain">+⚙ ${earned}</b></p>${rewardOffer()}
+        <p>«Стриж» прошёл весь каньон${game.retries || game.revived ? "" : " — и ни разу не был сбит"}. Детали за рейд: <b class="gain">+⚙ ${earned}</b></p>${rewardOffer()}
         <button class="primary" data-action="retry">Новый рейд</button>
         <div class="pair"><button class="choice" data-action="shop">Мастерская</button><button class="choice" data-action="dock">В меню</button></div>`);
       confetti();
@@ -420,7 +440,7 @@ function paintMode() {
       showPanel(`<div class="eyebrow">ПОТЕРЯ СВЯЗИ · ЗОНА ${game.zone} ИЗ ${ZONES.length}</div>
         <h2 id="panel-title">«Стриж» сбит</h2>
         <p class="result-score">◆ ${game.score}</p>${facts()}
-        <p class="tip">${tip}</p>
+        <p class="tip">${tip}</p>${rewardOffer()}
         <button class="primary" data-action="again">Ещё раз с этой зоны</button>
         <p class="note">Модули останутся, стражи станут слабее, счёт −25%.</p>
         <div class="pair"><button class="choice" data-action="retry">Новый рейд</button><button class="choice" data-action="dock">В меню</button></div>`);
@@ -449,10 +469,68 @@ function confetti() {
   setTimeout(() => box.remove(), 4600);
 }
 // Кнопка «детали ×2 за ролик» — только в VK-версии (там эту функцию подменяют)
-let rewardOffer = () =>
-  window.vkGameHost?.rewardReady && earned > 0
-    ? `<button class="choice reward" data-action="double">▶ Ролик: детали ×2 (+⚙ ${earned})</button>`
-    : "";
+function rewardButtons() {
+  if (!host?.inVk || !host.rewardReady) return "";
+  const revive = game.mode === "lost" && !game.revived
+    ? '<button class="choice reward" data-action="revive">Продолжить полёт за ролик</button>' : "";
+  const double = !doubled && earned > 0
+    ? `<button class="choice reward" data-action="double">Удвоить детали (+⚙ ${earned}) за ролик</button>` : "";
+  return revive + double;
+}
+function rewardOffer() {
+  return host?.inVk
+    ? `<div id="vk-rewards">${rewardButtons()}</div><p class="note" id="vk-reward-note" role="status" hidden></p>` : "";
+}
+function refreshRewards() {
+  const box = id("vk-rewards");
+  if (adBusy || !box || (game.mode !== "lost" && game.mode !== "won")) return;
+  const buttons = rewardButtons();
+  const focused = box.contains(document.activeElement);
+  const template = document.createElement("template");
+  template.innerHTML = buttons;
+  if (box.innerHTML !== template.innerHTML) {
+    box.replaceChildren(template.content);
+    if (focused) id("panel-body").querySelector("button")?.focus({ preventScroll: true });
+  }
+  const note = id("vk-reward-note");
+  note.textContent = rewardNotice;
+  note.hidden = !rewardNotice;
+}
+async function claimReward(action, button) {
+  const mode = game.mode;
+  if ((mode !== "lost" && mode !== "won") || button.disabled) return;
+  const revive = action === "revive";
+  if (revive ? mode !== "lost" || game.revived : doubled || earned <= 0) return;
+
+  button.disabled = true;
+  const shown = await showAd("rewarded");
+  if (game.mode !== mode) return;
+  button.disabled = false;
+  if (!shown) {
+    rewardNotice = "Ролик недоступен. Можно попробовать снова.";
+    refreshRewards();
+    return;
+  }
+  if (revive) {
+    rewardNotice = "";
+    clearInput();
+    if (game.revive()) {
+      if (!document.hidden && !host.hidden) Sound.unlock();
+      updateVisibility();
+    }
+  } else {
+    doubled = true;
+    const gift = earned;
+    parts += gift;
+    earned += gift;
+    save();
+    paintRecord();
+    for (const amount of id("panel-body").querySelectorAll(".gain")) amount.textContent = `+⚙ ${earned}`;
+    rewardNotice = `Получено дополнительно +⚙ ${gift}`;
+    refreshRewards();
+    if (!document.hidden && !host.hidden) Sound.module();
+  }
+}
 
 id("panel-body").addEventListener("click", async event => {
   if (adBusy) return; // во время ролика кнопки молчат
@@ -476,29 +554,14 @@ id("panel-body").addEventListener("click", async event => {
     const mode = game.mode;
     Sound.unlock();
     if (action === "module") Sound.module();
-    if (mode !== "paused") await adBreak();
+    if (mode !== "paused") await showAd("interstitial");
     if (game.mode !== mode) return;
     if (action === "retry") start();
     else if (action === "again") again();
     else game.upgrade(button.dataset.kind);
     updateVisibility(); // игру свернули во время ролика — полёт ждёт на паузе
-  } else if (action === "double") {
-    // Ролик за награду: игрок сам нажал кнопку, на которой написано, сколько деталей получит
-    if (button.disabled) return;
-    button.disabled = true;
-    const gift = earned;
-    adBusy = true;
-    const shown = await window.vkGameHost?.rewarded();
-    adBusy = false;
-    if (shown && gift > 0) {
-      parts += gift;
-      earned = 0;
-      save();
-      paintRecord();
-      button.textContent = `Получено: +⚙ ${gift}`;
-      Sound.module();
-    } else button.textContent = "Ролик не загрузился";
-    updateVisibility();
+  } else if (action === "double" || action === "revive") {
+    await claimReward(action, button);
   } else more(action, button);
 });
 
@@ -739,5 +802,5 @@ function frame(ms) {
 
 id("start").disabled = false;
 id("load").hidden = true;
-window.vkGameHost?.bannerWhen(() => !active());
+host?.bannerWhen(() => game.mode === "menu" && !adBusy);
 requestAnimationFrame(frame);

@@ -1,14 +1,14 @@
 // Сцена «Грозового каньона»: стены и дно едут навстречу, истребитель стоит в плоскости z = 0.
 // Правила (rules.js) ничего не знают о графике; здесь только то, что видно.
-import { T, GEO, TAU, V, clamp, hot, lit, part, at, flare } from "./kit.js?v=ac9603e7";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=ac9603e7";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=ac9603e7";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=ac9603e7";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=ac9603e7";
-import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=ac9603e7";
-import { createFx, tone, GLOW, SMOKE, FIRE, RING, STAR } from "./fx.js?v=ac9603e7";
-import { jet, wingman, enemyModels, enemyColor, pillar, arch, ridge, ringGate, GEM_GEO, gemMaterial, repairKit, capsule, CAPSULE_COLOR } from "./models.js?v=ac9603e7";
-import { SCROLL, FAR } from "./rules.js?v=ac9603e7";
+import { T, GEO, TAU, V, clamp, hot, lit, part, at, flare } from "./kit.js?v=40ce2712";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=40ce2712";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=40ce2712";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=40ce2712";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=40ce2712";
+import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=40ce2712";
+import { createFx, tone, GLOW, SMOKE, FIRE, RING, STAR } from "./fx.js?v=40ce2712";
+import { jet, wingman, enemyModels, enemyColor, pillar, arch, ridge, ringGate, GEM_GEO, gemMaterial, repairKit, capsule, CAPSULE_COLOR } from "./models.js?v=40ce2712";
+import { SCROLL, FAR } from "./rules.js?v=40ce2712";
 
 // Оформление зон по порядку. rock/rock2 — два оттенка скал, glow — цвет светящихся вкраплений (или null),
 // rain/snow — осадки, lightning — молнии в небе.

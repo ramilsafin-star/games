@@ -27,9 +27,14 @@ export class Audio {
         const data = this.noiseBuffer.getChannelData(0);
         for (let i = 0; i < size; i++) data[i] = Math.random() * 2 - 1;
       }
-      this.ctx.resume();
+      this.ctx.resume().catch(() => {});
       this.syncMusic();
     } catch { /* Игра работает и без звука */ }
+  }
+
+  suspend() {
+    this.setActive(false);
+    this.ctx?.suspend().catch(() => {});
   }
 
   setActive(active) {

@@ -1,6 +1,6 @@
 // Эффекты: искры, огонь, дым, обломки, ударные волны, снаряды, молнии и луч.
-import * as T from '../../vendor/three/three.module.min.js?v=4d3622b6';
-import { Kit, rbox, toyMaterial, BEND_GLSL, hdr } from './kit.js?v=4d3622b6';
+import * as T from '../../vendor/three/three.module.min.js?v=d3800c69';
+import { Kit, rbox, toyMaterial, BEND_GLSL, hdr } from './kit.js?v=d3800c69';
 
 const POINT_VERT = `
 attribute float aSize; attribute vec4 aColor; varying vec4 vColor; uniform float uScale;

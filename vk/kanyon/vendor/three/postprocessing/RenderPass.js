@@ -1,7 +1,7 @@
 import {
 	Color
-} from '../three.module.min.js?v=ec8a7f9e';
-import { Pass } from './Pass.js?v=ec8a7f9e';
+} from '../three.module.min.js?v=a3d819ef';
+import { Pass } from './Pass.js?v=a3d819ef';
 
 /**
  * This class represents a render pass. It takes a camera and a scene and produces

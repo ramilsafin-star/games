@@ -1,8 +1,8 @@
 // Герой: человек с нормальными пропорциями, лицом и одеждой. Руки держат оружие через обратную кинематику,
 // поэтому кисти всегда на рукояти и цевье, какой бы ни была пушка и что бы ни делало тело.
-import * as T from '../../vendor/three/three.module.min.js?v=4d3622b6';
-import { Kit, group, part, toyMaterial, damp } from './kit.js?v=4d3622b6';
-import { makeGun, GUN_POSE } from './guns.js?v=4d3622b6';
+import * as T from '../../vendor/three/three.module.min.js?v=d3800c69';
+import { Kit, group, part, toyMaterial, damp } from './kit.js?v=d3800c69';
+import { makeGun, GUN_POSE } from './guns.js?v=d3800c69';
 
 const COL = {
   skin: 0xf4b98f,

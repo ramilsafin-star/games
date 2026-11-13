@@ -1,5 +1,5 @@
 // Финальная обработка кадра: свечение ярких мест, мягкое ограничение яркости без потери цвета и лёгкая виньетка.
-import * as T from '../../vendor/three/three.module.min.js?v=4d3622b6';
+import * as T from '../../vendor/three/three.module.min.js?v=d3800c69';
 
 const VERT = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }';
 

@@ -1,8 +1,8 @@
 // «Грозовой каньон»: управление, приборы, панели, звук и главный цикл.
-import { LEVELS, ZONES, PERKS, PERK_COST, Raid } from "./rules.js?v=ac9603e7";
-import { CanyonView } from "./view.js?v=ac9603e7";
-import { Sound } from "./sound.js?v=ac9603e7";
-import { readStorage, writeStorage } from "./kit.js?v=ac9603e7";
+import { LEVELS, ZONES, PERKS, PERK_COST, Raid } from "./rules.js?v=40ce2712";
+import { CanyonView } from "./view.js?v=40ce2712";
+import { Sound } from "./sound.js?v=40ce2712";
+import { readStorage, writeStorage } from "./kit.js?v=40ce2712";
 
 const id = name => document.getElementById(name);
 const canvas = id("stage");
@@ -119,8 +119,9 @@ let earned = 0; // деталей за этот полёт
 
 // Детали начисляются по ходу: за каждую пройденную зону, задания и каждые 500 очков
 function bank(cleared = 0) {
-  const gain = Math.max(0, Math.floor((game.score - banked.score) / 500)) + (game.stars - banked.stars) * 20 + cleared * 8;
-  banked = { score: Math.max(banked.score, game.score), stars: game.stars };
+  const scoreParts = Math.max(0, Math.floor((game.score - banked.score) / 500));
+  const gain = scoreParts + (game.stars - banked.stars) * 20 + cleared * 8;
+  banked = { score: banked.score + scoreParts * 500, stars: game.stars };
   if (gain > 0) {
     parts += gain;
     earned += gain;
@@ -390,7 +391,7 @@ function paintMode() {
       showPanel(`<div class="eyebrow">РЕЙД ЗАВЕРШЁН · ${LEVELS[game.level].name.toUpperCase()}</div>
         <h2 id="panel-title">Цитадель пала!</h2>
         <p class="result-score">◆ ${game.score} · <span class="star">★</span> ${game.stars} из ${ZONES.length}</p>${facts()}
-        <p>«Стриж» прошёл весь каньон${game.retries ? "" : " — и ни разу не был сбит"}. Детали за рейд: <b class="gain">+⚙ ${earned}</b></p>${rewardOffer()}
+        <p>«Стриж» прошёл весь каньон${game.retries || game.revived ? "" : " — и ни разу не был сбит"}. Детали за рейд: <b class="gain">+⚙ ${earned}</b></p>${rewardOffer()}
         <button class="primary" data-action="retry">Новый рейд</button>
         <div class="pair"><button class="choice" data-action="shop">Мастерская</button><button class="choice" data-action="dock">В меню</button></div>`);
       confetti();
@@ -401,7 +402,7 @@ function paintMode() {
       showPanel(`<div class="eyebrow">ПОТЕРЯ СВЯЗИ · ЗОНА ${game.zone} ИЗ ${ZONES.length}</div>
         <h2 id="panel-title">«Стриж» сбит</h2>
         <p class="result-score">◆ ${game.score}</p>${facts()}
-        <p class="tip">${tip}</p>
+        <p class="tip">${tip}</p>${rewardOffer()}
         <button class="primary" data-action="again">Ещё раз с этой зоны</button>
         <p class="note">Модули останутся, стражи станут слабее, счёт −25%.</p>
         <div class="pair"><button class="choice" data-action="retry">Новый рейд</button><button class="choice" data-action="dock">В меню</button></div>`);

@@ -51,7 +51,7 @@ export class Game {
     this.mode = 'menu';
     this.level = level;
     this.ranks = ranks;
-    this.maxHp = 100 + (ranks.health || 0) * 10;
+    this.maxHp = 100 + (ranks.health || 0) * 15;
     this.hp = this.maxHp;
     this.score = 0;
     this.kills = 0;
@@ -90,6 +90,7 @@ export class Game {
     this.bonusWeapon = null;
     this.attack = null;
     this.sweep = null;
+    this.ram = null;
     this.speed = 9;
     this.time = 0;
     this.spawnTimer = 1.6;
@@ -231,11 +232,11 @@ export class Game {
     return pickup;
   }
 
-  // На бонусной зоне огонь сильнее: это награда, а не испытание
-  blasterPower() {
-    return this.power * (1 + (this.ranks.power || 0) * 0.12);
+  weaponPower() {
+    return this.power * (1 + (this.ranks.power || 0) * 0.15);
   }
 
+  // На бонусной зоне огонь сильнее: это награда, а не испытание
   fireBoost() {
     return this.phase === 'bonus' ? 2 : 1;
   }
@@ -260,7 +261,7 @@ export class Game {
     const target = this.aim();
     const slope = target ? clamp((target.x - x) / Math.max(3, z - target.z), -0.18, 0.18) : 0;
     const n = w.pellets || 1;
-    const damage = w.damage * (this.weapon === 'blaster' ? this.blasterPower() : this.power) * this.fireBoost();
+    const damage = w.damage * this.weaponPower() * this.fireBoost();
     for (let i = 0; i < n; i++) {
       const fan = n > 1 ? (i - (n - 1) / 2) * w.arc : 0;
       const jitter = w.jitter ? (this.random() - 0.5) * 2 * w.jitter : 0;
@@ -275,7 +276,7 @@ export class Game {
     const seen = new Set();
     let current = this.aim(4.6);
     const hitAny = Boolean(current);
-    let damage = w.damage * this.power * this.fireBoost();
+    let damage = w.damage * this.weaponPower() * this.fireBoost();
     for (let i = 0; i < w.chain && current; i++) {
       seen.add(current.id);
       points.push({ x: current.x, z: current.z });
@@ -304,7 +305,7 @@ export class Game {
     if (this.beamTick > 0) return;
     this.beamTick += w.tick / this.rate;
     const x = this.x + MUZZLE_X;
-    const damage = w.damage * this.power * this.fireBoost();
+    const damage = w.damage * this.weaponPower() * this.fireBoost();
     for (const e of this.enemies.slice()) {
       if (e.hp > 0 && e.z < HERO_Z && e.z > -46 && Math.abs(e.x - x) < e.radius + 0.3) this.hit(e, damage);
     }
@@ -421,7 +422,7 @@ export class Game {
     const same = this.weapon === weapon;
     const w = WEAPONS[weapon];
     this.weapon = weapon;
-    const duration = (w.time || 0) + (w.time ? (this.ranks.duration || 0) * 2 : 0);
+    const duration = (w.time || 0) + (w.time ? (this.ranks.duration || 0) * 1.5 : 0);
     this.weaponTime = same ? Math.max(this.weaponTime, Math.min(duration * Math.max(1.5, multiplier), this.weaponTime + duration * multiplier)) : duration * multiplier;
     this.weaponMax = this.weaponTime;
     this.beamTick = 0;
@@ -450,6 +451,7 @@ export class Game {
     this.boss = null;
     this.attack = null;
     this.sweep = null;
+    this.ram = null;
     this.hazards = [];
     this.bullets = [];
     this.pickups = [];
@@ -624,7 +626,7 @@ export class Game {
       }
       if (this.spawnTimer <= 0) this.spawnWave();
       if (this.pickupTimer <= 0) {
-        const type = this.hp < this.maxHp * 0.85 ? 'heal' : ['gem', 'shield'][this.pickupIndex % 2];
+        const type = this.hp <= this.maxHp - 20 ? 'heal' : ['gem', 'shield', 'gem'][this.pickupIndex % 3];
         this.pickupIndex++;
         this.addPickup(type, LANES[Math.floor(this.random() * 3)], -42);
         this.pickupTimer = 7;
@@ -633,7 +635,7 @@ export class Game {
       // Клетка падает сверху прямо перед боссом: можно сбить её ради пушки, а можно бить босса
       if (this.cageTimer <= 0) {
         const away = [0, 1, 2].filter((i) => Math.abs(LANES[i] - this.x) > 1.6);
-        this.spawnCage(away[Math.floor(this.random() * away.length)], -12, 7 + this.level * 2, true);
+        this.spawnCage(away[Math.floor(this.random() * away.length)], -16, 9 + this.level * 4, true);
         this.cageTimer = 11;
       }
       if (this.spawnTimer <= 0 && this.boss) {
@@ -690,36 +692,56 @@ export class Game {
   }
 
   updateBoss(e, dt) {
+    if (this.ram) {
+      const ram = this.ram;
+      const before = ram.time;
+      ram.time = Math.min(ram.duration, ram.time + dt);
+      const progress = ram.time / ram.duration;
+      e.x = ram.x;
+      e.z = -17 + Math.sin(progress * Math.PI) * (HERO_Z + 17);
+      if (before < ram.duration / 2 && progress >= 0.5 && Math.abs(this.x - ram.x) < 1.1) this.hurt(24);
+      if (progress >= 1) this.ram = null;
+      return;
+    }
     e.z = Math.min(-17, e.z + dt * 7);
     if (this.sweep) {
       const sweep = this.sweep;
       sweep.time += dt;
-      sweep.x = sweep.from + (sweep.to - sweep.from) * Math.min(1, sweep.time / 1.6);
+      sweep.x = sweep.from + (sweep.to - sweep.from) * Math.min(1, sweep.time / sweep.duration);
       if (Math.abs(this.x - sweep.x) < 0.75) this.hurt(18);
-      if (sweep.time >= 1.6) this.sweep = null;
+      if (sweep.time >= sweep.duration) this.sweep = null;
     }
-    e.x = Math.sin(e.age * (this.level === 1 ? 1 : 0.7)) * 2.6;
+    if (this.level === 0 && this.attack) e.x += (this.attack.x - e.x) * Math.min(1, dt * 9);
+    else e.x = Math.sin(e.age * (this.level === 1 ? 1 : 0.7)) * 2.6;
     if (e.z < -19) return;
     e.shot -= dt;
     if (!this.attack && e.shot <= BOSS_WARNING[this.level]) {
       const x = LANES.reduce((nearest, lane) => Math.abs(lane - this.x) < Math.abs(nearest - this.x) ? lane : nearest);
-      this.attack = { x, direction: this.x >= 0 ? 1 : -1 };
+      this.attack = { x, direction: this.x >= 0 ? 1 : -1, enraged: e.hp <= e.maxHp * 0.6 };
       this.emit('bossCharge', { level: this.level, x });
     }
     if (e.shot > 0 || !this.attack) return;
-    const { x, direction } = this.attack;
+    const { x, direction, enraged } = this.attack;
     this.attack = null;
-    e.shot = [3.2, 4.7, 4.8][this.level];
+    e.shot = [3.8, 4.7, 4.8][this.level] * (enraged ? 0.78 : 1);
     if (this.level === 0) {
-      this.hazards.push({ id: ++this.serial, x, z: e.z + 2, vx: 0, vz: 23, radius: 1.12, kind: 'rush' });
+      this.ram = { x, time: 0, duration: enraged ? 0.72 : 0.9 };
+      e.x = x;
+      e.z = -17;
     } else if (this.level === 1) {
       const lane = LANES.indexOf(x);
       const side = lane === 1 ? 0 : 1;
       const wall = this.spawnEnemy('brute', x, -12);
       Object.assign(wall, { type: 'wall', hp: 9, maxHp: 9, hurt: 16, speed: 2.3 });
       this.spawnEnemy('spitter', LANES[side], -23);
+      if (enraged) {
+        for (const flank of [LANES[0], LANES[2]]) {
+          const barrel = this.spawnEnemy('barrel', flank, -18);
+          barrel.barrelKind = 'blast';
+        }
+      }
     } else {
-      this.sweep = { from: -3.1 * direction, to: 3.1 * direction, x: -3.1 * direction, time: 0 };
+      this.sweep = { from: -3.1 * direction, to: 3.1 * direction, x: -3.1 * direction, time: 0, duration: enraged ? 1.2 : 1.6 };
     }
     this.emit('bossShot');
   }
@@ -792,7 +814,7 @@ export class Game {
       }
       // Близкие пушки и кристаллы сами тянутся к герою
       const dx = this.x - p.x;
-      if ((p.type === 'weapon' || p.type === 'gem') && Math.abs(dx) < 2.4 + (this.ranks.magnet || 0) * 0.6 && p.z > HERO_Z - 7) p.x += dx * Math.min(1, dt * 7);
+      if ((p.type === 'weapon' || p.type === 'gem') && Math.abs(dx) < 2.4 + (this.ranks.magnet || 0) * 0.9 && p.z > HERO_Z - 8) p.x += dx * Math.min(1, dt * 7);
       if (Math.abs(p.z - HERO_Z) < 1.2 && Math.abs(p.x - this.x) < 1.3) {
         this.collect(p);
         p.z = 20;

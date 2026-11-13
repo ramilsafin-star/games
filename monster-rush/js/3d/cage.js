@@ -1,8 +1,8 @@
 // Клетки с супероружием, числа прочности, столбы бонусной зоны, сундук и подбираемые предметы.
-import * as T from '../../vendor/three/three.module.min.js?v=4d3622b6';
-import { Kit, group, part, toyMaterial, metalMaterial, glowMaterial, canvasTexture, flat, place, hdr } from './kit.js?v=4d3622b6';
-import { makeGun } from './guns.js?v=4d3622b6';
-import { WEAPONS, BONUS_ROWS } from '../game.js?v=4d3622b6';
+import * as T from '../../vendor/three/three.module.min.js?v=d3800c69';
+import { Kit, group, part, toyMaterial, metalMaterial, glowMaterial, canvasTexture, flat, place, hdr } from './kit.js?v=d3800c69';
+import { makeGun } from './guns.js?v=d3800c69';
+import { WEAPONS, BONUS_ROWS } from '../game.js?v=d3800c69';
 
 const toy = toyMaterial({ roughness: 0.5 });
 const metal = metalMaterial();

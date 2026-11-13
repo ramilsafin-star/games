@@ -266,6 +266,7 @@ export class Raid {
     this.comboUntil = 0;
     this.bestCombo = 0;
     this.retries = 0;
+    this.revived = false;
     this.ease = 0; // сколько раз подряд игрок погиб в этой зоне
     this.clean = true; // зона без единой пробоины
     this.stars = 0; // выполненные задания зон
@@ -406,6 +407,20 @@ export class Raid {
     this.modules.push(kind);
     this.offer = [];
     this.nextZone();
+  }
+
+  revive() {
+    if (this.mode !== "lost" || this.revived) return false;
+    this.revived = true;
+    const p = this.player;
+    p.health = Math.round(p.maxHealth * 0.65);
+    p.safe = 2.5;
+    p.cooldown = 0;
+    this.shots.length = 0;
+    this.hazards.length = 0;
+    this.mode = "play";
+    this.emit("repair");
+    return true;
   }
 
   // после гибели: та же зона заново, модули остаются, счёт меньше на четверть, враги слабее

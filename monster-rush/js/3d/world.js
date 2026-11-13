@@ -1,6 +1,6 @@
 // Мир вокруг дороги: небо, горы, облака, дорога и разные пейзажи для трёх миров.
-import * as T from '../../vendor/three/three.module.min.js?v=4d3622b6';
-import { Kit, group, toyMaterial, glowMaterial, canvasTexture, rand, rimColor, rimPower, flat, place, hdr } from './kit.js?v=4d3622b6';
+import * as T from '../../vendor/three/three.module.min.js?v=d3800c69';
+import { Kit, group, toyMaterial, glowMaterial, canvasTexture, rand, rimColor, rimPower, flat, place, hdr } from './kit.js?v=d3800c69';
 
 export const PALETTES = [
   {

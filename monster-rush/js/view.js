@@ -1,14 +1,14 @@
 // Сцена: связывает правила игры с графикой. Сама ничего не решает, только показывает.
-import * as T from '../vendor/three/three.module.min.js?v=4d3622b6';
-import { BONUS_ROWS, HERO_Z, WEAPONS } from './game.js?v=4d3622b6';
-import { BEND_GLSL, damp, group } from './3d/kit.js?v=4d3622b6';
-import { World } from './3d/world.js?v=4d3622b6';
-import { Hero } from './3d/hero.js?v=4d3622b6';
-import { MonsterView, CHUNK_COLORS } from './3d/monsters.js?v=4d3622b6';
-import { CageView, ColumnView, FinishView, ChestView, PickupView } from './3d/cage.js?v=4d3622b6';
-import { makeGun } from './3d/guns.js?v=4d3622b6';
-import { FX } from './3d/fx.js?v=4d3622b6';
-import { Post } from './3d/post.js?v=4d3622b6';
+import * as T from '../vendor/three/three.module.min.js?v=d3800c69';
+import { BONUS_ROWS, HERO_Z, WEAPONS } from './game.js?v=d3800c69';
+import { BEND_GLSL, damp, group } from './3d/kit.js?v=d3800c69';
+import { World } from './3d/world.js?v=d3800c69';
+import { Hero } from './3d/hero.js?v=d3800c69';
+import { MonsterView, CHUNK_COLORS } from './3d/monsters.js?v=d3800c69';
+import { CageView, ColumnView, FinishView, ChestView, PickupView } from './3d/cage.js?v=d3800c69';
+import { makeGun } from './3d/guns.js?v=d3800c69';
+import { FX } from './3d/fx.js?v=d3800c69';
+import { Post } from './3d/post.js?v=d3800c69';
 
 const SHOT_Y = 1.42;
 const FRAME_LIMIT = 27;
@@ -559,12 +559,10 @@ export class View {
       this.sweepBeam.scale.y = this.sweepDir.length();
       this.sweepBeam.quaternion.setFromUnitVectors(this.sweepBeam.up, this.sweepDir.normalize());
     }
+    if (game.ram && boss) {
+      fx.flash(boss.x, 0.12, boss.z - 2, 0xff5538, 2.5, 6.5, 2.3, 0);
+    }
     for (const h of game.hazards) {
-      if (h.kind === 'rush') {
-        fx.bolt(h.x, 0.55, h.z, 0, 0, 1, 3.2, 1.45, 0xff5538, 2);
-        fx.orb(h.x, 0.6, h.z, 0.85, 0xffa542, 2.1);
-        continue;
-      }
       fx.orb(h.x, 1.25, h.z, h.radius * 1.15, 0xff2f4a, 2);
       fx.orb(h.x, 1.25, h.z, h.radius * 0.62, 0xffe08a, 3.1);
       if (trail) fx.flash(h.x, 1.25, h.z - 0.3, 0xff5a3c, 0.9, 0.16, 1.5, 0);
