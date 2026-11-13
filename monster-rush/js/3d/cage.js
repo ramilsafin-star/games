@@ -1,8 +1,8 @@
 // Клетки с супероружием, числа прочности, столбы бонусной зоны, сундук и подбираемые предметы.
-import * as T from '../../vendor/three/three.module.min.js';
-import { Kit, group, part, toyMaterial, metalMaterial, glowMaterial, canvasTexture, flat, place, hdr } from './kit.js';
-import { makeGun } from './guns.js';
-import { WEAPONS, BONUS_ROWS } from '../game.js';
+import * as T from '../../vendor/three/three.module.min.js?v=4d3622b6';
+import { Kit, group, part, toyMaterial, metalMaterial, glowMaterial, canvasTexture, flat, place, hdr } from './kit.js?v=4d3622b6';
+import { makeGun } from './guns.js?v=4d3622b6';
+import { WEAPONS, BONUS_ROWS } from '../game.js?v=4d3622b6';
 
 const toy = toyMaterial({ roughness: 0.5 });
 const metal = metalMaterial();
@@ -95,8 +95,9 @@ export class NumberMesh {
 }
 
 const panelCache = new Map();
-function panelTexture(weapon) {
-  if (panelCache.has(weapon)) return panelCache.get(weapon);
+function panelTexture(weapon, extended = false) {
+  const key = extended ? weapon + ':extended' : weapon;
+  if (panelCache.has(key)) return panelCache.get(key);
   const w = WEAPONS[weapon];
   const hex = `#${new T.Color(w.color).getHexString()}`;
   const tex = canvasTexture(420, 300, (c, W, H) => {
@@ -112,9 +113,9 @@ function panelTexture(weapon) {
     c.font = '900 52px "Avenir Next", "Arial Black", Arial, sans-serif';
     c.textAlign = 'center';
     c.textBaseline = 'middle';
-    c.fillText(w.name.toUpperCase(), W / 2, H - 58, W - 60);
+    c.fillText(w.name.toUpperCase() + (extended ? ' · ×2' : ''), W / 2, H - 58, W - 60);
   });
-  panelCache.set(weapon, tex);
+  panelCache.set(key, tex);
   return tex;
 }
 
@@ -302,6 +303,8 @@ export class CageView {
     this.holder.rotation.y = time * 1.5;
     this.holder.position.y = 1.25 + Math.sin(time * 2.4) * 0.07;
     if (this.gun.spin) this.gun.spin.rotation.z = time * 6;
+    const panel = panelTexture(this.weapon, item.duration > 1);
+    if (this.panel.material.map !== panel) this.panel.material.map = panel;
     this.number.set(item.hp);
     const f = Math.max(0, item.hp / item.maxHp);
     this.barFill.scale.set(Math.max(0.001, 1.64 * f), 0.075, 1);

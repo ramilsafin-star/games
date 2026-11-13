@@ -1,14 +1,14 @@
 // Сцена: связывает правила игры с графикой. Сама ничего не решает, только показывает.
-import * as T from '../vendor/three/three.module.min.js';
-import { BONUS_ROWS, HERO_Z, WEAPONS } from './game.js';
-import { BEND_GLSL, damp, group } from './3d/kit.js';
-import { World } from './3d/world.js';
-import { Hero } from './3d/hero.js';
-import { MonsterView, CHUNK_COLORS } from './3d/monsters.js';
-import { CageView, ColumnView, FinishView, ChestView, PickupView } from './3d/cage.js';
-import { makeGun } from './3d/guns.js';
-import { FX } from './3d/fx.js';
-import { Post } from './3d/post.js';
+import * as T from '../vendor/three/three.module.min.js?v=4d3622b6';
+import { BONUS_ROWS, HERO_Z, WEAPONS } from './game.js?v=4d3622b6';
+import { BEND_GLSL, damp, group } from './3d/kit.js?v=4d3622b6';
+import { World } from './3d/world.js?v=4d3622b6';
+import { Hero } from './3d/hero.js?v=4d3622b6';
+import { MonsterView, CHUNK_COLORS } from './3d/monsters.js?v=4d3622b6';
+import { CageView, ColumnView, FinishView, ChestView, PickupView } from './3d/cage.js?v=4d3622b6';
+import { makeGun } from './3d/guns.js?v=4d3622b6';
+import { FX } from './3d/fx.js?v=4d3622b6';
+import { Post } from './3d/post.js?v=4d3622b6';
 
 const SHOT_Y = 1.42;
 const FRAME_LIMIT = 27;
@@ -89,6 +89,16 @@ export class View {
 
     this.muzzleAt = new T.Vector3();
     this.beamTo = new T.Vector3();
+    this.warning = new T.Mesh(new T.PlaneGeometry(1, 1), new T.MeshBasicMaterial({ color: 0xff314c, transparent: true, opacity: 0, depthWrite: false, side: T.DoubleSide }));
+    this.warning.rotation.x = -Math.PI / 2;
+    this.warning.renderOrder = 3;
+    this.warning.visible = false;
+    this.scene.add(this.warning);
+    this.sweepBeam = new T.Mesh(new T.CylinderGeometry(0.44, 0.66, 1, 12), new T.MeshBasicMaterial({ color: 0xff7628, transparent: true, opacity: 0.86, depthWrite: false }));
+    this.sweepBeam.visible = false;
+    this.sweepFrom = new T.Vector3();
+    this.sweepDir = new T.Vector3();
+    this.scene.add(this.sweepBeam);
     this.makeDemo();
     this.resize();
     this.observer = new ResizeObserver(() => this.resize());
@@ -299,6 +309,13 @@ export class View {
         fx.spark(e.x, 1, e.z, 0x8cfff1, 60, 16, 0.32, 0.8);
         fx.lamp(e.x, 3, e.z, 0x8cfff1, 150);
         this.shake = 0.65;
+        break;
+      case 'barrelBurst':
+        if (e.kind !== 'gem') {
+          const color = e.kind === 'cryo' ? 0x74e7ff : 0xd589ff;
+          fx.ring(e.x, e.z, color, 7, 0.55);
+          fx.spark(e.x, 1.1, e.z, color, 18, 6, 0.22, 0.5);
+        }
         break;
       case 'bossShot':
         fx.flash(this.bossAt.x, 3.4, this.bossAt.z + 2, 0xff4030, 5, 0.22, 2.6, 0);
@@ -523,7 +540,31 @@ export class View {
         fx.bolt(b.x, SHOT_Y, b.z, b.vx, 0, b.vz, long * 0.85, wide * 0.8, 0xffffff, 2.9);
       }
     }
+    const warning = game.attack;
+    const boss = game.boss;
+    this.warning.visible = Boolean(warning && boss);
+    if (this.warning.visible) {
+      const wide = game.level === 2;
+      this.warning.position.set(wide ? 0 : warning.x, 0.09, (boss.z + HERO_Z) / 2);
+      this.warning.scale.set(wide ? 7.65 : 2.15, HERO_Z - boss.z, 1);
+      this.warning.material.color.setHex(game.level === 1 ? 0xd35aff : 0xff314c);
+      this.warning.material.opacity = 0.27 + 0.18 * (1 - Math.min(1, boss.shot));
+    }
+    this.sweepBeam.visible = Boolean(game.sweep && boss);
+    if (this.sweepBeam.visible) {
+      this.sweepFrom.set(boss.x, 2.1, boss.z + 1.5);
+      this.sweepDir.set(game.sweep.x, 0.85, HERO_Z);
+      this.sweepBeam.position.copy(this.sweepFrom).lerp(this.sweepDir, 0.5);
+      this.sweepDir.sub(this.sweepFrom);
+      this.sweepBeam.scale.y = this.sweepDir.length();
+      this.sweepBeam.quaternion.setFromUnitVectors(this.sweepBeam.up, this.sweepDir.normalize());
+    }
     for (const h of game.hazards) {
+      if (h.kind === 'rush') {
+        fx.bolt(h.x, 0.55, h.z, 0, 0, 1, 3.2, 1.45, 0xff5538, 2);
+        fx.orb(h.x, 0.6, h.z, 0.85, 0xffa542, 2.1);
+        continue;
+      }
       fx.orb(h.x, 1.25, h.z, h.radius * 1.15, 0xff2f4a, 2);
       fx.orb(h.x, 1.25, h.z, h.radius * 0.62, 0xffe08a, 3.1);
       if (trail) fx.flash(h.x, 1.25, h.z - 0.3, 0xff5a3c, 0.9, 0.16, 1.5, 0);
@@ -648,6 +689,7 @@ export class View {
 
     // Объекты игры
     const seen = new Set();
+    if (menu) this.warning.visible = this.sweepBeam.visible = false;
     if (!menu) {
       this.syncEnemies(vdt, seen, time);
       this.syncPickups(vdt, seen, time);
@@ -667,7 +709,7 @@ export class View {
     // Большая вспышка неба при гибели босса
     this.flashSky = Math.max(0, this.flashSky - dt * 2.2);
     if (this.post.enabled && this.quality > 0) {
-      this.post.final.uniforms.uExposure.value = 1 + this.flashSky * 1.2;
+      this.post.final.uniforms.uExposure.value = 1.06 + this.flashSky * 1.2;
       this.post.render(this.scene, this.camera);
     } else {
       this.renderer.render(this.scene, this.camera);

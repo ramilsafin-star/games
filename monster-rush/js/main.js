@@ -1,6 +1,7 @@
-import { Game, WORLDS, WEAPONS, clamp } from './game.js';
-import { View } from './view.js';
-import { Audio } from './audio.js';
+import { Game, WORLDS, WEAPONS, clamp } from './game.js?v=4d3622b6';
+import { View } from './view.js?v=4d3622b6';
+import { Audio } from './audio.js?v=4d3622b6';
+import { loadProfile, UPGRADES, MAX_RANK, price } from './profile.js?v=4d3622b6';
 
 const $ = (id) => document.getElementById(id);
 const audio = new Audio();
@@ -16,24 +17,75 @@ let flashTimer;
 let bannerTimer;
 let best = 0;
 const keys = new Set();
+let profile = loadProfile();
+let selectedWorld = 0;
 
 try {
   best = Number(localStorage.getItem('monster-rush-best')) || 0;
-  audio.muted = localStorage.getItem('monster-rush-muted') === 'true';
+  const oldMuted = localStorage.getItem('monster-rush-muted') === 'true';
+  audio.muted = (localStorage.getItem('monster-rush-effects') ?? String(!oldMuted)) === 'false';
+  audio.musicEnabled = (localStorage.getItem('monster-rush-music') ?? String(!oldMuted)) !== 'false';
+  profile = loadProfile(JSON.parse(localStorage.getItem('monster-rush-profile-v1') || 'null'));
 } catch { /* без сохранения тоже можно играть */ }
 $('best').textContent = best.toLocaleString('ru');
 
+function saveProfile() {
+  try {
+    localStorage.setItem('monster-rush-profile-v1', JSON.stringify(profile));
+  } catch { /* доступно до перезагрузки */ }
+}
+
+function recordWorld() {
+  profile.best[game.level] = Math.max(profile.best[game.level], game.score - game.stageScore);
+}
+
+function paintProfile() {
+  $('wallet').textContent = profile.gems.toLocaleString('ru');
+  $('shop-wallet').textContent = $('wallet').textContent;
+  const options = WORLDS.map((world, i) => {
+    const label = i <= profile.unlocked ? (profile.best[i] ? ` · рекорд ${profile.best[i].toLocaleString('ru')}` : '') : ' · закрыт';
+    return `<option value="${i}" ${i > profile.unlocked ? 'disabled' : ''}>${world.name}${label}</option>`;
+  });
+  $('world-select').innerHTML = options.join('');
+  $('world-select').value = selectedWorld;
+  $('shop-items').innerHTML = Object.entries(UPGRADES).map(([key, item]) => {
+    const rank = profile.ranks[key], cost = price(key, rank);
+    const max = rank >= MAX_RANK;
+    return `<div class="shop-item"><div><b>${item.name} · ${rank}/${MAX_RANK}</b><small>${item.step}</small></div>
+      <button data-buy="${key}" aria-label="${item.name} · ${max ? 'максимум' : cost + ' кристаллов'}" ${max || profile.gems < cost ? 'disabled' : ''}>${max ? 'Макс.' : '💎 ' + cost}</button></div>`;
+  }).join('');
+}
+
 function updateSound() {
-  $('sound').classList.toggle('muted', audio.muted);
-  $('sound').setAttribute('aria-label', audio.muted ? 'Включить звук' : 'Выключить звук');
-  $('sound').setAttribute('aria-pressed', String(!audio.muted));
+  const silent = audio.muted && !audio.musicEnabled;
+  $('sound').classList.toggle('muted', silent);
+  $('sound').setAttribute('aria-label', silent ? 'Включить звук' : 'Выключить звук');
+  $('sound').setAttribute('aria-pressed', String(!silent));
+  $('sound-effects').checked = !audio.muted;
+  $('music-enabled').checked = audio.musicEnabled;
+}
+
+function saveSound() {
+  audio.syncMusic();
+  updateSound();
+  try {
+    localStorage.setItem('monster-rush-effects', String(!audio.muted));
+    localStorage.setItem('monster-rush-music', String(audio.musicEnabled));
+  } catch { /* доступно до перезагрузки */ }
+}
+
+function vibrate(ms) {
+  if (matchMedia('(pointer: coarse)').matches) navigator.vibrate?.(ms);
 }
 updateSound();
 
 function clearInput() {
   keys.clear();
   pointer = null;
-  if (game) game.targetX = game.x;
+  if (game) {
+    game.targetX = game.x;
+    game.steerSpeed = 0;
+  }
 }
 
 function toast(text, delay = 2200) {
@@ -66,21 +118,28 @@ function onEvent(e) {
   switch (e.type) {
     case 'start':
       clearInput();
-      audio.active = true;
+      audio.setActive(true);
       toast('Веди пальцем, огонь автоматический', 2600);
       break;
     case 'stage':
       clearInput();
-      audio.active = true;
+      audio.setActive(true);
       toast(WORLDS[game.level].name);
       break;
     case 'pause':
       clearInput();
-      audio.active = false;
+      audio.setActive(false);
+      break;
+    case 'gems':
+      profile.gems = Math.min(99999999, profile.gems + e.amount);
+      saveProfile();
       break;
     case 'end':
+      recordWorld();
+      if (e.won) profile.unlocked = Math.min(WORLDS.length - 1, Math.max(profile.unlocked, game.level + 1));
+      saveProfile();
       clearInput();
-      audio.active = false;
+      audio.setActive(false);
       if (game.score > best) {
         best = game.score;
         try {
@@ -90,17 +149,19 @@ function onEvent(e) {
       }
       break;
     case 'resume':
-      audio.active = true;
+      audio.setActive(true);
       break;
     case 'cage':
       if (e.first) toast('Стреляй по клетке: внутри супероружие!', 3400);
+      else if (e.duration > 1) toast('Прочная клетка: супероружие ×2 по времени', 2300);
       break;
     case 'cageBreak':
+      vibrate(24);
       toast('Хватай пушку!', 1300);
       break;
     case 'weapon': {
       const w = WEAPONS[e.weapon];
-      banner(`${w.name.toUpperCase()}!`, w.hint, hex(w.color));
+      banner(`${w.name.toUpperCase()}!`, e.duration > 1 ? 'Двойное время работы' : w.hint, hex(w.color));
       break;
     }
     case 'weaponOut':
@@ -117,12 +178,20 @@ function onEvent(e) {
       toast('Щит поглотил удар', 900);
       break;
     case 'bonus':
-      toast('Разбей все столбы: сундук откроется!', 3000);
+      toast('Разбивай столбы, чтобы заработать больше кристаллов', 3000);
+      break;
+    case 'nova':
+      vibrate(38);
+      break;
+    case 'barrelBurst':
+      if (e.kind === 'cryo') toast('Крио: монстры замедлены', 1200);
+      if (e.kind === 'pulse') toast('Импульс: суперудар +25%', 1200);
       break;
     case 'chest':
       banner('СУНДУК ОТКРЫТ!', `+${e.gems} кристаллов`, '#ffd24a');
       break;
     case 'hurt':
+      vibrate(40);
       clearTimeout(flashTimer);
       $('damage-flash').classList.add('show');
       flashTimer = setTimeout(() => $('damage-flash').classList.remove('show'), 220);
@@ -148,6 +217,8 @@ function showMode() {
   const modal = ['paused', 'upgrade', 'gameover', 'victory'].includes(mode);
   $('overlay').classList.toggle('hidden', !modal);
   $('upgrades').classList.toggle('hidden', mode !== 'upgrade');
+  $('pause-audio').classList.toggle('hidden', mode !== 'paused');
+  if (mode !== 'playing') $('attack-warning').classList.add('hidden');
   $('continue').classList.toggle('hidden', mode === 'upgrade');
   $('results').classList.toggle('hidden', !['gameover', 'victory', 'upgrade'].includes(mode));
   $('overlay').dataset.mode = mode;
@@ -156,7 +227,7 @@ function showMode() {
       paused: ['Передышка', 'Монстры подождут.'],
       upgrade: ['Супермонстр повержен!', 'Выбери усиление для следующего мира. Здоровье +45.'],
       gameover: ['Ещё один забег?', 'Монстры выиграли этот раунд. Разбивай клетки: супероружие решает.'],
-      victory: ['Ты легенда!', 'Три мира спасены, три супербосса повержены.'],
+      victory: ['Ты легенда!', 'Титан пепла повержен. Вулкан спасён!'],
     }[mode];
     $('modal-title').textContent = text[0];
     $('modal-copy').textContent = text[1];
@@ -165,29 +236,31 @@ function showMode() {
     (mode === 'upgrade' ? document.querySelector('[data-upgrade]') : $('continue')).focus({ preventScroll: true });
   }
   if (menu) {
-    audio.active = false;
-    view.setWorld(0);
+    audio.setActive(false);
+    paintProfile();
+    view.setWorld(selectedWorld);
   }
 }
 
 function hud() {
   $('hp').textContent = Math.ceil(game.hp);
-  $('hp-fill').style.width = `${game.hp}%`;
-  $('hp-fill').classList.toggle('low', game.hp < 30);
+  $('hp-fill').style.width = `${100 * game.hp / game.maxHp}%`;
+  $('hp-fill').classList.toggle('low', game.hp < game.maxHp * 0.3);
   $('shield-count').textContent = game.shield ? `🛡 ${game.shield}` : '';
   $('stage-label').textContent = `ЭТАП ${game.level + 1} / 3`;
   $('world-name').textContent = WORLDS[game.level].name;
   $('stage-fill').style.width = `${Math.min(100, (game.time / game.stageTime) * 100)}%`;
   $('score').textContent = game.score.toLocaleString('ru');
-  $('coin-count').textContent = game.coins;
+  $('coin-count').textContent = profile.gems;
   const w = WEAPONS[game.weapon];
   $('weapon').textContent = w.name;
-  $('power').textContent = `Сила ×${game.power.toFixed(1)}`;
+  const power = game.weapon === 'blaster' ? game.blasterPower() : game.power;
+  $('power').textContent = `Сила ×${power.toFixed(2).replace(/0$/, '')}`;
   const box = $('weapon-box');
   box.style.setProperty('--tone', hex(w.color));
   box.classList.toggle('super', Boolean(w.time));
   box.classList.toggle('ending', Boolean(w.time) && game.weaponTime < 3);
-  $('weapon-fill').style.width = w.time ? `${Math.min(100, (game.weaponTime / w.time) * 100)}%` : '0%';
+  $('weapon-fill').style.width = w.time ? `${Math.min(100, (game.weaponTime / (game.weaponMax || w.time)) * 100)}%` : '0%';
   const charged = game.novaCharge >= 100;
   const nova = $('nova');
   nova.classList.toggle('charging', !charged);
@@ -201,22 +274,25 @@ function hud() {
     $('boss-fill').style.width = `${p}%`;
     $('boss-percent').textContent = `${Math.ceil(p)}%`;
   }
+  const warning = game.attack ? ['Таран! Уйди с красной полосы', 'Кристальная стена и плеватель', 'Луч! Уйди к краю'][game.level] : game.sweep ? 'Держись у края!' : '';
+  $('attack-warning').classList.toggle('hidden', !warning || game.mode !== 'playing');
+  if ($('attack-warning').textContent !== warning) $('attack-warning').textContent = warning;
   $('combo').innerHTML = game.combo >= 5 ? `×${Math.min(4, 1 + Math.floor(game.combo / 5))}<small>серия ${game.combo}</small>` : '';
   $('touch-hint').style.opacity = game.mode === 'playing' && game.runTime < 5 ? '1' : '0';
 }
 
-function start() {
+function start(level = selectedWorld) {
   audio.unlock();
-  game.start();
+  game.start(level, profile.ranks);
   showMode();
   $('start').blur();
 }
 
-$('start').addEventListener('click', start);
+$('start').addEventListener('click', () => start());
 $('continue').addEventListener('click', () => {
   audio.unlock();
   if (game.mode === 'paused') game.resume();
-  else start();
+  else start(game.level);
   showMode();
 });
 $('pause').addEventListener('click', () => {
@@ -225,6 +301,8 @@ $('pause').addEventListener('click', () => {
   showMode();
 });
 $('back-menu').addEventListener('click', () => {
+  recordWorld();
+  saveProfile();
   clearInput();
   game.reset();
   showMode();
@@ -236,13 +314,43 @@ document.querySelectorAll('[data-upgrade]').forEach((el) => el.addEventListener(
   showMode();
   el.blur();
 }));
+$('world-select').addEventListener('change', (e) => {
+  selectedWorld = Number(e.target.value);
+  view.setWorld(selectedWorld);
+});
+$('shop-open').addEventListener('click', () => {
+  paintProfile();
+  $('shop').showModal();
+});
+$('shop-close').addEventListener('click', () => $('shop').close());
+$('shop-items').addEventListener('click', (e) => {
+  const key = e.target.closest('[data-buy]')?.dataset.buy;
+  if (!Object.hasOwn(UPGRADES, key)) return;
+  const rank = profile.ranks[key], cost = price(key, rank);
+  if (rank >= MAX_RANK || profile.gems < cost) return;
+  profile.gems -= cost;
+  profile.ranks[key]++;
+  saveProfile();
+  paintProfile();
+  const next = $('shop-items').querySelector(`[data-buy="${key}"]:enabled`);
+  (next || $('shop-close')).focus();
+});
 $('sound').addEventListener('click', () => {
   audio.unlock();
-  audio.toggle();
-  updateSound();
-  try {
-    localStorage.setItem('monster-rush-muted', String(audio.muted));
-  } catch { /* настройка останется до перезагрузки */ }
+  const silent = audio.muted && !audio.musicEnabled;
+  audio.muted = !silent;
+  audio.musicEnabled = silent;
+  saveSound();
+});
+$('sound-effects').addEventListener('change', (e) => {
+  audio.unlock();
+  audio.muted = !e.target.checked;
+  saveSound();
+});
+$('music-enabled').addEventListener('change', (e) => {
+  audio.unlock();
+  audio.musicEnabled = e.target.checked;
+  saveSound();
 });
 $('fullscreen').addEventListener('click', async () => {
   try {
@@ -282,6 +390,7 @@ for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
   });
 }
 window.addEventListener('keydown', (e) => {
+  if ($('shop').open || (e.target.matches('select, input') && e.code !== 'Escape')) return;
   if (['ArrowLeft', 'ArrowRight', 'Space', 'KeyA', 'KeyD', 'Escape', 'KeyP'].includes(e.code)) e.preventDefault();
   if (['ArrowLeft', 'ArrowRight', 'KeyA', 'KeyD'].includes(e.code)) keys.add(e.code);
   if (e.repeat) return;

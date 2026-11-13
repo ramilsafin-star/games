@@ -8,7 +8,7 @@
   <meta name="description" content="Monster Rush — яркий 3D-шутер: герой бежит сквозь три мира, разбивает клетки с супероружием и побеждает гигантских боссов.">
   <title>Monster Rush</title>
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./style.css?v=4d3622b6">
 </head>
 <body class="menu-mode">
   <svg class="svg-defs" aria-hidden="true"><defs>
@@ -34,10 +34,9 @@
       <h1><span>MONSTER</span><em>RUSH</em></h1>
       <p class="intro">Беги вперёд, разбивай клетки, забирай супероружие и побеждай гигантских монстров!</p>
       <button id="start" class="primary" disabled><svg><use href="#i-arrow"/></svg><span id="start-text">ЗАГРУЗКА…</span></button>
-      <div class="menu-stats">
-        <div class="pill p1"><strong>3</strong><span>мира</span></div>
-        <div class="pill p2"><strong>3</strong><span>супербосса</span></div>
-        <div class="pill p3"><strong>6</strong><span>суперпушек</span></div>
+      <div class="menu-actions">
+        <label class="world-select">Мир <select id="world-select"></select></label>
+        <button id="shop-open" class="pill"><svg><use href="#i-gem"/></svg><b id="wallet">0</b><span>Улучшения</span></button>
       </div>
       <div class="menu-foot"><span class="how">Веди пальцем или ← → · Пробел — суперудар</span><span class="best">Рекорд <b id="best">0</b></span></div>
     </section>
@@ -78,6 +77,7 @@
       <div id="touch-hint" class="touch-hint">← Веди пальцем →</div>
     </div>
 
+    <div id="attack-warning" class="attack-warning hidden" role="status"></div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
     <div id="banner" class="banner" aria-live="polite"><b id="banner-title"></b><span id="banner-hint"></span></div>
     <div id="damage-flash"></div>
@@ -92,13 +92,22 @@
           <button data-upgrade="speed"><svg><use href="#i-bolt"/></svg><b>Быстрый огонь</b><span>+25% к темпу огня</span></button>
           <button data-upgrade="shield"><svg><use href="#i-shield"/></svg><b>Энергощит</b><span>Защита от 2 ударов</span></button>
         </div>
+        <div id="pause-audio" class="pause-audio hidden">
+          <label><input id="sound-effects" type="checkbox"> Эффекты</label>
+          <label><input id="music-enabled" type="checkbox"> Музыка</label>
+        </div>
         <button id="continue" class="primary"><svg><use href="#i-arrow"/></svg><span id="continue-text">ПРОДОЛЖИТЬ</span></button>
         <button id="back-menu" class="text-button">В главное меню</button>
       </div>
     </section>
+    <dialog id="shop" aria-labelledby="shop-title">
+      <div class="shop-head"><h2 id="shop-title">Улучшения</h2><span>💎 <b id="shop-wallet">0</b></span></div>
+      <div id="shop-items"></div>
+      <button id="shop-close" class="text-button">Назад</button>
+    </dialog>
     <div id="error" class="error hidden" role="alert"><h2>Нужна поддержка WebGL 2</h2><p>Открой игру в современном Chrome, Safari или Firefox с включённым аппаратным ускорением.</p><p id="error-detail"></p></div>
   </main>
-  <script type="module" src="./js/main.js"></script>
-    <script src="./js/juice.js"></script>
+  <script type="module" src="./js/main.js?v=4d3622b6"></script>
+    <script src="./js/juice.js?v=4d3622b6"></script>
 </body>
 </html>

@@ -1,26 +1,26 @@
 // Мир вокруг дороги: небо, горы, облака, дорога и разные пейзажи для трёх миров.
-import * as T from '../../vendor/three/three.module.min.js';
-import { Kit, group, toyMaterial, glowMaterial, canvasTexture, rand, rimColor, rimPower, flat, place, hdr } from './kit.js';
+import * as T from '../../vendor/three/three.module.min.js?v=4d3622b6';
+import { Kit, group, toyMaterial, glowMaterial, canvasTexture, rand, rimColor, rimPower, flat, place, hdr } from './kit.js?v=4d3622b6';
 
 export const PALETTES = [
   {
     // Коралловый каньон: жаркий день
     zenith: 0x1a7fff, sky: 0x57bdff, horizon: 0xbfe6ff, sun: 0xfff3c4, sunAt: [-0.5, 0.42, -0.76], fog: 0xc9e4f4, fogNear: 70, fogFar: 240,
-    hemi: [0xdff1ff, 0xffb27a, 0.98], light: [0xfff1dc, 2.5], rim: 0xfff0d0, rimK: 0.15,
+    hemi: [0xdff1ff, 0xffb27a, 1.1], light: [0xfff1dc, 2.5], rim: 0xfff0d0, rimK: 0.15,
     ground: ['#ffb765', '#f39f4f', '#ffc985'], road: '#675788', roadLight: '#74649a', line: '#fff6d2', curb: ['#ff5247', '#fff4e0'], glowLine: 0xffb347,
     far: [0xeeb09a, 0xf3bfa6, 0xe6a494], cloud: 0xffffff, cloudShade: 0xc9e2f7, floor: [0xff4d9d, 0xff7a3d, 0xffc531, 0x3ddc84, 0x2fb5ff],
   },
   {
     // Кристальный разлом: сиреневый вечер и светящиеся кристаллы
     zenith: 0x4a23c9, sky: 0xa45cf2, horizon: 0xf39ae0, sun: 0xfff0ff, sunAt: [0.46, 0.38, -0.8], fog: 0xd98ae0, fogNear: 65, fogFar: 225,
-    hemi: [0xd9d0ff, 0x4fe0c8, 1.05], light: [0xffe6f6, 2.35], rim: 0xc9f5ff, rimK: 0.2,
+    hemi: [0xd9d0ff, 0x70e3e1, 1.18], light: [0xffe6f6, 2.35], rim: 0xc9f5ff, rimK: 0.2,
     ground: ['#3fd6bf', '#2bb9ae', '#7cf0d8'], road: '#3f3a86', roadLight: '#4b45a0', line: '#c9fff4', curb: ['#ff5fc0', '#7ffff0'], glowLine: 0x7ffff0,
     far: [0x7a4fd6, 0x9a68e8, 0x5d3fc0], cloud: 0xffe6fb, cloudShade: 0xd6a8f0, floor: [0xff5fc0, 0xb76bff, 0x5f8dff, 0x35e0ff, 0x4dffa6],
   },
   {
     // Сердце вулкана: раскалённый закат и лава
     zenith: 0x4a1c63, sky: 0xc6405c, horizon: 0xf58b42, sun: 0xffe08a, sunAt: [-0.32, 0.3, -0.9], fog: 0xcf5a3c, fogNear: 60, fogFar: 210,
-    hemi: [0xffc9a8, 0x8a2f30, 1.1], light: [0xffd9b0, 2.45], rim: 0xffb37a, rimK: 0.22,
+    hemi: [0xffc9a8, 0xb85c72, 1.25], light: [0xffd9b0, 2.45], rim: 0xffb37a, rimK: 0.22,
     ground: ['#5b3350', '#4a2843', '#7a4560'], road: '#37293f', roadLight: '#43324c', line: '#ffd28a', curb: ['#ffb02e', '#3a2238'], glowLine: 0xff7a26,
     far: [0x5a2a4c, 0x6e3456, 0x472242], cloud: 0x8a5a78, cloudShade: 0x4f2f4a, floor: [0xff3d3d, 0xff7a26, 0xffc531, 0xfff06a, 0xffffff],
   },

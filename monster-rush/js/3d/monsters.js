@@ -1,6 +1,6 @@
 // Монстры: мультяшные, без крови. В каждом мире свой окрас, у каждого босса свой облик. Смотрят в +Z, на героя.
-import * as T from '../../vendor/three/three.module.min.js';
-import { Kit, group, part, toyMaterial, glowMaterial, flat, place } from './kit.js';
+import * as T from '../../vendor/three/three.module.min.js?v=4d3622b6';
+import { Kit, group, part, toyMaterial, glowMaterial, flat, place } from './kit.js?v=4d3622b6';
 
 const glow = glowMaterial();
 const DARK = 0x2a1a2c;
@@ -324,6 +324,16 @@ function buildTitan() {
   };
 }
 
+function buildWall() {
+  const body = new Kit(), light = new Kit();
+  body.box(0x432b71, 0, 0.32, 0, 2.5, 0.58, 1);
+  for (const [x, height] of [[-0.83, 1.35], [0, 2.15], [0.83, 1.55]]) {
+    body.cone(0x814ade, x, height * 0.55, 0, 0.57, height, 0, 0, 0.1, 6);
+    light.box(0xa1edff, x, 0.48, 0.46, 0.14, 0.49, 0.05);
+  }
+  return { body: body.build(), light, scale: 1 };
+}
+
 const cache = new Map();
 function geometry(type, level) {
   const key = type === 'barrel' ? 'barrel' : `${type}:${level}`;
@@ -333,6 +343,7 @@ function geometry(type, level) {
   else if (type === 'spitter') g = buildSpitter(level);
   else if (type === 'brute') g = buildBrute(level);
   else if (type === 'barrel') g = buildBarrel();
+  else if (type === 'wall') g = buildWall();
   else g = [buildCrusher, buildQueen, buildTitan][level]();
   g.light = g.light.parts.length ? g.light.build() : null;
   cache.set(key, g);
@@ -344,6 +355,7 @@ export const CHUNK_COLORS = {
   spitter: (l) => SKINS.spitter[l].slice(0, 3),
   brute: (l) => [...SKINS.brute[l].slice(0, 2), STEEL],
   barrel: () => [0xe53935, 0xffc531, 0x3a3148],
+  wall: () => [0xa768ff, 0x81efff, 0x52328f],
   boss: (l) => [[0xe0533f, 0x8c4a3f, 0xffd24a], [0x2fbfae, 0xff5fc0, 0x8ff5ff], [0x362436, 0x4e3148, 0xff7a1f]][l],
 };
 
@@ -374,6 +386,18 @@ export class MonsterView {
         this.legs.push(legGroup);
       }
     }
+    if (type === 'barrel') {
+      this.band = new T.Mesh(new T.TorusGeometry(0.62, 0.055, 8, 20), new T.MeshBasicMaterial());
+      this.band.position.y = 1.02;
+      this.band.rotation.x = Math.PI / 2;
+      this.root.add(this.band);
+    }
+    if (type === 'spitter') {
+      this.charge = new T.Mesh(new T.SphereGeometry(0.19, 12, 8), new T.MeshBasicMaterial({ color: 0xffc762 }));
+      this.charge.position.set(0, 0.98, 0.64);
+      this.body.add(this.charge);
+      this.charge.visible = false;
+    }
     this.punch = 0;
   }
 
@@ -389,6 +413,11 @@ export class MonsterView {
 
   update(dt, item) {
     const age = item.age;
+    if (this.band) this.band.material.color.setHex(item.barrelKind === 'cryo' ? 0x77ebff : item.barrelKind === 'pulse' ? 0xd99aff : 0xffca58);
+    if (this.charge) {
+      this.charge.visible = Boolean(item.charge);
+      this.charge.scale.setScalar(1 + Math.max(0, 0.4 - item.shot) * 3);
+    }
     const big = this.type === 'boss' || this.type === 'brute';
     const pace = big ? 6.2 : this.type === 'spitter' ? 8.5 : 10.5;
     const stride = big ? 0.44 : 0.62;
@@ -419,7 +448,12 @@ export class MonsterView {
     this.punch = Math.max(0, this.punch - dt * 7);
     if (item.hit > 0.07) this.punch = 1;
     const flash = Math.max(0, item.hit - 0.05) / 0.07;
-    this.material.emissiveIntensity = flash * flash * (this.type === 'boss' ? 0.16 : 0.42);
+    this.material.emissive.setHex(item.frost ? 0x7be9ff : 0xffffff);
+    this.material.emissiveIntensity = flash * flash * (this.type === 'boss' ? 0.16 : 0.42) + (item.frost ? 0.13 : 0);
+    if (this.type === 'wall') {
+      this.body.position.y = 0;
+      this.body.rotation.set(0, 0, 0);
+    }
     this.root.scale.setScalar(this.scale * (1 + this.punch * (this.type === 'boss' ? 0.02 : 0.08)));
   }
 }

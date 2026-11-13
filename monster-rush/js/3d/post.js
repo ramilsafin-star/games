@@ -1,5 +1,5 @@
 // Финальная обработка кадра: свечение ярких мест, мягкое ограничение яркости без потери цвета и лёгкая виньетка.
-import * as T from '../../vendor/three/three.module.min.js';
+import * as T from '../../vendor/three/three.module.min.js?v=4d3622b6';
 
 const VERT = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }';
 
@@ -55,7 +55,7 @@ void main(){
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   c = mix(vec3(l), c, uSaturation);
   vec2 d = vUv - 0.5;
-  c *= 1.0 - dot(d, d) * 0.28;
+  c *= 1.0 - dot(d, d) * 0.17;
   c = toSrgb(clamp(c, 0.0, 1.0));
   gl_FragColor = vec4(c + dither(gl_FragCoord.xy) / 255.0, 1.0);
 }`;

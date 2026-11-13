@@ -3,6 +3,7 @@ export class Audio {
   constructor() {
     this.muted = false;
     this.active = false;
+    this.musicEnabled = true;
     this.beat = 0;
     this.timer = null;
     this.last = {};
@@ -14,7 +15,7 @@ export class Audio {
       if (!this.ctx) {
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
         this.master = this.ctx.createGain();
-        this.master.gain.value = this.muted ? 0 : 0.42;
+        this.master.gain.value = 0.42;
         // Ограничитель: десяток взрывов разом не должен хрипеть
         const limiter = this.ctx.createDynamicsCompressor();
         limiter.threshold.value = -14;
@@ -27,16 +28,32 @@ export class Audio {
         for (let i = 0; i < size; i++) data[i] = Math.random() * 2 - 1;
       }
       this.ctx.resume();
-      if (!this.timer) this.timer = setInterval(() => this.music(), 170);
+      this.syncMusic();
     } catch { /* Игра работает и без звука */ }
   }
 
-  ready() {
-    return this.ctx && !this.muted && this.ctx.state === 'running';
+  setActive(active) {
+    this.active = active;
+    this.syncMusic();
+    if (!active) this.beam(false);
   }
 
-  tone(freq, duration = 0.1, type = 'sine', volume = 0.15, end = freq, delay = 0) {
-    if (!this.ready()) return;
+  syncMusic() {
+    const play = this.ctx && this.active && this.musicEnabled;
+    if (play && !this.timer) this.timer = setInterval(() => this.music(), 170);
+    if (!play && this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+    if (this.muted) this.beam(false);
+  }
+
+  ready(music = false) {
+    return this.ctx && (music ? this.musicEnabled : !this.muted) && this.ctx.state === 'running';
+  }
+
+  tone(freq, duration = 0.1, type = 'sine', volume = 0.15, end = freq, delay = 0, music = false) {
+    if (!this.ready(music)) return;
     const t = this.ctx.currentTime + delay;
     const o = this.ctx.createOscillator();
     const g = this.ctx.createGain();
@@ -143,6 +160,7 @@ export class Audio {
       this.tone(900, 0.8, 'sine', 0.13, 50);
       this.noise(0.7, 0.2, 800, 6000);
     } else if (type === 'boss') this.tone(90, 1.5, 'sawtooth', 0.18, 45);
+    else if (type === 'bossCharge' || type === 'spitCharge') this.tone(type === 'bossCharge' ? 280 : 430, 0.32, 'triangle', 0.07, 620);
     else if (type === 'bossShot') this.tone(240, 0.3, 'sawtooth', 0.08, 90);
     else if (type === 'bossDown') {
       for (let i = 0; i < 7; i++) this.noise(0.3, 0.2, 2600, 150, i * 0.14);
@@ -190,18 +208,14 @@ export class Audio {
   }
 
   music() {
-    if (!this.active || this.muted) return;
+    if (!this.active || !this.musicEnabled) return;
     const bass = [73.42, 73.42, 87.31, 65.41][Math.floor(this.beat / 16) % 4];
-    if (this.beat % 4 === 0) this.tone(130, 0.15, 'sine', 0.2, 35);
-    if (this.beat % 2 === 0) this.tone(bass, 0.25, 'triangle', 0.12);
+    if (this.beat % 4 === 0) this.tone(130, 0.15, 'sine', 0.2, 35, 0, true);
+    if (this.beat % 2 === 0) this.tone(bass, 0.25, 'triangle', 0.12, bass, 0, true);
     const melody = [4, 6, 8, 6, 3, 4, 6, 3];
-    this.tone(bass * melody[this.beat % 8], 0.13, 'sine', 0.035);
+    const note = bass * melody[this.beat % 8];
+    this.tone(note, 0.13, 'sine', 0.035, note, 0, true);
     this.beat++;
   }
 
-  toggle() {
-    this.muted = !this.muted;
-    if (this.master) this.master.gain.value = this.muted ? 0 : 0.42;
-    return this.muted;
-  }
 }
