@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#1b1f4a" />
+    <title>Планетка</title>
+    <meta name="description" content="Своя маленькая планета: сажай цветы, деревья и грибы, поливай из тучки, строй домики — и к тебе прилетят бабочки, птицы и радуга." />
+    <link rel="icon" href="./icon-192.png" />
+    <link rel="apple-touch-icon" href="./icon-180.png" />
+    <script src="./vendor/vk/vk-bridge.min.js?v=844727b5"></script>
+    <script src="./js/vk-host.js?v=844727b5" data-keys="planetka_save,planetka_mute" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=844727b5" />
+  </head>
+  <body>
+    <canvas id="stage" aria-label="Планетка: крути пальцем, касайся, чтобы сажать"></canvas>
+    <header class="top">
+      
+      <div id="stars" class="pill" aria-label="Сколько планет украшено">⭐ <b id="stars-n">0</b></div>
+      <div id="stickers" aria-label="Кто уже поселился на планете"></div>
+      <button id="sound" class="round" aria-label="Звук">🔊</button>
+    </header>
+    <div id="hand" aria-hidden="true">👆</div>
+    <nav id="tools" aria-label="Что делать">
+      <button data-tool="flower" aria-label="Посадить цветок">🌼</button>
+      <button data-tool="tree" aria-label="Посадить дерево">🌳</button>
+      <button data-tool="mushroom" aria-label="Посадить гриб">🍄</button>
+      <button data-tool="house" aria-label="Поставить домик">🏠</button>
+      <button data-tool="rain" aria-label="Полить из тучки">🌧️</button>
+      <button data-tool="erase" aria-label="Убрать">🧽</button>
+    </nav>
+    <button id="fresh" class="round" aria-label="Новая планета">🪐</button>
+    <script type="module" src="./js/game.js?v=844727b5"></script>
+    <script src="./js/juice.js?v=844727b5"></script>
+  </body>
+</html>

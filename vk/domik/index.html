@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"
+    />
+    <title>Домик на дереве</title>
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Домик" />
+    <meta name="theme-color" content="#8fdcff" />
+    <script src="./vendor/vk/vk-bridge.min.js?v=61ed2cc9"></script>
+    <script src="./js/vk-host.js?v=61ed2cc9" data-keys="domik_save" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=61ed2cc9" />
+  </head>
+  <body>
+    <canvas id="game" aria-label="Большое дерево на поляне"></canvas>
+    <div id="steps" aria-hidden="true"></div>
+    <button id="btn-sound" class="round" type="button" aria-label="Выключить звук">🔊</button>
+    <div id="tray"></div>
+    <button id="btn-ok" type="button" aria-label="Готово" hidden>✓</button>
+    <div id="bin" aria-hidden="true">🗑️</div>
+    <div id="hand" aria-hidden="true">👆</div>
+    <p id="load" role="status">🌳</p>
+    <script>
+      // Простой синтаксис намеренно: сообщение покажется и там, где браузер не прочитает игру
+      window.domikFail = function () {
+        var box = document.getElementById("load");
+        box.hidden = false;
+        box.className = "fail";
+        box.textContent =
+          "Этот браузер не тянет 3D-графику игры. Обновите систему устройства или откройте игру в свежем Safari или Chrome.";
+      };
+      window.addEventListener("error", function (e) {
+        if (!window.Domik || !window.Domik.ready) window.domikFail();
+      });
+      setTimeout(function () {
+        if (!window.Domik || !window.Domik.ready) window.domikFail();
+      }, 30000);
+    </script>
+    <script src="./js/audio.js?v=61ed2cc9"></script>
+    <script type="module" src="./js/game.js?v=61ed2cc9" onerror="window.domikFail()"></script>
+    <script src="./js/juice.js?v=61ed2cc9"></script>
+  </body>
+</html>

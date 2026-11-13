@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#5fc8ff" />
+    <title>Гонка бобрят</title>
+    <meta name="description" content="Бобрята-почтальоны бегут наперегонки по островам, собирают брёвнышки и строят мостики, чтобы срезать путь." />
+    <link rel="icon" href="./icon-192.png" />
+    <link rel="apple-touch-icon" href="./icon-180.png" />
+    <script src="./vendor/vk/vk-bridge.min.js?v=408217eb"></script>
+    <script src="./js/vk-host.js?v=408217eb" data-keys="bobryata-v1" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=408217eb" />
+  </head>
+  <body>
+    <canvas id="stage" aria-label="Гонка: веди пальцем влево и вправо, чтобы повернуть"></canvas>
+    <header class="top">
+      
+      <button id="map-open" class="round" aria-label="Трассы и открытки"></button>
+      <div id="place" class="place">1</div>
+      <div class="hud">
+        <div class="track-name" id="track-name"></div>
+        <div class="progress" id="progress"></div>
+      </div>
+      <div class="pill logs"><i></i><b id="planks">0</b></div>
+      <div class="tools">
+        <button id="music" class="round"></button>
+        <button id="sound" class="round"></button>
+      </div>
+    </header>
+    <div id="steer" class="steer" hidden><span>◀</span><b>веди пальцем</b><span>▶</span></div>
+    <div id="count" class="count" aria-live="assertive"></div>
+    <div id="toast" class="toast" aria-live="polite"></div>
+
+    <section id="title" class="screen title">
+      <div class="logo">
+        <h1><span>Гонка</span><span>бобрят</span></h1>
+        <p>Собирай брёвнышки — строй мостики — срезай путь!</p>
+      </div>
+      <button id="play" class="big">▶ Бежим!</button>
+    </section>
+
+    <section id="map" class="screen dim" hidden>
+      <div class="sheet">
+        <button id="map-close" class="round close" aria-label="Закрыть"></button>
+        <h2>Открытки с трасс</h2>
+        <div id="tracks" class="tracks"></div>
+      </div>
+    </section>
+
+    <section id="result" class="screen dim" hidden>
+      <div class="card">
+        <div id="postcard" class="postcard"></div>
+        <h2 id="result-title"></h2>
+        <p id="result-text" class="result-text"></p>
+        <div class="row">
+          <button id="to-map" class="round wide" aria-label="Трассы"></button>
+          <button id="again" class="big alt">↻ Ещё раз</button>
+          <button id="next" class="big">Дальше ▶</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="nogl" class="screen nogl" hidden>
+      <p>Тут нужна 3D-графика (WebGL), а браузер её не включил. Попробуйте другой браузер.</p>
+    </div>
+    <script src="./js/audio.js?v=408217eb"></script>
+    <script type="module" src="./js/game.js?v=408217eb"></script>
+    <script src="./js/juice.js?v=408217eb"></script>
+  </body>
+</html>

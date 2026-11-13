@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#4fc3ff" />
+    <title>Ёжик-почтальон</title>
+    <meta name="description" content="Нарисуй пальцем рельсы — и ёжик-почтальон довезёт посылку через петли, трамплины и пещеры." />
+    <link rel="icon" href="./icon-192.png" />
+    <link rel="apple-touch-icon" href="./icon-180.png" />
+    <script src="./vendor/vk/vk-bridge.min.js?v=bb8d6757"></script>
+    <script src="./js/vk-host.js?v=bb8d6757" data-keys="yozhik-v1" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=bb8d6757" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="top">
+        
+        <button id="map-open" class="round" aria-label="Все горки"></button>
+        <div class="level"><b id="lvl-num">1</b><span id="lvl-name"></span></div>
+        <div id="stamps" class="stamps" aria-label="Печати"><i></i><i></i></div>
+        <div class="tools">
+          <button id="music" class="round"></button>
+          <button id="sound" class="round"></button>
+        </div>
+      </header>
+      <canvas id="stage" aria-label="Поле: рисуй рельсы пальцем"></canvas>
+      <nav class="bar" aria-label="Инструменты">
+        <div class="group">
+          <button id="pencil" class="tool on" aria-label="Карандаш"></button>
+          <button id="eraser" class="tool" aria-label="Ластик"></button>
+          <button id="undo" class="tool" aria-label="Отменить"></button>
+          <button id="clear" class="tool" aria-label="Стереть всё"></button>
+        </div>
+        <button id="go" class="go" aria-label="Поехали"><i></i><span>Поехали!</span></button>
+      </nav>
+    </main>
+
+    <!-- Заставка -->
+    <section id="title" class="screen title-screen">
+      <div class="logo">
+        <h1><span>Ёжик</span><span>почтальон</span></h1>
+        <p>Нарисуй рельсы — довези посылку!</p>
+      </div>
+      <button id="play" class="big">▶ Играть</button>
+    </section>
+
+    <!-- Карта горок и гараж вагончиков -->
+    <section id="map" class="screen map" hidden>
+      <div class="map-card">
+        <button id="map-close" class="round close" aria-label="Закрыть"></button>
+        <h2>Горки</h2>
+        <div id="worlds"></div>
+        <h2>Вагончики <small id="stamp-total"></small></h2>
+        <div id="garage" class="garage"></div>
+      </div>
+    </section>
+
+    <!-- Посылка доставлена -->
+    <section id="result" class="result" hidden>
+      <div class="card">
+        <h2 id="result-title">Посылка доставлена!</h2>
+        <div id="result-stars" class="stars"><i></i><i></i><i></i></div>
+        <div id="result-tricks" class="tricks" hidden></div>
+        <div id="result-new" class="new" hidden></div>
+        <div class="row">
+          <button id="again" class="round wide" aria-label="Ещё раз"></button>
+          <button id="next" class="big" aria-label="Следующая горка">▶</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Телефон стоя: поле узкое, рисовать неудобно -->
+    <div class="rotate" aria-live="polite">
+      <div><b>📱</b><p>Поверни телефон боком —<br />так удобнее рисовать!</p><button id="portrait-ok" class="later">Играть так</button></div>
+    </div>
+    <!-- Лампочка-подсказка появляется на поле рядом с местом, где не получилось -->
+    <button id="hint" class="hint-float" aria-label="Подсказка" hidden></button>
+    <div id="toast" class="toast" aria-live="polite"></div>
+    <div id="hand" class="hand" hidden aria-hidden="true">👆</div>
+    <div id="fly" class="fly" aria-hidden="true"></div>
+    <div id="nogl" class="screen nogl" hidden>
+      <p>Тут нужна 3D-графика (WebGL), а браузер её не включил. Попробуйте другой браузер.</p>
+    </div>
+    <script src="./js/audio.js?v=bb8d6757"></script>
+    <script type="module" src="./js/game.js?v=bb8d6757"></script>
+    <script src="./js/juice.js?v=bb8d6757"></script>
+  </body>
+</html>

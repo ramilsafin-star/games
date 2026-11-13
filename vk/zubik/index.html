@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta name="theme-color" content="#fffaeb" />
+    <title>Зубик · Лесная клиника</title>
+    <meta name="description" content="Помоги плюшевым друзьям, укрась их зубки и собери альбом улыбок." />
+    <link rel="icon" href="./icon-192.png" />
+    <link rel="apple-touch-icon" href="./icon-180.png" />
+    <script src="./vendor/vk/vk-bridge.min.js?v=d76e1677"></script>
+    <script src="./js/vk-host.js?v=d76e1677" data-keys="zubik-v1" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=d76e1677" />
+  </head>
+  <body>
+    <main class="app" data-screen="welcome">
+      <header class="top">
+        
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"
+            ><svg viewBox="0 0 44 44">
+              <path d="M9 12c3-5 8-5 13-2 6-3 10-3 13 2 4 7-2 23-6 23-4 0-3-10-7-10s-3 10-7 10c-4 0-10-16-6-23Z" fill="#fff9df" />
+              <path d="M17 16q5 4 10 0" stroke="#ffc264" stroke-width="2.8" stroke-linecap="round" fill="none" /></svg></span
+          ><span><b>Зубик</b><small>Лесная клиника</small></span>
+        </div>
+        <div class="top-tools">
+          <button id="gallery-open" class="round" aria-label="Галерея улыбок"></button>
+          <button id="music" class="round"></button><button id="sound" class="round"></button>
+        </div>
+      </header>
+      <div class="board">
+        <div id="steps" class="steps" aria-hidden="true"></div>
+        <div class="work-area">
+          <canvas id="stage" aria-label="Зубки в увеличительном зеркале"></canvas>
+          <div id="buddy" class="buddy" hidden>
+            <img id="buddy-img" alt="" />
+            <div><small>На приёме</small><b id="who"></b></div>
+          </div>
+        </div>
+        <div id="instruction" class="instruction" aria-live="polite"></div>
+        <nav id="tray" class="tray" aria-label="Инструменты"></nav>
+        <section id="welcome" class="welcome" aria-labelledby="patient-name">
+          <div class="portrait-set">
+            <div class="window" aria-hidden="true"><i></i><i></i></div>
+            <div class="chair" aria-hidden="true"></div>
+            <button id="greet" class="greet" aria-label="Поздороваться со зверьком">
+              <img id="guest-art" alt="" draggable="false" />
+            </button>
+            <span id="story-token" class="story-token" aria-hidden="true"></span>
+            <span class="twinkle one" aria-hidden="true">✦</span><span class="twinkle two" aria-hidden="true">✦</span>
+          </div>
+          <div class="welcome-copy">
+            <div class="eyebrow"><i></i> В гостях у доктора</div>
+            <h1 id="patient-name"></h1>
+            <p id="story"></p>
+            <button id="start" class="primary">Поздороваться <span aria-hidden="true">➜</span></button>
+            <small class="visit-count">Улыбок в альбоме <b id="count">0</b></small>
+          </div>
+        </section>
+      </div>
+    </main>
+    <div id="hand" class="hand" hidden aria-hidden="true">👆</div>
+    <div id="hold-ring" hidden aria-hidden="true"></div>
+    <div id="flash" class="flash" aria-hidden="true"></div>
+    <div id="flashwhite" class="flashwhite" aria-hidden="true"></div>
+    <section id="photo" class="photo" hidden aria-labelledby="photo-who">
+      <div class="card">
+        <div class="print"><img id="photo-img" alt="Портрет пациента и снимок его зубов" /></div>
+        <div class="photo-info">
+          <div class="eyebrow"><i></i> Альбом улыбок</div>
+          <h2 id="photo-who"></h2>
+          <div id="compare" class="compare" aria-label="Сравнить снимки">
+            <button data-view="before">До</button><button data-view="after">После</button>
+          </div>
+          <div id="photo-new" class="new" hidden></div>
+          <button id="next" class="primary" aria-label="Следующий пациент">Следующий пациент <span aria-hidden="true">➜</span></button>
+        </div>
+      </div>
+    </section>
+    <dialog id="gallery" aria-labelledby="gallery-title">
+      <button id="gallery-close" class="round close" aria-label="Закрыть"></button>
+      <div class="eyebrow"><i></i> Лесная клиника</div>
+      <h2 id="gallery-title">Галерея улыбок</h2>
+      <div id="gallery-grid" class="grid"></div>
+    </dialog>
+    <div id="nogl" class="nogl" hidden>Для этой игры нужен браузер с 3D-графикой</div>
+    <script src="./js/audio.js?v=d76e1677"></script>
+    <script type="module" src="./js/game.js?v=d76e1677"></script>
+    <script src="./js/juice.js?v=d76e1677"></script>
+  </body>
+</html>

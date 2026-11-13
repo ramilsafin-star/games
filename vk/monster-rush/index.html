@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#2f9dff">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="description" content="Monster Rush — яркий 3D-шутер: герой бежит сквозь три мира, разбивает клетки с супероружием и побеждает гигантских боссов.">
+  <title>Monster Rush</title>
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <script src="./vendor/vk/vk-bridge.min.js?v=ccdbda82"></script>
+    <script src="./js/vk-host.js?v=ccdbda82" data-keys="monster-rush-profile-v1,monster-rush-best,monster-rush-effects,monster-rush-music" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=ccdbda82">
+</head>
+<body class="menu-mode">
+  <svg class="svg-defs" aria-hidden="true"><defs>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M14 2 4 14h7l-1 8 10-12h-7z"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M6 4v16l14-8z"/></symbol>
+    <symbol id="i-sound" viewBox="0 0 24 24"><path d="m11 4-6 5H2v6h3l6 5zm5 4a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24"><path d="M20.8 4.6c-2-2-5.1-2-7.1 0L12 6.3l-1.7-1.7a5 5 0 0 0-7.1 7.1L12 21l8.8-9.3a5 5 0 0 0 0-7.1Z"/></symbol>
+    <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4M1 12h4m14 0h4"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 2 9 4v6c0 5-9 10-9 10S3 17 3 12V6z"/></symbol>
+    <symbol id="i-gem" viewBox="0 0 24 24"><path d="M7 3h10l5 6-10 12L2 9zM2 9h20M9 9l3 12 3-12-3-6z"/></symbol>
+  </defs></svg>
+  <main id="arena">
+    <div id="viewport"></div>
+    <div class="tools">
+      <button id="sound" class="icon-button" aria-label="Выключить звук" title="Звук"><svg><use href="#i-sound"/></svg></button>
+      <button id="fullscreen" class="icon-button" aria-label="Полный экран" title="Полный экран"><svg><use href="#i-expand"/></svg></button>
+      <button id="pause" class="icon-button hidden" aria-label="Пауза" title="Пауза · Esc"><svg><use href="#i-pause"/></svg></button>
+    </div>
+
+    <section id="menu" class="menu-panel">
+      <h1><span>MONSTER</span><em>RUSH</em></h1>
+      <p class="intro">Беги вперёд, разбивай клетки, забирай супероружие и побеждай гигантских монстров!</p>
+      <button id="start" class="primary" disabled><svg><use href="#i-arrow"/></svg><span id="start-text">ЗАГРУЗКА…</span></button>
+      <div class="menu-actions">
+        <label class="world-select">Мир <select id="world-select"></select></label>
+        <button id="shop-open" class="pill"><svg><use href="#i-gem"/></svg><b id="wallet">0</b><span>Улучшения</span></button>
+      </div>
+      <div class="menu-foot"><span class="how">Веди пальцем или ← → · Пробел — суперудар</span><span class="best">Рекорд <b id="best">0</b></span></div>
+    </section>
+
+    <div id="hud" class="hidden">
+      <div class="hud-top">
+        <div class="health-box">
+          <svg><use href="#i-heart"/></svg>
+          <div class="meter"><i id="hp-fill"></i><strong id="hp">100</strong></div>
+          <span id="shield-count"></span>
+        </div>
+        <div class="stage-box">
+          <small id="stage-label">ЭТАП 1 / 3</small>
+          <strong id="world-name">Коралловый каньон</strong>
+          <div class="progress"><i id="stage-fill"></i></div>
+        </div>
+        <div class="score-box">
+          <strong id="score">0</strong>
+          <span id="coins"><svg><use href="#i-gem"/></svg><b id="coin-count">0</b></span>
+        </div>
+      </div>
+      <div id="boss-health" class="boss-health hidden">
+        <div><b id="boss-name">КРОШИТЕЛЬ</b><span id="boss-percent">100%</span></div>
+        <div class="meter"><i id="boss-fill"></i></div>
+      </div>
+      <div id="combo" class="combo"></div>
+      <div class="hud-bottom">
+        <div id="weapon-box" class="weapon-box">
+          <span class="weapon-icon"><svg><use href="#i-target"/></svg></span>
+          <div class="weapon-text">
+            <strong id="weapon">Бластер</strong>
+            <div id="weapon-meter" class="weapon-meter"><i id="weapon-fill"></i></div>
+            <small id="power">Сила ×1.0</small>
+          </div>
+        </div>
+        <button id="nova" class="nova-button" aria-label="Суперудар"><i id="nova-ring"></i><svg><use href="#i-bolt"/></svg><small id="nova-percent">100%</small></button>
+      </div>
+      <div id="touch-hint" class="touch-hint">← Веди пальцем →</div>
+    </div>
+
+    <div id="attack-warning" class="attack-warning hidden" role="status"></div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <div id="banner" class="banner" aria-live="polite"><b id="banner-title"></b><span id="banner-hint"></span></div>
+    <div id="damage-flash"></div>
+
+    <section id="overlay" class="overlay hidden" aria-label="Игровое меню">
+      <div class="modal">
+        <h2 id="modal-title">Пауза</h2>
+        <p id="modal-copy"></p>
+        <div id="results" class="results hidden"></div>
+        <div id="upgrades" class="upgrades hidden">
+          <button data-upgrade="power"><svg><use href="#i-target"/></svg><b>Мощный заряд</b><span>+50% к урону</span></button>
+          <button data-upgrade="speed"><svg><use href="#i-bolt"/></svg><b>Быстрый огонь</b><span>+25% к темпу огня</span></button>
+          <button data-upgrade="shield"><svg><use href="#i-shield"/></svg><b>Энергощит</b><span>Защита от 2 ударов</span></button>
+        </div>
+        <div id="pause-audio" class="pause-audio hidden">
+          <label><input id="sound-effects" type="checkbox"> Эффекты</label>
+          <label><input id="music-enabled" type="checkbox"> Музыка</label>
+        </div>
+        <button id="continue" class="primary"><svg><use href="#i-arrow"/></svg><span id="continue-text">ПРОДОЛЖИТЬ</span></button>
+        <button id="back-menu" class="text-button">В главное меню</button>
+      </div>
+    </section>
+    <dialog id="shop" aria-labelledby="shop-title">
+      <div class="shop-head"><h2 id="shop-title">Улучшения</h2><span>💎 <b id="shop-wallet">0</b></span></div>
+      <div id="shop-items"></div>
+      <button id="shop-close" class="text-button">Назад</button>
+    </dialog>
+    <div id="error" class="error hidden" role="alert"><h2>Нужна поддержка WebGL 2</h2><p>Открой игру в современном Chrome, Safari или Firefox с включённым аппаратным ускорением.</p><p id="error-detail"></p></div>
+  </main>
+  <script type="module" src="./js/main.js?v=ccdbda82"></script>
+    <script src="./js/juice.js?v=ccdbda82"></script>
+</body>
+</html>

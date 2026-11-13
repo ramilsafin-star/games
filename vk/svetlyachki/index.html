@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#1b1446" />
+    <title>Светлячковый концерт</title>
+    <meta name="description" content="Лови светлячков-ноток в такт музыке — и концертный домик засияет огнями." />
+    <link rel="icon" href="./icon-192.png" />
+    <link rel="apple-touch-icon" href="./icon-180.png" />
+    <script src="./vendor/vk/vk-bridge.min.js?v=08fe098e"></script>
+    <script src="./js/vk-host.js?v=08fe098e" data-keys="svetlyachki-v1" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=08fe098e" />
+  </head>
+  <body>
+    <canvas id="stage" aria-label="Поляна с дорожками: нажимай на кружки в такт"></canvas>
+    <header class="top">
+      
+      <button id="list" class="round" aria-label="Песенки"></button>
+      <div class="song"><b id="song-name">Светлячковый концерт</b><span id="beats" class="beats"><i></i><i></i><i></i><i></i></span></div>
+      <div id="score" class="score" hidden>✨ <b id="hits">0</b><small>/<span id="total">0</span></small></div>
+      <div class="tools">
+        <button id="pause" class="round" aria-label="Пауза" hidden></button>
+        <button id="music" class="round"></button>
+        <button id="sound" class="round"></button>
+      </div>
+    </header>
+    <div id="combo" class="combo" aria-live="polite"></div>
+    <div id="count" class="count" aria-live="assertive"></div>
+    <div id="hand" class="hand" hidden aria-hidden="true">👆</div>
+
+    <!-- Заставка -->
+    <section id="title" class="screen title">
+      <div class="logo">
+        <h1><span>Светлячковый</span><span>концерт</span></h1>
+        <p>Лови светлячков в такт музыке!</p>
+      </div>
+      <button id="play" class="big">▶ Играть</button>
+    </section>
+
+    <!-- Афиша: песенки -->
+    <section id="menu" class="screen menu" hidden>
+      <div class="poster">
+        <h2>Афиша концерта</h2>
+        <div id="songs" class="songs"></div>
+      </div>
+    </section>
+
+    <!-- Пауза -->
+    <section id="paused" class="screen dim" hidden>
+      <div class="card">
+        <h2>Пауза</h2>
+        <div class="row">
+          <button id="to-list" class="round wide" aria-label="Песенки"></button>
+          <button id="resume" class="big">▶ Дальше</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Итог -->
+    <section id="result" class="screen dim" hidden>
+      <div class="card">
+        <h2 id="result-title">Браво!</h2>
+        <div id="stars" class="stars"><i></i><i></i><i></i></div>
+        <p id="result-text" class="result-text"></p>
+        <div id="result-new" class="new" hidden></div>
+        <div class="row">
+          <button id="again" class="round wide" aria-label="Ещё раз"></button>
+          <button id="next" class="big" aria-label="Следующая песенка">▶</button>
+        </div>
+      </div>
+    </section>
+    <div id="nogl" class="screen nogl" hidden>
+      <p>Тут нужна 3D-графика (WebGL), а браузер её не включил. Попробуйте другой браузер.</p>
+    </div>
+    <script src="./js/audio.js?v=08fe098e"></script>
+    <script type="module" src="./js/game.js?v=08fe098e"></script>
+    <script src="./js/juice.js?v=08fe098e"></script>
+  </body>
+</html>

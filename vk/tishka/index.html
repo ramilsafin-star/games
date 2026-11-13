@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#1b1446" />
+    <title>Звездочёт Тишка</title>
+    <meta name="description" content="Помоги мышонку Тишке настроить телескопы и не попасться в свет фонарика робота-сторожа." />
+    <link rel="icon" href="./icon-192.png" />
+    <link rel="apple-touch-icon" href="./icon-180.png" />
+    <script src="./vendor/vk/vk-bridge.min.js?v=db686b78"></script>
+    <script src="./js/vk-host.js?v=db686b78" data-keys="tishka-v1" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=db686b78" />
+  </head>
+  <body>
+    <canvas id="stage" aria-label="Обсерватория: нажми на пол, чтобы Тишка пошёл туда"></canvas>
+    <header class="top">
+      
+      <button id="atlas-open" class="round" aria-label="Звёздный атлас"></button>
+      <div class="room"><b id="room-num">1</b><span id="room-name"></span></div>
+      <div id="goals" class="goals" aria-label="Телескопы"></div>
+      <div class="tools">
+        <button id="music" class="round"></button>
+        <button id="sound" class="round"></button>
+      </div>
+    </header>
+    <button id="fly" class="fly" aria-label="Светлячок: отвлечь робота"><span class="bug"></span><b id="fly-count">3</b></button>
+    <div id="toast" class="toast" aria-live="polite"></div>
+    <div id="hand" class="hand" hidden aria-hidden="true">👆</div>
+
+    <section id="title" class="screen title">
+      <div class="logo">
+        <h1><span>Звездочёт</span><span>Тишка</span></h1>
+        <p>Настрой телескопы и не попадись роботу!</p>
+      </div>
+      <button id="play" class="big">▶ Играть</button>
+    </section>
+
+    <section id="atlas" class="screen dim" hidden>
+      <div class="sheet">
+        <button id="atlas-close" class="round close" aria-label="Закрыть"></button>
+        <h2>Звёздный атлас</h2>
+        <div id="rooms" class="rooms"></div>
+      </div>
+    </section>
+
+    <section id="result" class="screen dim" hidden>
+      <div class="card">
+        <canvas id="sky" class="skyview" width="360" height="360" aria-hidden="true"></canvas>
+        <h2 id="sky-name"></h2>
+        <div id="stars" class="stars"><i></i><i></i><i></i></div>
+        <p id="result-text" class="result-text"></p>
+        <div class="row">
+          <button id="again" class="round wide" aria-label="Ещё раз"></button>
+          <button id="next" class="big" aria-label="Следующая комната">▶</button>
+        </div>
+      </div>
+    </section>
+    <div class="rotate" aria-live="polite">
+      <div><b>📱</b><p>Поверни телефон боком —<br />так видно всю комнату!</p><button id="portrait-ok" class="later">Играть так</button></div>
+    </div>
+    <div id="nogl" class="screen nogl" hidden>
+      <p>Тут нужна 3D-графика (WebGL), а браузер её не включил. Попробуйте другой браузер.</p>
+    </div>
+    <script src="./js/audio.js?v=db686b78"></script>
+    <script type="module" src="./js/game.js?v=db686b78"></script>
+    <script src="./js/juice.js?v=db686b78"></script>
+  </body>
+</html>

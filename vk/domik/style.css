@@ -1,0 +1,427 @@
+:root {
+  --ink: #233e35;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+body {
+  background: #8fdcff;
+  color: var(--ink);
+  font-family: ui-rounded, "SF Pro Rounded", "Avenir Next", system-ui, -apple-system, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+#game {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+button {
+  font: inherit;
+  color: inherit;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+button:focus-visible {
+  outline: 4px solid #127bd1;
+  outline-offset: 3px;
+}
+button:active {
+  transform: translateY(3px);
+}
+[hidden] {
+  display: none !important;
+}
+#steps {
+  position: fixed;
+  top: calc(26px + var(--safe-top));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  pointer-events: none;
+}
+#steps i {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffffa8;
+  box-shadow: 0 2px 0 #0000001f;
+}
+#steps i.on {
+  background: #ffc21f;
+}
+#steps i.now {
+  transform: scale(1.35);
+  background: #ff8a1f;
+}
+.round {
+  position: fixed;
+  top: calc(12px + var(--safe-top));
+  right: calc(12px + var(--safe-right));
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #fffffff0;
+  box-shadow: 0 4px 0 #0000002e;
+  font-size: 26px;
+  line-height: 1;
+}
+/* Лоток с выбором внизу: крупные кнопки для маленьких пальцев */
+#tray {
+  position: fixed;
+  left: calc(10px + var(--safe-left));
+  right: calc(138px + var(--safe-right));
+  bottom: calc(14px + var(--safe-bottom));
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  pointer-events: none;
+}
+body[data-stage="done"] #tray {
+  right: calc(70px + var(--safe-right));
+}
+.row {
+  display: flex;
+  gap: 10px;
+  max-width: 100%;
+  padding: 8px;
+  border-radius: 28px;
+  background: #ffffffc4;
+  box-shadow: 0 5px 0 #00000024;
+  overflow-x: auto;
+  scrollbar-width: none;
+  pointer-events: auto;
+  touch-action: pan-x;
+}
+.row::-webkit-scrollbar {
+  display: none;
+}
+/* Все украшения сразу на виду: ребёнок не догадается листать лоток */
+.row.wide {
+  flex-wrap: wrap;
+  overflow: visible;
+}
+.chip {
+  position: relative;
+  flex: none;
+  width: 76px;
+  height: 76px;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 4px 0 #b9cdbf;
+  display: grid;
+  place-items: center;
+  font-size: 40px;
+  line-height: 1;
+  color: var(--tone, #ff5148);
+}
+.chip svg {
+  width: 56px;
+  height: 56px;
+  display: block;
+}
+.chip.dark {
+  color: #6e3a20;
+}
+.chip[aria-pressed="true"] {
+  background: #fff3b8;
+  box-shadow:
+    0 4px 0 #d89b26,
+    inset 0 0 0 4px #ff8a1f;
+}
+.swatch {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--swatch);
+  border: 4px solid #fff;
+  box-shadow:
+    inset 0 -5px 0 #00000020,
+    0 3px 0 #00000030;
+}
+.swatch[aria-pressed="true"] {
+  background: var(--swatch);
+  border-color: var(--ink);
+  transform: scale(1.14);
+  box-shadow:
+    inset 0 -5px 0 #00000020,
+    0 3px 0 #00000030;
+}
+.tree-chip i {
+  position: absolute;
+  left: 11px;
+  top: 7px;
+  width: 54px;
+  height: 46px;
+  border-radius: 50%;
+}
+.tree-chip u {
+  position: absolute;
+  left: 32px;
+  top: 48px;
+  width: 12px;
+  height: 21px;
+  border-radius: 3px;
+}
+.chip.sure {
+  background: #ffd0d0;
+  box-shadow:
+    0 4px 0 #d86a6a,
+    inset 0 0 0 4px #ff5148;
+  animation: shake 0.4s;
+}
+@keyframes shake {
+  25%,
+  75% {
+    transform: translateX(-4px);
+  }
+  50% {
+    transform: translateX(4px);
+  }
+}
+#btn-ok {
+  position: fixed;
+  right: calc(16px + var(--safe-right));
+  bottom: calc(20px + var(--safe-bottom));
+  width: 108px;
+  height: 108px;
+  border-radius: 50%;
+  background: #33c75a;
+  box-shadow:
+    0 8px 0 #1f9440,
+    0 12px 22px #00000033;
+  color: #fff;
+  font-size: 62px;
+  font-weight: 900;
+  line-height: 1;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+@keyframes pulse {
+  50% {
+    transform: scale(1.08);
+  }
+}
+/* Корзина появляется, пока палец несёт вещь */
+#bin {
+  position: fixed;
+  right: calc(16px + var(--safe-right));
+  bottom: calc(20px + var(--safe-bottom));
+  width: 108px;
+  height: 108px;
+  border-radius: 50%;
+  background: #ffffffe8;
+  box-shadow: 0 8px 0 #00000026;
+  display: none;
+  place-items: center;
+  font-size: 56px;
+  line-height: 1;
+  pointer-events: none;
+  z-index: 10;
+}
+#bin.hot {
+  background: #ffc2c2;
+  transform: scale(1.18);
+}
+body.dragging #bin {
+  display: grid;
+}
+body.dragging #btn-ok {
+  visibility: hidden;
+}
+body.free #steps {
+  display: none;
+}
+/* Зовёт заглянуть в домик */
+.chip.hero {
+  background: #fff3b8;
+  box-shadow:
+    0 4px 0 #d89b26,
+    inset 0 0 0 4px #ffb02e;
+}
+.paper {
+  flex: none;
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
+  background-size: cover;
+  background-color: #fff;
+  border: 4px solid #fff;
+  box-shadow: 0 4px 0 #b9cdbf;
+}
+.paper[aria-pressed="true"] {
+  border-color: #ff8a1f;
+  box-shadow: 0 4px 0 #d89b26;
+}
+#hand {
+  position: fixed;
+  left: 0;
+  top: 0;
+  font-size: 58px;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s;
+  filter: drop-shadow(0 4px 6px #17304270);
+  z-index: 20;
+}
+#load {
+  position: fixed;
+  inset: 0;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(170deg, #8fdcff, #c6f2a4);
+  font-size: 92px;
+  z-index: 30;
+}
+#load.fail {
+  padding: 28px;
+  font-size: 22px;
+  line-height: 1.4;
+  font-weight: 600;
+  text-align: center;
+}
+@media (max-width: 620px) {
+  .paper {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    border-width: 3px;
+  }
+  #bin {
+    width: 84px;
+    height: 84px;
+    font-size: 44px;
+    bottom: calc(12px + var(--safe-bottom));
+  }
+  .chip {
+    width: 62px;
+    height: 62px;
+    border-radius: 18px;
+    font-size: 32px;
+  }
+  .chip svg {
+    width: 46px;
+    height: 46px;
+  }
+  .swatch {
+    width: 44px;
+    height: 44px;
+  }
+  .tree-chip i {
+    left: 9px;
+    top: 5px;
+    width: 44px;
+    height: 38px;
+  }
+  .tree-chip u {
+    left: 26px;
+    top: 39px;
+    width: 10px;
+    height: 18px;
+  }
+  .row {
+    gap: 7px;
+    padding: 6px;
+    border-radius: 22px;
+  }
+  #tray {
+    right: calc(10px + var(--safe-right));
+    bottom: calc(12px + var(--safe-bottom));
+  }
+  body:not([data-stage="done"]) #tray {
+    bottom: calc(104px + var(--safe-bottom));
+  }
+  #btn-ok {
+    width: 84px;
+    height: 84px;
+    font-size: 48px;
+    bottom: calc(12px + var(--safe-bottom));
+  }
+  #steps i {
+    width: 12px;
+    height: 12px;
+  }
+  #steps {
+    gap: 6px;
+  }
+}
+@media (max-height: 500px) {
+  .paper {
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+    border-width: 3px;
+  }
+  #bin {
+    width: 74px;
+    height: 74px;
+    font-size: 38px;
+    bottom: calc(10px + var(--safe-bottom));
+  }
+  .chip {
+    width: 52px;
+    height: 52px;
+    border-radius: 15px;
+    font-size: 27px;
+  }
+  .chip svg {
+    width: 38px;
+    height: 38px;
+  }
+  .swatch {
+    width: 38px;
+    height: 38px;
+    border-width: 3px;
+  }
+  .tree-chip i {
+    left: 7px;
+    top: 4px;
+    width: 38px;
+    height: 30px;
+  }
+  .tree-chip u {
+    left: 22px;
+    top: 32px;
+    width: 8px;
+    height: 14px;
+  }
+  .row {
+    gap: 5px;
+    padding: 4px;
+    border-radius: 18px;
+  }
+  #tray {
+    gap: 5px;
+    bottom: calc(6px + var(--safe-bottom));
+    right: calc(92px + var(--safe-right));
+  }
+  body:not([data-stage="done"]) #tray {
+    bottom: calc(6px + var(--safe-bottom));
+  }
+  #btn-ok {
+    width: 74px;
+    height: 74px;
+    font-size: 42px;
+    bottom: calc(10px + var(--safe-bottom));
+  }
+}

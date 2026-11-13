@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Бибика — большое путешествие</title>
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="apple-mobile-web-app-title" content="Бибика" />
+    <meta name="theme-color" content="#abdf65" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./icons/icon-180.png" />
+    <link rel="icon" href="./icons/icon-192.png" />
+    <script src="./vendor/vk/vk-bridge.min.js?v=517659a9"></script>
+    <script src="./js/vk-host.js?v=517659a9" data-keys="bibika_save" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=517659a9" />
+  </head>
+  <body data-mode="garage">
+    <main id="garage">
+      <section class="stage-panel">
+        <header class="garage-header">
+          <span class="brand"
+            ><span class="brand-mark">b.</span>бибика<span class="brand-dot"
+              >★</span
+            ></span
+          >
+          <div class="header-tools">
+            <span class="total-stars" aria-label="Всего звёзд"
+              >★ <b id="total-count">0</b></span
+            ><button
+              id="sound-garage"
+              class="icon-button sound-button"
+              aria-label="Выключить звук"
+            >
+              🔊
+            </button>
+          </div>
+        </header>
+        <div class="hero-model">
+          <div class="model-orbit"></div>
+          <canvas
+            id="hero-car"
+            width="600"
+            height="500"
+            aria-label="Выбранная машина"
+          ></canvas>
+          <div id="bubbles" aria-hidden="true"></div>
+          <button id="hero-power" type="button" title="Посмотреть суперсилу" aria-label="Показать суперсилу" disabled></button>
+          <div id="tune-list">
+            <button id="tune-wheels" class="tune-button" type="button" aria-label="Цвет дисков"></button>
+            <button id="tune-beacon" class="tune-button" type="button" aria-label="Мигалка" aria-pressed="false">
+              <span aria-hidden="true">🚨</span>
+            </button>
+          </div>
+          <span id="selected-name" class="visually-hidden" aria-live="polite"></span>
+          <button id="btn-play" class="play-button" disabled aria-label="Поехали">
+            <span class="play-icon" aria-hidden="true">▶</span>
+          </button>
+        </div>
+        <div id="paint-list" class="paint-list" aria-label="Цвет машины"></div>
+        <p id="load-status" role="status" hidden></p>
+      </section>
+      <section class="picker">
+        <div id="world-list" class="world-list" aria-label="Выбор мира"></div>
+        <button id="btn-mission" type="button" disabled hidden></button>
+        <div id="car-list" class="car-grid" aria-label="Выбор машины"></div>
+        <footer>
+          <a href="./assets/models/CREDITS.md" target="_blank" rel="noopener"
+            >Авторы модели</a
+          >
+        </footer>
+      </section>
+    </main>
+    <section id="drive" aria-label="Дорога">
+      <div id="game-stage">
+        <canvas
+          id="game"
+          aria-label="Веди пальцем по дороге, чтобы управлять машиной"
+        ></canvas>
+        <div class="drive-top">
+          <button id="btn-home" class="icon-button" aria-label="Домой, в гараж">
+            <span aria-hidden="true">🏠</span>
+          </button>
+          <div id="star-progress" class="trip-hud" role="img">
+            <div class="star-track">
+              <div id="star-fill"></div>
+              <i style="left: 33.3%"></i><i style="left: 66.6%"></i>
+              <span id="rival-dots" aria-hidden="true"></span>
+            </div>
+            <span id="star-end" aria-hidden="true">★</span>
+          </div>
+          <button id="btn-pause" class="icon-button" aria-label="Пауза">
+            <span aria-hidden="true">⏸</span>
+          </button>
+        </div>
+        <div id="world-toast" role="status"></div>
+        <div id="patrol-mirror" aria-label="Зеркало заднего вида" hidden></div>
+        <div id="mission-hint" role="status" hidden></div>
+        <div id="steer-hint" aria-hidden="true"><span>👆</span></div>
+        <div class="drive-bottom">
+          <button id="btn-horn" class="icon-button" aria-label="Гудок">
+            <span aria-hidden="true">📢</span>
+          </button>
+          <button id="btn-brake" class="icon-button" aria-label="Остановиться" hidden>🛑</button>
+          <div class="drive-actions">
+            <button id="btn-fire" type="button" class="icon-button" aria-label="Стрелять" aria-keyshortcuts="F" title="Стрелять · F. Удерживай для очереди.">
+              <span aria-hidden="true">🎯</span>
+              <span id="fire-ammo" aria-hidden="true"></span>
+            </button>
+            <button id="btn-power" aria-label="Суперспособность">
+              <span id="power-fill"></span>
+              <span id="power-icon" aria-hidden="true">🔥</span>
+            </button>
+          </div>
+        </div>
+        <div id="finish" hidden>
+          <section class="finish-card" role="dialog" aria-label="Все звёзды собраны!">
+            <div class="finish-star" aria-hidden="true">★</div>
+            <div class="finish-prizes">
+              <span id="finish-sticker" class="sticker" aria-label="Наклейка"></span>
+              <span id="finish-paint" class="paint-prize" aria-label="Новый цвет" hidden></span>
+            </div>
+            <div class="finish-podium">
+              <span class="my-medal" aria-label="Золотая медаль">🥇</span>
+              <span id="finish-friends"></span>
+            </div>
+            <button id="btn-next" class="play-button" aria-label="Дальше">
+              <span class="play-icon" aria-hidden="true">▶</span>
+            </button>
+            <button
+              id="btn-finish-garage"
+              class="icon-button"
+              aria-label="В гараж"
+            >
+              <span aria-hidden="true">🏠</span>
+            </button>
+          </section>
+        </div>
+        <div id="dialog-backdrop" hidden>
+          <section class="game-dialog" role="dialog" aria-modal="true" aria-label="Пауза">
+            <button id="btn-resume" class="play-button" aria-label="Продолжить">
+              <span class="play-icon" aria-hidden="true">▶</span>
+            </button>
+            <div class="dialog-tools">
+              <button id="btn-garage" class="icon-button" aria-label="В гараж">
+                <span aria-hidden="true">🏠</span>
+              </button>
+              <button id="btn-camera" class="icon-button" aria-label="Отдалить камеру">
+                <span aria-hidden="true">🎥</span>
+              </button>
+              <button id="sound-drive" class="icon-button sound-button" aria-label="Выключить звук">
+                🔊
+              </button>
+            </div>
+            <div class="audio-levels">
+              <label
+                ><span aria-hidden="true">🎵</span
+                ><span class="visually-hidden">Музыка</span>
+                <input id="music-level" type="range" min="0" max="100" step="1"
+              /></label>
+              <label
+                ><span aria-hidden="true">🔔</span
+                ><span class="visually-hidden">Эффекты</span>
+                <input id="effects-level" type="range" min="0" max="100" step="1"
+              /></label>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+    <script>
+      // Простой синтаксис намеренно: сообщение должно показаться даже там,
+      // где браузер не смог прочитать саму игру.
+      window.bibikaFail = function () {
+        if (window.driveView && window.driveView.ready) return;
+        var status = document.getElementById("load-status");
+        status.hidden = false;
+        status.textContent =
+          "Этот браузер не тянет 3D-графику игры. Обновите систему устройства или откройте игру в свежем Safari или Chrome.";
+      };
+      setTimeout(function () {
+        if (!window.driveView) window.bibikaFail();
+      }, 30000);
+    </script>
+    <script src="./js/audio.js?v=517659a9"></script>
+    <script src="./js/art.js?v=517659a9"></script>
+    <script src="./js/cars.js?v=517659a9"></script>
+    <script src="./js/world.js?v=517659a9"></script>
+    <script src="./js/powers.js?v=517659a9"></script>
+    <script src="./js/missions.js?v=517659a9"></script>
+    <script type="module">
+      await window.vkGameHost?.ready;
+      await new Promise((resolve, reject) => {
+        const game = document.createElement("script");
+        game.src = "./js/game.js";
+        game.onload = resolve;
+        game.onerror = reject;
+        document.body.append(game);
+      }).then(() => import("./js/3d/boot.js")).catch(() => window.bibikaFail());
+    </script>
+    <script src="./js/juice.js?v=517659a9"></script>
+  </body>
+</html>

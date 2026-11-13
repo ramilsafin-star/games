@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#d8f3e3" />
+    <title>Лавка Листик</title>
+    <meta name="description" content="Лесной магазин: будь кассиром — пробей покупки, сложи в пакет, прими оплату и отдай чек." />
+    <link rel="icon" href="./icon-192.png" />
+    <link rel="apple-touch-icon" href="./icon-180.png" />
+    <script src="./vendor/vk/vk-bridge.min.js?v=4bdcc34a"></script>
+    <script src="./js/vk-host.js?v=4bdcc34a" data-keys="listik-v2" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=4bdcc34a" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="top">
+        
+        <div class="brand"><i data-icon="leaf"></i><span>Лавка Листик</span></div>
+        <div class="tools">
+          <button id="album" class="pill" aria-label="Альбом наклеек">
+            <span data-icon="book"></span><b id="album-count">0</b>
+          </button>
+          <button id="music" class="round" aria-pressed="true"></button>
+          <button id="sound" class="round" aria-pressed="true"></button>
+        </div>
+      </header>
+      <section id="theatre" aria-label="Касса лесного магазина">
+        <canvas id="store"></canvas>
+        <div class="hud">
+          <div class="steps-box">
+            <div id="steps" class="steps"></div>
+            <small id="task"></small>
+          </div>
+          <b id="sum" class="sum" hidden></b>
+          <small id="shift" class="shift"></small>
+        </div>
+        <div id="change" class="change" hidden></div>
+        <div id="hand" class="hand" hidden aria-hidden="true">👆</div>
+        <div id="toast" class="toast" hidden><img alt="" /><span></span></div>
+        <div id="party" class="party" hidden><b>Смена закончена!</b><span>🎉</span></div>
+        <div id="nogl" class="nogl" hidden>Для этой игры нужен браузер с 3D-графикой</div>
+      </section>
+    </main>
+    <dialog id="book" aria-labelledby="book-title">
+      <button id="book-close" class="round close" aria-label="Закрыть альбом"><span data-icon="close"></span></button>
+      <small>МОИ НАКЛЕЙКИ · <span id="book-count"></span></small>
+      <h2 id="book-title">Лесной альбом</h2>
+      <div id="book-grid" class="grid"></div>
+    </dialog>
+    <script src="./js/audio.js?v=4bdcc34a"></script>
+    <script type="module" src="./js/game.js?v=4bdcc34a"></script>
+    <script src="./js/juice.js?v=4bdcc34a"></script>
+  </body>
+</html>

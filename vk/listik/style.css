@@ -1,0 +1,437 @@
+:root {
+  color-scheme: light;
+  --ink: #1f4a37;
+  --leaf: #2f8a5f;
+  --mint: #d8f3e3;
+  --orange: #ff9a3c;
+  --cream: #fffaf0;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+body {
+  color: var(--ink);
+  font-family: ui-rounded, "Avenir Next", system-ui, -apple-system, sans-serif;
+  background: linear-gradient(#d8f3e3, #fff1dc);
+  -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
+}
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+button:active {
+  translate: 0 2px;
+}
+button:focus-visible {
+  outline: 4px solid #067796;
+  outline-offset: 2px;
+}
+[hidden] {
+  display: none !important;
+}
+svg {
+  display: block;
+}
+/* Весь экран: шапка и магазин под ней */
+.app {
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+    max(10px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  gap: 8px;
+}
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 46px;
+}
+.home-slot {
+  min-width: 46px;
+  display: flex;
+}
+.home-slot a,
+.round,
+.pill {
+  border: 2px solid var(--ink);
+  border-radius: 24px;
+  background: var(--cream);
+  min-height: 42px;
+  box-shadow: 0 3px 0 #1f4a3740;
+  display: inline-grid;
+  place-items: center;
+  text-decoration: none;
+}
+.home-slot a {
+  width: 46px;
+  font-size: 22px;
+}
+.round {
+  width: 46px;
+  padding: 0;
+}
+.round svg,
+.pill svg {
+  width: 22px;
+  height: 22px;
+}
+.pill {
+  display: inline-flex;
+  gap: 7px;
+  padding: 0 12px 0 10px;
+  font-weight: 850;
+}
+.pill b {
+  background: var(--mint);
+  border-radius: 10px;
+  padding: 2px 7px;
+  font-size: 14px;
+}
+.pill.bump {
+  animation: bump 0.6s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+@keyframes bump {
+  40% {
+    transform: scale(1.25) rotate(-4deg);
+  }
+}
+.tools {
+  display: flex;
+  gap: 7px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 900;
+  font-size: clamp(18px, 3.4vw, 28px);
+  letter-spacing: -0.04em;
+  white-space: nowrap;
+}
+.brand i {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: var(--leaf);
+  color: #b9ee7f;
+  display: grid;
+  place-items: center;
+  transform: rotate(-8deg);
+  box-shadow: 0 3px 0 #1f4a3755;
+}
+.brand i svg {
+  width: 20px;
+  height: 20px;
+}
+/* Магазин */
+#theatre {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 2px solid var(--ink);
+  border-radius: 26px;
+  overflow: hidden;
+  background: linear-gradient(#e6f8ee, #fff3e2);
+  box-shadow: 0 4px 0 #1f4a3733;
+  isolation: isolate;
+}
+#store {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+/* Шаги покупки в левом верхнем углу, вывеска магазина остаётся видна */
+.hud {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  pointer-events: none;
+}
+.steps-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.steps {
+  display: flex;
+  gap: 6px;
+  background: #fffaf0e8;
+  border-radius: 22px;
+  padding: 5px;
+  box-shadow: 0 3px 10px #1f4a3722;
+}
+.step {
+  width: 44px;
+  height: 44px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  color: #8aa898;
+  background: #eef6f0;
+}
+.step svg {
+  width: 26px;
+  height: 26px;
+}
+.step.now {
+  background: var(--orange);
+  color: #fff;
+  transform: scale(1.12);
+  box-shadow: 0 3px 0 #c96d1d;
+}
+.step.done {
+  background: var(--leaf);
+  color: #fff;
+}
+#task {
+  font-weight: 850;
+  font-size: 13px;
+  background: #fffaf0d9;
+  border-radius: 10px;
+  padding: 2px 9px;
+}
+#task:empty {
+  display: none;
+}
+.sum {
+  font-size: 15px;
+  font-weight: 900;
+  background: #123d2c;
+  color: #e9ff8a;
+  border-radius: 12px;
+  padding: 4px 11px;
+  font-variant-numeric: tabular-nums;
+}
+.shift {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  background: #fffaf0d9;
+  border-radius: 12px;
+  padding: 5px 9px;
+}
+/* Сдача кружочками: монетка ложится — кружок становится золотым */
+.change {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fffaf0f0;
+  border: 2px solid var(--ink);
+  border-radius: 26px;
+  padding: 8px 14px;
+  box-shadow: 0 4px 0 #1f4a3733;
+}
+.change-label {
+  font-weight: 900;
+  margin-right: 4px;
+}
+.change i {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px dashed #d8b45c;
+  background: #fff7dd;
+}
+.change i.on {
+  border: 3px solid #c8901c;
+  background: radial-gradient(circle at 35% 35%, #fff2a8, #f5c33b 60%, #d9a21f);
+  animation: pop 0.3s cubic-bezier(0.3, 1.7, 0.5, 1);
+}
+@keyframes pop {
+  from {
+    transform: scale(0.3);
+  }
+}
+.hand {
+  position: absolute;
+  font-size: 46px;
+  pointer-events: none;
+  transform: translate(-30%, 10%);
+  animation: tap 1s ease-in-out infinite;
+  filter: drop-shadow(0 4px 4px #0003);
+  z-index: 3;
+}
+@keyframes tap {
+  50% {
+    transform: translate(-30%, 0) scale(0.9);
+  }
+}
+/* Наклейка-награда: выпрыгивает и улетает в альбом */
+.toast {
+  position: absolute;
+  left: 50%;
+  top: 22%;
+  translate: -50% 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  z-index: 4;
+  pointer-events: none;
+}
+.toast img {
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background: radial-gradient(#fffbe6, #ffe08a);
+  border: 5px solid #fff;
+  box-shadow: 0 6px 18px #1f4a3744;
+}
+.toast span {
+  font-weight: 900;
+  background: #fff;
+  border-radius: 12px;
+  padding: 3px 12px;
+}
+.toast.show {
+  animation: grow 0.5s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+.toast.fly {
+  transition:
+    transform 0.55s ease-in,
+    opacity 0.55s ease-in;
+  transform: translate(var(--dx), var(--dy)) scale(0.15);
+  opacity: 0.4;
+}
+@keyframes grow {
+  from {
+    transform: scale(0.2) rotate(-20deg);
+  }
+}
+.party {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 6px;
+  z-index: 5;
+  pointer-events: none;
+  animation: grow 0.6s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+.party b {
+  font-size: clamp(30px, 6vw, 56px);
+  color: #fff;
+  -webkit-text-stroke: 2px var(--ink);
+  paint-order: stroke;
+  text-shadow: 0 5px 0 var(--ink);
+}
+.party span {
+  font-size: 60px;
+}
+.nogl {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 30px;
+  text-align: center;
+  font-weight: 800;
+}
+/* Альбом наклеек */
+dialog {
+  border: 3px solid var(--ink);
+  border-radius: 28px;
+  background: var(--cream);
+  color: var(--ink);
+  padding: 22px 18px 18px;
+  width: min(640px, 94vw);
+  max-height: 88vh;
+  box-shadow: 0 8px 0 #1f4a3744;
+}
+dialog::backdrop {
+  background: #1f4a3766;
+}
+dialog small {
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  font-size: 11px;
+}
+dialog h2 {
+  margin: 2px 0 14px;
+  font-size: 28px;
+  letter-spacing: -0.04em;
+}
+.close {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 10px;
+}
+.sticker {
+  margin: 0;
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+}
+.sticker img,
+.sticker b {
+  width: 86px;
+  height: 86px;
+  border-radius: 50%;
+  background: radial-gradient(#fffbe6, #ffe08a);
+  border: 4px solid #fff;
+  box-shadow: 0 3px 8px #1f4a3733;
+}
+.sticker.locked b {
+  display: grid;
+  place-items: center;
+  background: #e8efe9;
+  color: #a9bdb0;
+  font-size: 34px;
+}
+.sticker figcaption {
+  font-size: 12px;
+  font-weight: 800;
+}
+@media (max-width: 480px) {
+  .brand span {
+    display: none;
+  }
+  .step {
+    width: 38px;
+    height: 38px;
+  }
+  .change i {
+    width: 26px;
+    height: 26px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hand,
+  .toast.show,
+  .party,
+  .change i.on,
+  .pill.bump {
+    animation: none;
+  }
+}
