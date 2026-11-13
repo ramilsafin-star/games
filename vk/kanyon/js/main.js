@@ -1,8 +1,8 @@
 // «Грозовой каньон»: управление, приборы, панели, звук и главный цикл.
-import { LEVELS, ZONES, PERKS, PERK_COST, Raid } from "./rules.js?v=a9e9d095";
-import { CanyonView } from "./view.js?v=a9e9d095";
-import { Sound } from "./sound.js?v=a9e9d095";
-import { readStorage, writeStorage } from "./kit.js?v=a9e9d095";
+import { LEVELS, ZONES, PERKS, PERK_COST, Raid } from "./rules.js?v=ec8a7f9e";
+import { CanyonView } from "./view.js?v=ec8a7f9e";
+import { Sound } from "./sound.js?v=ec8a7f9e";
+import { readStorage, writeStorage } from "./kit.js?v=ec8a7f9e";
 
 const id = name => document.getElementById(name);
 const canvas = id("stage");
@@ -238,7 +238,7 @@ paintSound();
 function paintRecord() {
   id("best").hidden = best === 0 && !longest.wave;
   const reach = deep > ZONES.length ? "рейд пройден" : deep ? `зона ${deep} из ${ZONES.length}` : "";
-  text(id("best"), "Рекорд рейда  ◆ " + best + (reach ? "  ·  " + reach : "") + (longest.wave ? `  ·  ∞ волна ${longest.wave}` : ""));
+  text(id("best"), "Рекорд рейда  ◆ " + best + (reach ? "  ·  " + reach : "") + (longest.wave ? `  ·  ∞ волна ${longest.wave} · ◆ ${longest.score}` : ""));
   text(id("parts"), parts);
   text(id("quality"), "Графика: " + QUALITY_NAMES[quality] + (quality === "auto" ? ` (${QUALITY_NAMES[view.quality]})` : ""));
 }
@@ -281,6 +281,7 @@ function resume() {
 id("pause").onclick = pause;
 
 function start() {
+  if (game.mode === "paused") bank();
   clearInput();
   Sound.unlock();
   hasMoved = usedRockets = false;
@@ -366,7 +367,7 @@ function paintMode() {
   Sound.mood(mode === "menu" ? 0 : 1);
 
   if (mode === "paused") {
-    showPanel('<div class="eyebrow">РЕЙД «СТРИЖА»</div><h2 id="panel-title">Пауза</h2><p>Двигатели на холостом ходу.</p><button class="primary" data-action="resume">Продолжить</button><div class="pair solo"><button class="choice" data-action="dock">В меню</button></div>');
+    showPanel('<div class="eyebrow">РЕЙД «СТРИЖА»</div><h2 id="panel-title">Пауза</h2><button class="primary" data-action="resume">Продолжить</button><div class="pair"><button class="choice" data-action="retry">Заново</button><button class="choice" data-action="dock">В меню</button></div>');
   } else if (mode === "upgrade") {
     clearInput();
     const cards = game.offer.map(kind => {
@@ -475,7 +476,7 @@ id("panel-body").addEventListener("click", async event => {
     const mode = game.mode;
     Sound.unlock();
     if (action === "module") Sound.module();
-    await adBreak();
+    if (mode !== "paused") await adBreak();
     if (game.mode !== mode) return;
     if (action === "retry") start();
     else if (action === "again") again();
@@ -525,7 +526,8 @@ function paintHud(dt) {
   taskBox.hidden = !task || game.mode === "upgrade";
   if (task) {
     text(taskLabel, TASK_SHORT[task.kind]);
-    text(taskCount, task.done ? "✓" : task.failed ? "✗" : `${Math.min(task.have, task.goal)}/${task.goal}`);
+    const progress = task.kind === "tough" ? `запас ${Math.max(0, task.goal - task.have)}` : `${Math.min(task.have, task.goal)}/${task.goal}`;
+    text(taskCount, task.done ? "✓" : task.failed ? "✗" : progress);
     taskBox.className = task.done ? "done" : task.failed ? "failed" : "";
   }
   const weapon = p.weapon || (p.shield > 0 ? "shield" : null);
@@ -573,6 +575,7 @@ const ENEMY_HINTS = {
   shield: ["Щитоносец! Пробей щит ракетами", "или стреляй, когда он открылся"],
   sniper: ["Снайпер целится — уйди с линии!", "НОВЫЙ ВРАГ"],
   drone: ["Звено дронов — сбей всех!", "ЗА ВСЁ ЗВЕНО — КАПСУЛА"],
+  prism: ["Призма защищает хозяина", "Сбей её обычным огнём"],
   carrier: ["Контейнер! Сбей его", "ВНУТРИ — КАПСУЛА С ОРУЖИЕМ"],
 };
 function hints() {
@@ -590,14 +593,22 @@ function hints() {
 }
 
 let shotCount = 0;
+let hurtTimer;
 function hear(e) {
   switch (e.type) {
-    case "shot": if (shotCount++ % 2 === 0) Sound.laser(); break;
+    case "shot": if (shotCount++ % 2 === 0) Sound.laser(e.kind); break;
     case "impact": if (Math.random() < 0.4) Sound.hit(); break;
     case "burst": Sound.boom(e.kind === "boss" ? 2 : e.kind === "bomber" ? 1.5 : e.kind === "mine" || e.kind === "dart" ? 0.5 : 1); break;
     case "rocket": Sound.rocket(); break;
     case "rocket-hit": Sound.boom(1); break;
-    case "hurt": Sound.hull(); break;
+    case "hurt":
+      Sound.hull();
+      if (view.quality === "low") {
+        document.body.classList.add("hurt-flash");
+        clearTimeout(hurtTimer);
+        hurtTimer = setTimeout(() => document.body.classList.remove("hurt-flash"), 220);
+      }
+      break;
     case "crash": Sound.crash(); break;
     case "gem": Sound.pick(); break;
     case "repair": Sound.repair(); break;
@@ -605,8 +616,9 @@ function hear(e) {
     case "zone": Sound.zone(); break;
     case "clear": Sound.clear(); break;
     case "boss-warning": Sound.boss(); break;
+    case "boss-special": Sound.warn(); break;
     case "hazard-warning": Sound.warn(); break;
-    case "hazard-live": e.kind === "bolt" ? Sound.thunder() : e.kind === "geyser" ? Sound.geyser() : Sound.beam(); break;
+    case "hazard-live": e.kind === "bolt" || e.kind === "gate" ? Sound.thunder() : e.kind === "geyser" ? Sound.geyser() : Sound.beam(); break;
     case "won": Sound.won(); break;
     case "lost": Sound.lost(); break;
     case "capsule": Sound.capsule(); break;
@@ -623,7 +635,16 @@ function hear(e) {
   }
 }
 
-const HAZARD_HINTS = { bolt: "Молния! Уйди с полосы", geyser: "Гейзер — уйди вбок или выше", beam: "Луч! Проскочи над ним или под ним", icicle: "Сосульки! Уйди вбок или вниз" };
+const BOSS_HINTS = {
+  ram: "Таран! Уйди с красной полосы",
+  prisms: "Сбей три призмы, чтобы ослабить защиту",
+  gates: "Грозовые ворота! Лети в просвет",
+  press: "Ледяной пресс! Уходи вбок",
+  firestorm: "Огненный шторм! Следи за лучом",
+  wind: "Боковой ветер! Удерживай курс",
+  barrier: "Щит цитадели! Пробей ракетами",
+};
+const HAZARD_HINTS = { ram: BOSS_HINTS.ram, gate: BOSS_HINTS.gates, bolt: "Молния! Уйди с полосы", geyser: "Гейзер — уйди вбок или выше", beam: "Луч! Проскочи над ним или под ним", icicle: "Сосульки! Уйди вбок или вниз" };
 let taskTimer = 0;
 function narrate(e) {
   if (e.type === "zone") {
@@ -632,6 +653,7 @@ function narrate(e) {
     clearTimeout(taskTimer);
     taskTimer = setTimeout(() => game.mode === "play" && announce(e.task, "★ ЗАДАНИЕ ЗОНЫ"), 2300);
   } else if (e.type === "boss-warning") announce(e.name, "ХОЗЯИН ЗОНЫ", true);
+  else if (e.type === "boss-special") announce(BOSS_HINTS[e.kind], "ПРИЁМ ХОЗЯИНА", true);
   else if (e.type === "clear") {
     lastGain = bank(1);
     announce(!game.endless && game.zone === ZONES.length ? "Каньон свободен" : e.clean ? "Зона пройдена без пробоин! +300" : "Зона пройдена");

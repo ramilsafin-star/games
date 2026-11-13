@@ -1,6 +1,6 @@
 // Звук «Грозового каньона»: всё синтезируется на лету, файлов нет.
 // Эффекты и тихая музыка идут через общий компрессор, чтобы взрывы не перегружали динамик.
-import { readStorage, writeStorage } from "./kit.js?v=a9e9d095";
+import { readStorage, writeStorage } from "./kit.js?v=ec8a7f9e";
 
 const Audio = window.AudioContext || window.webkitAudioContext;
 let ctx = null,
@@ -173,7 +173,12 @@ export const Sound = {
   mood(value) {
     level = value;
   },
-  laser: () => tone(1040, 0.06, "sawtooth", 0.014, 0.35),
+  laser(kind) {
+    if (kind === "plasma") {
+      tone(440, 0.08, "triangle", 0.022, 0.28);
+      tone(220, 0.07, "sine", 0.018, 0.4);
+    } else tone(1040, 0.06, "sawtooth", 0.014, 0.35);
+  },
   hit: () => tone(1500, 0.03, "square", 0.02),
   boom(size) {
     noise(size > 1 ? 1.1 : 0.5, size > 1 ? 0.5 : size < 1 ? 0.16 : 0.3, size > 1 ? 1800 : 2600, 80);

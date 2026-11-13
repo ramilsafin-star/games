@@ -33,7 +33,7 @@ export const TASKS = {
   rockets: { goal: z => 2 + Math.floor(z / 2), text: n => `Сбей ракетами ${n} стражей` },
   combo: { goal: z => 4 + z, text: n => `Сбей ${n} стражей подряд` },
   flock: { goal: () => 1, text: () => "Сбей звено дронов целиком" },
-  tough: { goal: () => 40, text: n => `Потеряй меньше ${n} корпуса` },
+  tough: { goal: (_, level = "easy") => ({ easy: 40, normal: 50, hard: 60 })[level], text: n => `Потеряй меньше ${n} корпуса` },
 };
 
 // Оружие из капсул: сколько секунд действует (щит — сколько ударов держит)
@@ -51,6 +51,7 @@ const UNITS = {
   mine: { hp: 12, r: 1.05, points: 30, hit: 18 },
   bomber: { hp: 150, r: 2.7, points: 200, hit: 20 },
   boss: { hp: 500, r: 5, points: 1000, hit: 24 },
+  prism: { hp: 45, r: 1.15, points: 0, hit: 10 },
   drone: { hp: 7, r: 0.85, points: 25, hit: 10 }, // звено дронов кружит хороводом, потом бросается вперёд
   shield: { hp: 64, r: 1.6, points: 160, hit: 16 }, // щит спереди держит лазеры; ракеты его пробивают
   sniper: { hp: 40, r: 1.3, points: 130, hit: 14 }, // целится красной линией, потом стреляет
@@ -70,7 +71,13 @@ export const LEVELS = {
 // Модули ангара. Брать можно повторно, пока не упрёшься в предел.
 export const MODULES = ["rapid", "spread", "armor", "rockets", "magnet", "wing"];
 const BOLT_SPEED = 150;
+const BOLT_LIFE = 1.45;
 const ROCKET_TIME = 9;
+const MAX_RAPID = 4;
+const ROCKET_PRIORITY = { boss: -80, cruiser: -60, bomber: -30, sniper: -30, mine: 80, drone: 80 };
+const rocketOrder = e => (e.shield ? -120 : ROCKET_PRIORITY[e.kind] ?? 0) - e.z;
+const BOSS_SPECIAL = ["ram", "prisms", "gates", "press", "firestorm", "wind", "barrier"];
+const rocketTarget = e => e.z < -3 && e.z > FAR + 15 && !(e.state === "in" && (e.kind === "boss" || e.kind === "cruiser"));
 
 let groups = 0; // номера звеньев дронов
 
@@ -264,6 +271,7 @@ export class Raid {
     this.stars = 0; // выполненные задания зон
     this.starred = new Set(); // зоны, за задание которых звезда уже дана (повтор зоны второй не даёт)
     this.task = null;
+    this.wind = 0;
     this.groups = new Map(); // звенья дронов: сколько сбито
     this.modules = [];
     this.serial = 0;
@@ -325,6 +333,8 @@ export class Raid {
     this.zoneTime = 0;
     this.bossDone = false;
     this.clean = true;
+    this.wind = 0;
+    this.groups.clear();
     const p = this.player;
     p.health = Math.min(p.maxHealth, p.health + this.tune.repair);
     const extra = this.tune.extra + (this.endless ? Math.floor(this.wave / 6) : 0);
@@ -332,9 +342,14 @@ export class Raid {
     this.script = made.list;
     this.planEnd = made.end;
     // задание зоны (в бесконечном полёте — по кругу)
-    const kind = this.endless ? Object.keys(TASKS)[(this.wave - 1) % 6] : zone.task;
-    const goal = TASKS[kind].goal(this.endless ? Math.min(7, 1 + Math.floor(this.wave / 2)) : this.zone);
+    const kind = this.endless ? Object.keys(TASKS)[(this.wave - 1) % Object.keys(TASKS).length] : zone.task;
+    const goal = TASKS[kind].goal(this.endless ? Math.min(7, 1 + Math.floor(this.wave / 2)) : this.zone, this.level);
     this.task = { kind, goal, have: 0, done: false, failed: false, text: TASKS[kind].text(goal) };
+    if (kind === "flock") {
+      const groups = new Set(this.script.filter(item => item.group).map(item => item.group));
+      if (groups.size) this.task.groups = groups;
+      else this.task.groups = new Set([this.spawnFlock(this.height(0.7), -92)]);
+    }
     this.emit("zone", { zone: this.zone, wave: this.wave, name: zone.name, task: this.task.text });
   }
 
@@ -368,7 +383,8 @@ export class Raid {
 
   makeOffer() {
     const p = this.player;
-    const pool = MODULES.filter(kind => !(kind === "spread" && p.spread >= 2) && !(kind === "wing" && p.wing >= 2));
+    const rapid = this.modules.filter(kind => kind === "rapid").length;
+    const pool = MODULES.filter(kind => !(kind === "spread" && p.spread >= 2) && !(kind === "wing" && p.wing >= 2) && !(kind === "rapid" && rapid >= MAX_RAPID));
     const offer = [];
     while (offer.length < 3 && pool.length) offer.push(pool.splice(Math.floor(this.random() * pool.length), 1)[0]);
     return offer;
@@ -445,12 +461,19 @@ export class Raid {
       stay: item.stay ?? 6, sway: item.sway ?? 0.12, rate: item.rate ?? 1.3, phase: item.phase ?? this.random() * TAU,
       fire: boss ? 2 : item.kind === "sniper" ? 1.4 + this.random() : item.kind === "cruiser" ? 2.2 : 0.9 + this.random() * 1.4,
       attack: 0, burst: 0, burstAt: 0, vx: 0, vy: 0, vz: 0,
+      specialAt: Infinity, ram: 0, ramX: 0, wind: 0, shieldPhase: 0,
       group: item.group || 0, slot: item.slot || 0, of: item.of || 1, dir: item.dir || 1,
       shield: item.kind === "shield" ? 1 : 0, open: 0, charge: 0, aimX: 0, aimY: 0, launch: 3,
     };
     if (enemy.group && !this.groups.has(enemy.group)) this.groups.set(enemy.group, { of: enemy.of, killed: 0 });
     this.enemies.push(enemy);
     return enemy;
+  }
+
+  spawnFlock(y, z, count = 6) {
+    const group = ++groups;
+    for (let i = 0; i < count; i++) this.spawn({ kind: "drone", group, of: count, slot: i, u: 0, v: 0.7, y, z: z - i * 1.8, stay: 4.5 });
+    return group;
   }
 
   addRock(item) {
@@ -475,14 +498,14 @@ export class Raid {
   addHazard(item) {
     const b = this.bounds;
     const p = this.player;
-    const hazard = { id: ++this.serial, kind: item.kind, warn: item.warn ?? 1.1, live: 0.3, on: false };
+    const hazard = { id: ++this.serial, kind: item.kind, warn: item.warn ?? 1.1, live: item.live ?? 0.3, on: false };
     if (item.kind === "beam") {
       // луч босса: полоса во всю ширину, идёт сверху вниз или снизу вверх
       const down = this.random() < 0.5;
       Object.assign(hazard, { y: down ? b.top + 0.6 : b.bottom - 0.6, vy: (down ? -1 : 1) * 3.4, half: 0.55, live: 9 });
     } else {
-      hazard.x = item.aimed ? clamp(p.x + (this.random() - 0.5) * 1.2, -b.x, b.x) : item.u * b.x;
-      hazard.half = Math.min(1.15, b.x * 0.26);
+      hazard.x = item.x ?? (item.aimed ? clamp(p.x + (this.random() - 0.5) * 1.2, -b.x, b.x) : item.u * b.x);
+      hazard.half = item.half ?? Math.min(1.15, b.x * 0.26);
       hazard.y0 = -9;
       hazard.y1 = item.kind === "geyser" ? b.bottom + (b.top - b.bottom) * 0.56 : 99;
       if (item.kind === "geyser") hazard.live = 0.6;
@@ -517,7 +540,7 @@ export class Raid {
     const blend = Math.min(1, dt * 14);
     p.vx += (vx - p.vx) * blend;
     p.vy += (vy - p.vy) * blend;
-    p.x = clamp(p.x + p.vx * dt, -b.x, b.x);
+    p.x = clamp(p.x + (p.vx + this.wind) * dt, -b.x, b.x);
     p.y = clamp(p.y + p.vy * dt, b.bottom, b.top);
     p.safe = Math.max(0, p.safe - dt);
     p.cooldown = Math.max(0, p.cooldown - dt);
@@ -535,11 +558,13 @@ export class Raid {
     const p = this.player;
     const extra = this.perks.power;
     if (kind === "shield") {
-      p.shield = WEAPONS.shield + extra;
-      if (!p.weapon || p.weapon === "shield") p.weapon = null;
+      const max = WEAPONS.shield + extra;
+      p.shield = Math.min(max + 1, p.shield + max);
     } else {
+      const full = WEAPONS[kind] + extra * 2.5;
+      p.weaponLeft = p.weapon === kind ? Math.min(full * 1.5, p.weaponLeft + full * 0.75) : full;
       p.weapon = kind;
-      p.weaponTime = p.weaponLeft = WEAPONS[kind] + extra * 2.5;
+      p.weaponTime = p.weaponLeft;
     }
     this.emit("weapon", { kind });
   }
@@ -577,7 +602,7 @@ export class Raid {
       vy = dy / length * BOLT_SPEED;
       vz = dz / length * BOLT_SPEED;
     }
-    this.bolts.push({ id: ++this.serial, x, y, z, vx, vy, vz, power, kind });
+    this.bolts.push({ id: ++this.serial, x, y, z, vx, vy, vz, power, kind, life: BOLT_LIFE });
   }
 
   autoFire(dt) {
@@ -593,7 +618,7 @@ export class Raid {
       }
       // плазма: широкий веер из четырёх лучей
       if (plasma) for (const s of [-1, 1]) for (const k of [1, 2]) this.bolt(p.x + s * 0.9, p.y + 0.1, -1, null, p.power * 0.7, s * (0.04 + 0.075 * k), kind);
-      this.emit("shot");
+      this.emit("shot", { kind });
     }
     // молния: каждые 0,4 с бьёт в цель и перескакивает ещё на двоих
     if (p.weapon === "chain" && this.time >= p.chainNext) {
@@ -659,16 +684,16 @@ export class Raid {
     const p = this.player;
     if (this.mode !== "play" || p.cooldown > 0) return false;
     p.cooldown = p.rocketTime;
-    // щитоносцы и крейсер — первые цели ракет
-    const order = e => (e.shield ? -100 : e.kind === "cruiser" ? -50 : 0) - e.z;
-    const targets = this.enemies.filter(e => e.z < -3 && e.z > FAR + 15).sort((a, b) => order(a) - order(b));
+    const targets = this.enemies.filter(rocketTarget).sort((a, b) => rocketOrder(a) - rocketOrder(b));
+    const threats = targets.filter(e => e.kind !== "mine" && e.kind !== "drone");
+    const salvo = threats.length ? threats : targets;
     for (let i = 0; i < p.rockets; i++) {
       const side = i % 2 ? 1 : -1;
       const row = Math.floor(i / 2);
       this.rockets.push({
         id: ++this.serial, x: p.x + side * 0.9, y: p.y - 0.2, z: -0.5,
         vx: side * (7 + row * 4), vy: 5 - row * 2, vz: -24, life: 3.2,
-        target: targets.length ? targets[i % targets.length].id : 0,
+        target: salvo.length ? salvo[i % salvo.length].id : 0,
       });
     }
     this.emit("rocket");
@@ -702,7 +727,7 @@ export class Raid {
   // source: "bolt" (лазер), "rocket", "chain" (молния)
   damage(enemy, amount, source = "bolt") {
     if (enemy.state === "in" && (enemy.kind === "boss" || enemy.kind === "cruiser")) return; // неуязвимы, пока прилетают
-    if (enemy.shield && enemy.open <= 0 && source === "bolt") {
+    if (enemy.shield && enemy.open <= 0 && (source === "bolt" || (enemy.kind === "boss" && source !== "rocket"))) {
       this.emit("block", { x: enemy.x, y: enemy.y, z: enemy.z + 1.6 });
       return;
     }
@@ -710,6 +735,7 @@ export class Raid {
       enemy.shield = 0; // ракета пробила щит насовсем
       this.emit("shield-break", { x: enemy.x, y: enemy.y, z: enemy.z + 1.4 });
     }
+    if (enemy.kind === "boss" && this.zone === 2 && this.enemies.some(e => e.prismOwner === enemy.id)) amount *= 0.4;
     enemy.health -= amount;
     enemy.flash = 0.12;
     if (enemy.health <= 0) this.destroy(enemy, true, source);
@@ -732,7 +758,11 @@ export class Raid {
     if (index < 0) return;
     this.enemies.splice(index, 1);
     this.emit("burst", { kind: enemy.kind, x: enemy.x, y: enemy.y, z: enemy.z });
-    if (!scored) return;
+    if (!scored) {
+      this.missFlock(enemy);
+      return;
+    }
+    if (enemy.kind === "prism") return;
     this.destroyed++;
     this.combo = this.time < this.comboUntil ? this.combo + 1 : 1;
     this.comboUntil = this.time + 3;
@@ -752,24 +782,41 @@ export class Raid {
     // звено сбито целиком — бонус и капсула
     if (enemy.group) {
       const flock = this.groups.get(enemy.group);
-      if (flock && ++flock.killed === flock.of) {
+      if (flock && !flock.missed && ++flock.killed === flock.of) {
         this.gain(200);
         this.dropGem(enemy, "power", 0, this.randomWeapon());
-        this.progress("flock");
+        if (!this.task?.groups || this.task.groups.has(enemy.group)) this.progress("flock");
         this.emit("flock", { x: enemy.x, y: enemy.y, z: enemy.z });
       }
     }
     if (boss) {
       this.bossDone = true;
+      this.wind = 0;
       this.script.length = 0;
       for (const other of [...this.enemies]) this.destroy(other, false);
+    }
+  }
+
+  missFlock(e) {
+    if (!e.group) return;
+    const flock = this.groups.get(e.group);
+    if (flock) flock.missed = true;
+    const task = this.task;
+    if (task?.kind !== "flock" || task.done || task.failed || !task.groups?.has(e.group)) return;
+    task.groups.delete(e.group);
+    if (task.groups.size === 0) {
+      task.failed = true;
+      this.emit("task-failed");
     }
   }
 
   // враг ушёл сам (улетел за спину или наверх)
   leave(e) {
     const index = this.enemies.indexOf(e);
-    if (index >= 0) this.enemies.splice(index, 1);
+    if (index >= 0) {
+      this.enemies.splice(index, 1);
+      this.missFlock(e);
+    }
   }
 
   moveEnemy(e, dt) {
@@ -778,7 +825,14 @@ export class Raid {
     e.age += dt;
     e.flash = Math.max(0, e.flash - dt);
     const before = { x: e.x, y: e.y, z: e.z };
-    if (e.kind === "mine" || e.kind === "turret") {
+    if (e.kind === "prism") {
+      const owner = this.enemies.find(enemy => enemy.id === e.prismOwner);
+      if (!owner) return this.leave(e);
+      const angle = e.phase + e.age * 1.5;
+      e.x = owner.x + Math.cos(angle) * 4.2;
+      e.y = owner.y + Math.sin(angle) * 2.2;
+      e.z = owner.z + 4 + Math.sin(angle) * 1.5;
+    } else if (e.kind === "mine" || e.kind === "turret") {
       e.z += SCROLL * dt;
       if (e.kind === "turret" && e.z > -125 && e.z < -50) {
         e.fire -= dt;
@@ -823,6 +877,7 @@ export class Raid {
         if (big) {
           tx = Math.sin(e.age * (boss ? 0.55 : 0.45)) * b.x * (boss ? 0.5 : 0.45);
           ty = this.height((boss ? 0.62 : 0.7) + Math.sin(e.age * 0.8) * 0.2);
+          if (boss && e.ram > 0) tx = e.ramX;
         } else if (e.kind === "drone") {
           // хоровод: центр звена медленно плывёт, дроны кружат вокруг
           const a = e.age * 1.7 + (e.slot / e.of) * TAU;
@@ -837,7 +892,14 @@ export class Raid {
         e.y += (ty - e.y) * Math.min(1, dt * (e.kind === "drone" ? 5 : 2.6));
         e.fire -= dt;
         e.open = Math.max(0, e.open - dt);
-        if (boss) this.bossActs(e, dt);
+        if (boss) {
+          if (e.ram > 0) {
+            e.ram = Math.max(0, e.ram - dt);
+            const elapsed = 1.65 - e.ram;
+            e.z = elapsed < 0.8 ? e.depth - elapsed * 5 : e.depth + Math.sin(Math.min(1, (elapsed - 0.8) / 0.85) * Math.PI) * 27;
+          }
+          this.bossActs(e, dt);
+        }
         else if (e.kind === "cruiser") this.cruiserActs(e, dt);
         else if (e.kind === "sniper") this.sniperActs(e, dt);
         else if (e.kind === "drone") {
@@ -906,9 +968,74 @@ export class Raid {
     }
   }
 
+  bossSpecial(e) {
+    const p = this.player, b = this.bounds;
+    const kind = BOSS_SPECIAL[this.zone - 1];
+    switch (kind) {
+      case "ram":
+        e.ram = 1.65;
+        e.ramX = p.x;
+        this.addHazard({ kind: "ram", x: p.x, half: Math.min(1.25, b.x * 0.27), warn: 0.95, live: 0.3 });
+        break;
+      case "prisms":
+        for (let i = 0; i < 3; i++) {
+          const prism = this.spawn({ kind: "prism", x: e.x, y: e.y, z: e.z + 4, phase: i * TAU / 3 });
+          prism.prismOwner = e.id;
+        }
+        break;
+      case "gates": {
+        const gap = clamp(p.x > 0 ? -b.x * 0.22 : b.x * 0.22, -b.x * 0.55, b.x * 0.55);
+        const opening = b.x * 0.29 + 0.5;
+        const left = gap - opening, right = gap + opening;
+        this.addHazard({ kind: "gate", x: (left - b.x) / 2, half: (left + b.x) / 2, warn: 1.35, live: 0.5 });
+        this.addHazard({ kind: "gate", x: (right + b.x) / 2, half: (b.x - right) / 2, warn: 1.35, live: 0.5 });
+        break;
+      }
+      case "press": {
+        this.addHazard({ kind: "icicle", x: p.x, warn: 1.35 });
+        for (let i = -1; i <= 1; i++) this.shoot(e, p.x + i * 2, b.bottom + 0.45, 17, true);
+        break;
+      }
+      case "firestorm":
+        this.addHazard({ kind: "geyser", x: p.x, warn: 1.15 });
+        this.addHazard({ kind: "beam", warn: 1.6 });
+        break;
+      case "wind":
+        e.wind = p.x > 0 ? -3.8 : 3.8;
+        e.windUntil = this.time + 3.4;
+        this.spawnFlock(this.height(0.68), -57, 4);
+        break;
+    }
+    this.emit("boss-special", { kind });
+  }
+
   bossActs(e, dt) {
     const p = this.player;
-    const wild = e.health < e.maxHealth / 2;
+    const wild = e.health <= e.maxHealth / 2;
+    if (this.zone === 7) {
+      const threshold = e.shieldPhase === 0 ? 0.66 : e.shieldPhase === 1 ? 0.33 : 0;
+      if (threshold && e.health <= e.maxHealth * threshold && !e.shield) {
+        e.shieldPhase++;
+        e.shield = 1;
+        e.shieldUntil = this.time + 5.5;
+        this.emit("boss-special", { kind: "barrier" });
+      }
+      if (e.shield && this.time >= e.shieldUntil) {
+        e.shield = 0;
+        this.emit("shield-break", { x: e.x, y: e.y, z: e.z + 1.4 });
+      }
+    }
+    if (this.zone === 6) this.wind = this.time < (e.windUntil || 0) ? e.wind : 0;
+    const firstSpecial = wild && this.zone !== 7 && e.specialAt === Infinity;
+    if (firstSpecial) e.specialAt = this.time;
+    if (e.ram > 0) return;
+    if (this.time >= e.specialAt && (firstSpecial || e.fire <= 0) &&
+      (this.zone !== 2 || !this.enemies.some(other => other.prismOwner === e.id))) {
+      this.bossSpecial(e);
+      e.specialAt = this.time + 12;
+      e.fire = Math.max(2.7, 3.4 * this.tune.pace);
+      return;
+    }
     // очередь из трёх прицельных зарядов
     if (e.burst > 0 && this.time >= e.burstAt) {
       e.burst--;
@@ -974,6 +1101,7 @@ export class Raid {
           if (Math.hypot(p.x - rock.x, p.y - rock.y) <= rock.r) {
             this.gain(60 * this.multiplier());
             p.cooldown = Math.max(0, p.cooldown - 0.8);
+            p.health = Math.min(p.maxHealth, p.health + 5);
             rock.taken = true;
             this.emit("ring", { x: rock.x, y: rock.y });
           }
@@ -994,7 +1122,8 @@ export class Raid {
       bolt.x += bolt.vx * dt;
       bolt.y += bolt.vy * dt;
       bolt.z += bolt.vz * dt;
-      let gone = bolt.z < FAR + 6;
+      bolt.life -= dt;
+      let gone = bolt.z < FAR + 6 || bolt.life <= 0;
       // скалы лазер не пробивает
       if (!gone) {
         for (const rock of this.rocks) {
@@ -1010,7 +1139,7 @@ export class Raid {
         for (const e of this.enemies) {
           // лазер за шаг пролетает 2.5 единицы: проверяем весь отрезок по глубине
           if (e.z > z0 + e.r || e.z < bolt.z - e.r) continue;
-          if (Math.hypot(bolt.x - e.x, bolt.y - e.y) <= e.r + 0.25) {
+          if (Math.hypot(bolt.x - e.x, bolt.y - e.y) <= e.r + (bolt.kind === "plasma" ? 0.5 : 0.25)) {
             if (!(e.shield && e.open <= 0)) this.emit("impact", { kind: e.kind, x: bolt.x, y: bolt.y, z: e.z + e.r * 0.6 });
             this.damage(e, bolt.power, "bolt");
             gone = true;
@@ -1043,7 +1172,9 @@ export class Raid {
       r.life -= dt;
       let target = this.enemies.find(e => e.id === r.target);
       if (!target) {
-        target = this.enemies.find(e => e.z < -3 && e.z > FAR + 15);
+        for (const e of this.enemies) {
+          if (rocketTarget(e) && (!target || rocketOrder(e) < rocketOrder(target))) target = e;
+        }
         r.target = target ? target.id : 0;
       }
       if (target) {

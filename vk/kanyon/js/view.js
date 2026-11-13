@@ -1,14 +1,14 @@
 // Сцена «Грозового каньона»: стены и дно едут навстречу, истребитель стоит в плоскости z = 0.
 // Правила (rules.js) ничего не знают о графике; здесь только то, что видно.
-import { T, GEO, TAU, V, clamp, hot, lit, part, at, flare } from "./kit.js?v=a9e9d095";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=a9e9d095";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=a9e9d095";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=a9e9d095";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=a9e9d095";
-import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=a9e9d095";
-import { createFx, tone, GLOW, SMOKE, FIRE, RING, STAR } from "./fx.js?v=a9e9d095";
-import { jet, wingman, enemyModels, enemyColor, pillar, arch, ridge, ringGate, GEM_GEO, gemMaterial, repairKit, capsule, CAPSULE_COLOR } from "./models.js?v=a9e9d095";
-import { SCROLL, FAR } from "./rules.js?v=a9e9d095";
+import { T, GEO, TAU, V, clamp, hot, lit, part, at, flare } from "./kit.js?v=ec8a7f9e";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=ec8a7f9e";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=ec8a7f9e";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=ec8a7f9e";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=ec8a7f9e";
+import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=ec8a7f9e";
+import { createFx, tone, GLOW, SMOKE, FIRE, RING, STAR } from "./fx.js?v=ec8a7f9e";
+import { jet, wingman, enemyModels, enemyColor, pillar, arch, ridge, ringGate, GEM_GEO, gemMaterial, repairKit, capsule, CAPSULE_COLOR } from "./models.js?v=ec8a7f9e";
+import { SCROLL, FAR } from "./rules.js?v=ec8a7f9e";
 
 // Оформление зон по порядку. rock/rock2 — два оттенка скал, glow — цвет светящихся вкраплений (или null),
 // rain/snow — осадки, lightning — молнии в небе.
@@ -266,11 +266,16 @@ export class CanyonView {
     this.rocketMesh = pool(GEO.cone, lit("#fff0c0", 2.6), 16);
     this.dummy = new T.Object3D();
     this.aimPoint = V();
+    this.workPosition = V();
+    this.workVelocity = V();
+    this.trailHead = V();
+    this.ringBoost = 0;
 
     this.actors = new Map(); // враги
     this.rocks = new Map();
     this.hazards = new Map();
     this.kits = new Map();
+    this.kitPool = new Map();
     this.fx = createFx(scene, this.camera);
     this.fx.setFlow(SCROLL * 0.3);
 
@@ -348,7 +353,7 @@ export class CanyonView {
         return;
       }
       const s = k ? 1 : -1;
-      const head = V(ship.position.x + Math.cos(roll) * s * 2.3, ship.position.y + 0.12 + Math.sin(roll) * s * 2.3, 1.2);
+      const head = this.trailHead.set(ship.position.x + Math.cos(roll) * s * 2.3, ship.position.y + 0.12 + Math.sin(roll) * s * 2.3, 1.2);
       const { points, pos, col, N } = trail;
       if (trail.fresh) {
         points.forEach(q => q.copy(head));
@@ -512,6 +517,7 @@ export class CanyonView {
     else if (e.type === "gem" || e.type === "repair") {
       fx.puff(STAR, V(p.x, p.y + 0.3, -0.5), null, 1, 2.6, 0.25, tone(e.type === "gem" ? "#6ff3ff" : "#5dff8f", 2), 0.9);
     } else if (e.type === "ring") {
+      if (!this.reduced) this.ringBoost = 0.55;
       fx.puff(RING, V(e.x, e.y, 0), null, 1.5, 5, 0.4, tone("#ffe27a", 2.4), 0.9);
       fx.burst(V(e.x, e.y, 0), ["#ffe27a", "#ffffff"], 12, 16, 0.09);
     } else if (e.type === "hazard-live") {
@@ -527,7 +533,13 @@ export class CanyonView {
   }
 
   reset() {
-    for (const map of [this.actors, this.rocks, this.hazards, this.kits]) {
+    for (const [id, kit] of this.kits) this.recycleKit(id, kit);
+    this.ringBoost = 0;
+    for (const record of this.hazards.values()) {
+      record.warnMat.dispose();
+      record.liveMat.dispose();
+    }
+    for (const map of [this.actors, this.rocks, this.hazards]) {
       for (const record of map.values()) this.scene.remove(record.model || record);
       map.clear();
     }
@@ -686,7 +698,8 @@ export class CanyonView {
       m.position.set(e.x, e.y, e.z);
       // модели чуть крупнее «честного» размера: издалека их должно быть видно
       m.scale.setScalar(e.kind === "boss" ? 1.3 + e.flash * 0.3 : 1.45 * (1 + e.flash * 1.2));
-      if (e.kind === "drone") {
+      if (e.kind === "prism") m.rotation.set(this.time * 0.6, this.time * 1.5, this.time * 0.8);
+      else if (e.kind === "drone") {
         m.rotation.set(e.state === "dive" ? 0.6 : 0, clamp(-e.vx * 0.03, -0.5, 0.5), clamp(-e.vx * 0.06, -0.7, 0.7));
         m.userData.spin[0].rotation.y = this.time * 34;
         m.scale.setScalar(1.35 * (1 + e.flash * 1.5));
@@ -717,6 +730,7 @@ export class CanyonView {
           const pulse = 1 + Math.sin(this.time * (e.health < e.maxHealth / 2 ? 14 : 6)) * 0.12;
           m.userData.core.scale.setScalar(1.05 * pulse);
           m.userData.ring.rotation.z = this.time * 1.4;
+          if (m.userData.plate) m.userData.plate.visible = e.shield > 0;
           m.rotation.y += Math.sin(this.time * 0.7) * 0.12;
         }
       }
@@ -772,13 +786,20 @@ export class CanyonView {
       let record = this.hazards.get(h.id);
       if (!record) {
         const group = new T.Group();
-        const colorHex = h.kind === "bolt" ? "#bfe0ff" : h.kind === "geyser" ? "#ff8a2a" : h.kind === "icicle" ? "#9ff0ff" : "#ff4fb0";
+        const colorHex = h.kind === "ram" ? "#ff4e43" : ["bolt", "gate"].includes(h.kind) ? "#bfe0ff" : h.kind === "geyser" ? "#ff8a2a" : h.kind === "icicle" ? "#9ff0ff" : "#ff4fb0";
         const warnMat = new T.MeshBasicMaterial({ color: hot(colorHex, 1.6), transparent: true, opacity: 0.4, toneMapped: false, depthWrite: false, fog: false });
         const liveMat = new T.MeshBasicMaterial({ color: hot(colorHex, 3.4), toneMapped: false, fog: false });
         let warn, live;
         if (h.kind === "beam") {
           warn = part(GEO.box, warnMat, this.wallX * 2 + 6, 0.12, 0.12);
           live = part(GEO.box, liveMat, this.wallX * 2 + 6, h.half * 2, 0.5);
+        } else if (h.kind === "ram") {
+          warn = at(part(GEO.box, warnMat, h.half * 2, 0.06, 43), 0, -1.75, -21);
+          live = at(part(GEO.box, liveMat, h.half * 2, 0.08, 43), 0, -1.72, -21);
+        } else if (h.kind === "gate") {
+          warn = at(part(GEO.box, warnMat, h.half * 2, 0.08, 46), 0, -1.85, -20);
+          live = at(part(GEO.box, warnMat, h.half * 2, 32, 0.3), 0, 14, 0);
+          live.add(part(GEO.box, liveMat, 0.07, 1, 1));
         } else if (h.kind === "icicle") {
           // сосульки: полоса на дне и нить от середины высоты вверх; живые — ледяные клыки сверху
           warn = new T.Group();
@@ -810,7 +831,7 @@ export class CanyonView {
         }
         group.add(warn, live);
         this.scene.add(group);
-        record = { model: group, warn, live, warnMat };
+        record = { model: group, warn, live, warnMat, liveMat };
         this.hazards.set(h.id, record);
       }
       const { model, warn, live, warnMat } = record;
@@ -821,10 +842,10 @@ export class CanyonView {
       warnMat.opacity = h.on ? 0.75 : 0.28 + 0.3 * Math.abs(Math.sin(this.time * 14));
       if (h.on && h.kind === "icicle") {
         if (Math.random() < 0.5) this.fx.burst(V(h.x + (Math.random() - 0.5) * h.half * 2, h.y0, -0.4), ["#dff8ff", "#ffffff"], 1, 8, 0.15);
-      } else if (h.on && h.kind !== "beam") {
+      } else if (h.on && h.kind !== "beam" && h.kind !== "ram" && h.kind !== "gate") {
         live.scale.x = live.scale.z = h.half * (h.kind === "bolt" ? 0.22 : 0.9) * (0.7 + Math.random() * 0.6);
         if (h.kind === "bolt") live.position.x = (Math.random() - 0.5) * h.half * 0.8;
-        const hex = h.kind === "bolt" ? "#bfe0ff" : "#ffb04a";
+        const hex = ["bolt", "gate"].includes(h.kind) ? "#bfe0ff" : "#ffb04a";
         if (h.kind === "bolt") this.fx.puff(GLOW, V(h.x + live.position.x, b.bottom - 2.2, -0.5), null, 1.2, 2.6, 0.14, tone(hex, 2.4), 0.8);
         else this.fx.puff(FIRE, V(h.x + (Math.random() - 0.5) * h.half, b.bottom + Math.random() * 4, -0.5), V(0, 9, 0), 0.7, 1.8, 0.3, tone(hex, 3), 0.9);
       }
@@ -833,8 +854,15 @@ export class CanyonView {
       if (seen.has(id)) continue;
       this.scene.remove(record.model);
       record.warnMat.dispose();
+      record.liveMat.dispose();
       this.hazards.delete(id);
     }
+  }
+
+  recycleKit(id, kit) {
+    kit.removeFromParent();
+    this.kitPool.get(kit.userData.poolKey).push(kit);
+    this.kits.delete(id);
   }
 
   syncPools(game) {
@@ -842,7 +870,7 @@ export class CanyonView {
     let n = 0, m = 0;
     for (const bolt of game.bolts) {
       const plasma = bolt.kind === "plasma";
-      if (plasma ? m >= 200 : n >= 220) continue;
+      if (plasma ? m >= this.plasmaMesh.instanceMatrix.count : n >= this.boltMesh.instanceMatrix.count) continue;
       d.position.set(bolt.x, bolt.y, bolt.z);
       d.lookAt(this.aimPoint.set(bolt.x + bolt.vx, bolt.y + bolt.vy, bolt.z + bolt.vz));
       if (plasma) {
@@ -893,7 +921,10 @@ export class CanyonView {
         kits.add(gem.id);
         let kit = this.kits.get(gem.id);
         if (!kit) {
-          kit = gem.kind === "power" ? capsule(gem.power) : repairKit();
+          const key = gem.kind === "power" ? gem.power : "repair";
+          if (!this.kitPool.has(key)) this.kitPool.set(key, []);
+          kit = this.kitPool.get(key).pop() || (gem.kind === "power" ? capsule(gem.power) : repairKit());
+          kit.userData.poolKey = key;
           this.scene.add(kit);
           this.kits.set(gem.id, kit);
         }
@@ -916,8 +947,7 @@ export class CanyonView {
     this.gemMesh.instanceMatrix.needsUpdate = true;
     for (const [id, kit] of this.kits) {
       if (kits.has(id)) continue;
-      this.scene.remove(kit);
-      this.kits.delete(id);
+      this.recycleKit(id, kit);
     }
 
     n = 0;
@@ -929,8 +959,8 @@ export class CanyonView {
       d.scale.set(0.16, 0.9, 0.16);
       d.updateMatrix();
       this.rocketMesh.setMatrixAt(n++, d.matrix);
-      this.fx.puff(SMOKE, V(r.x, r.y, r.z), V(0, 0, -SCROLL * 0.7), 0.3, 1.1, 0.5, tone("#e8ecf6", 1), 0.4);
-      this.fx.puff(GLOW, V(r.x, r.y, r.z), V(0, 0, -SCROLL), 0.7, 0.2, 0.12, tone("#ffb04a", 3), 0.9);
+      this.fx.puff(SMOKE, this.workPosition.set(r.x, r.y, r.z), this.workVelocity.set(0, 0, -SCROLL * 0.7), 0.3, 1.1, 0.5, tone("#e8ecf6", 1), 0.4);
+      this.fx.puff(GLOW, this.workPosition.set(r.x, r.y, r.z), this.workVelocity.set(0, 0, -SCROLL), 0.7, 0.2, 0.12, tone("#ffb04a", 3), 0.9);
     }
     this.rocketMesh.count = n;
     this.rocketMesh.instanceMatrix.needsUpdate = true;
@@ -965,7 +995,7 @@ export class CanyonView {
     ship.visible = p.health > 0 && (p.safe <= 0 || idle || Math.sin(t * 40) > -0.3);
     ship.userData.flames.forEach((flame, i) => flame.scale.setScalar(1 + Math.sin(t * 50 + i) * 0.18 + this.muzzle * 0.1));
     if (ship.visible && !this.reduced) {
-      for (const s of [-1, 1]) this.fx.puff(GLOW, V(sx + s * 0.47, sy + 0.02, 2.5), V(0, 0, 9), 0.34, 0.06, 0.1, tone("#59dcff", 1.8), 0.6);
+      for (const s of [-1, 1]) this.fx.puff(GLOW, this.workPosition.set(sx + s * 0.47, sy + 0.02, 2.5), this.workVelocity.set(0, 0, 9), 0.34, 0.06, 0.1, tone("#59dcff", 1.8), 0.6);
     }
     this.drawTrails(dt, idle || !ship.visible && p.health <= 0 || this.quality === "low");
     // пузырь щита
@@ -981,7 +1011,7 @@ export class CanyonView {
     this.wings.forEach((wing, i) => {
       wing.visible = !idle && p.wing > i && p.health > 0;
       if (!wing.visible) return;
-      const goal = V(p.x + (i ? 2 : -2), p.y + 0.6 + Math.sin(t * 3 + i * 2) * 0.15, 0.6);
+      const goal = this.workPosition.set(p.x + (i ? 2 : -2), p.y + 0.6 + Math.sin(t * 3 + i * 2) * 0.15, 0.6);
       wing.position.lerp(goal, Math.min(1, dt * 7));
       wing.rotation.z = clamp(-p.vx * 0.04, -0.6, 0.6);
     });
@@ -1022,7 +1052,9 @@ export class CanyonView {
     const ty = idle ? (wide ? sy + 1.6 : sy + 2.6) : 4.3 + sy * 0.6;
     cam.position.x += (tx - cam.position.x) * Math.min(1, dt * 8);
     cam.position.y += (ty - cam.position.y) * Math.min(1, dt * 8);
-    cam.position.z = idle ? 8.5 : 11.5;
+    this.ringBoost = Math.max(0, this.ringBoost - dt);
+    const boost = Math.sin(this.ringBoost / 0.55 * Math.PI);
+    cam.position.z = idle ? 8.5 : 11.5 + boost * 1.15;
     this.look.x += ((idle ? (wide ? sx - 2.4 : sx) : sx * 0.62) - this.look.x) * Math.min(1, dt * 8);
     this.look.y += ((idle ? (wide ? sy + 0.2 : sy - 3.4) : 1.9 + sy * 0.75) - this.look.y) * Math.min(1, dt * 8);
     this.look.z = idle ? -12 : -40;

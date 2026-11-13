@@ -1,6 +1,6 @@
 // Модели «Грозового каньона»: истребитель, роботы-стражи, скалы, кольца и кристаллы.
 // Истребитель смотрит в −z (вглубь каньона), враги — в +z (на игрока).
-import { T, GEO, TAU, part, at, along, metal, lit, flare } from "./kit.js?v=a9e9d095";
+import { T, GEO, TAU, part, at, along, metal, lit, flare } from "./kit.js?v=ec8a7f9e";
 
 const white = metal("#e9eef6", { roughness: 0.35 });
 const orange = metal("#ff7a2e", { roughness: 0.4 });
@@ -144,7 +144,67 @@ function boss(zone = 1) {
     guns.push(muzzle);
     g.add(pylon, cannon, muzzle, fin);
   }
-  g.userData = { core, ring, guns };
+  const fins = [-1, 1];
+  switch (zone) {
+    case 1:
+      for (const side of fins) {
+        const tusk = at(part(GEO.cone, shell, 0.6, 3.0, 0.66), side * 1.75, -0.45, 3.2);
+        tusk.rotation.x = Math.PI / 2;
+        g.add(tusk);
+      }
+      break;
+    case 2:
+      for (const [x, y] of [[-2.6, 1.4], [0, 2.3], [2.6, 1.4]]) {
+        g.add(at(part(GEO.oct, glow, 0.58, 1.65, 0.58), x, y, 0.3));
+      }
+      break;
+    case 3:
+      for (const side of fins) {
+        const x = side * 3.45;
+        g.add(at(part(GEO.cyl, gun, 0.28, 2.5, 0.28), x, 1.55, 0));
+        for (let i = 0; i < 3; i++) {
+          const coil = at(part(GEO.ring, glow, 0.58), x, 1.05 + i * 0.7, 0);
+          coil.rotation.x = Math.PI / 2;
+          g.add(coil);
+        }
+      }
+      break;
+    case 4:
+      for (let i = -2; i <= 2; i++) {
+        const spike = at(part(GEO.cone, glow, 0.47, 2.1 - Math.abs(i) * 0.28, 0.47), i * 0.95, 1.85, -0.6);
+        spike.rotation.z = i * -0.18;
+        g.add(spike);
+      }
+      break;
+    case 5:
+      for (const side of fins) {
+        const x = side * 2.35;
+        g.add(at(along(part(GEO.cyl, hullDark, 0.84, 2.2, 0.84)), x, 1.0, 0.65),
+          at(part(GEO.ring, glow, 0.88), x, 1.0, 1.8),
+          at(part(GEO.ball, glow, 0.43), x, 1.0, 1.75));
+      }
+      break;
+    case 6:
+      for (const side of fins) {
+        const wing = at(part(GEO.box, shell, 4.1, 0.22, 1.42), side * 5.45, 0.65, -0.9);
+        wing.rotation.y = side * 0.32;
+        wing.rotation.z = side * 0.2;
+        wing.add(at(part(GEO.box, glow, 0.17, 0.09, 1.02), side * 1.55 / 4.1, 0.7, 0.17));
+        g.add(wing);
+      }
+      break;
+    case 7:
+      for (const side of fins) g.add(at(part(GEO.ball, glow, 0.64), side * 2.1, 0.25, 2.05));
+      break;
+  }
+  let plate = null;
+  if (zone === 7) {
+    plate = at(part(GEO.hex, shieldGlass, 4.2, 0.09, 3.0), 0, 0.1, 3.45);
+    plate.rotation.x = Math.PI / 2;
+    plate.visible = false;
+    g.add(plate);
+  }
+  g.userData = { core, ring, guns, plate };
   return g;
 }
 
@@ -230,8 +290,16 @@ function cruiser(zone = 1) {
   return g;
 }
 
-export const enemyModels = { scout, dart, turret, mine, bomber, boss, drone, shield: shieldBearer, sniper, carrier, cruiser };
-export const enemyColor = { scout: "#ff6a4a", dart: "#ff9a3a", turret: "#ffb02e", mine: "#ff5252", bomber: "#ff5fb8", boss: "#ffd27a", drone: "#7fe9ff", shield: "#5fd0ff", sniper: "#ff5a8a", carrier: "#ffd23e", cruiser: "#ff9a4a" };
+function prism() {
+  const g = new T.Group();
+  g.add(part(GEO.oct, metal("#8666d9"), 0.88, 1.4, 0.88),
+    part(GEO.oct, lit("#d5acff", 2.2), 0.46, 1.18, 0.46),
+    flare("#bd80ff", 3.0));
+  return g;
+}
+
+export const enemyModels = { prism, scout, dart, turret, mine, bomber, boss, drone, shield: shieldBearer, sniper, carrier, cruiser };
+export const enemyColor = { prism: "#c39aff", scout: "#ff6a4a", dart: "#ff9a3a", turret: "#ffb02e", mine: "#ff5252", bomber: "#ff5fb8", boss: "#ffd27a", drone: "#7fe9ff", shield: "#5fd0ff", sniper: "#ff5a8a", carrier: "#ffd23e", cruiser: "#ff9a4a" };
 
 // Капсулы с оружием: цвет говорит, что внутри
 export const CAPSULE_COLOR = { plasma: "#ff5ad0", chain: "#ffe14a", shield: "#5fd0ff" };
