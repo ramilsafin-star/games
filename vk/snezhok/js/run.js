@@ -1,8 +1,8 @@
 // Заезд «Снежного кома»: движение кома по трассе, ворота, подбор, удары, финал.
 // Чистая логика без графики. Время заезда на трассе — путь / скорость, поэтому положение
 // движущихся препятствий в каждой точке трассы заранее известно (и проверкам, и роботу).
-import { HALF, LATERAL, GRAVITY, JUMP, BRIDGE_HALF, MAX_SIZE, START, radiusOf, applyGate, isGood, damage, touches, clamp, MONSTER, WEAPON, AVALANCHE, DRAIN, isMonster, impX, shotDamage, crushGain, bonkDamage } from "./rules.js?v=51f23175";
-import { bridgeAt } from "./levels.js?v=51f23175";
+import { HALF, LATERAL, GRAVITY, JUMP, BRIDGE_HALF, MAX_SIZE, START, radiusOf, applyGate, isGood, damage, touches, clamp, MONSTER, WEAPON, AVALANCHE, DRAIN, isMonster, impX, shotDamage, crushGain, bonkDamage } from "./rules.js?v=3cff0128";
+import { bridgeAt } from "./levels.js?v=3cff0128";
 
 const HAZARD_KINDS = new Set(["rock", "fence", "spikes", "log", "hole", "crusher", "geyser", "snowball", "volley"]);
 

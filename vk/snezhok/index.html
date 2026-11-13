@@ -8,9 +8,9 @@
   <meta name="description" content="3D-раннер: снежный ком катится с горы, растёт в воротах ×2 и ×3, давит йети и ледяных бесят, стреляет из снежной пушки. Круши ледяные крепости и снеговиков-боссов. 40 уровней на четырёх горах.">
   <link rel="icon" href="./icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="./icon-180.png">
-  <script src="./vendor/vk/vk-bridge.min.js?v=51f23175"></script>
-    <script src="./js/vk-host.js?v=51f23175" data-keys="snezhok-v1" data-ad-gap="120"></script>
-    <link rel="stylesheet" href="./style.css?v=51f23175">
+  <script src="./vendor/vk/vk-bridge.min.js?v=3cff0128"></script>
+    <script src="./js/vk-host.js?v=3cff0128" data-keys="snezhok-v1" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=3cff0128">
 </head>
 <body data-screen="load">
   <canvas id="stage" aria-label="Снежный склон"></canvas>
@@ -42,6 +42,7 @@
         <div class="pick-text"><b id="pick-level">Уровень 1</b><small id="pick-mountain">Ёлочный склон</small></div>
         <button id="next" class="round" type="button" aria-label="Следующий уровень">›</button>
       </div>
+      <nav id="mountains" class="mountains" aria-label="Выбор горы"></nav>
       <button id="play" class="primary" type="button" disabled>Играть</button>
       <div class="row">
         <button id="open-upgrades" class="ghost" type="button">Улучшения</button>
@@ -55,6 +56,6 @@
   <section id="panel" class="veil" hidden aria-labelledby="panel-title">
     <div class="sheet" id="sheet"></div>
   </section>
-  <script type="module" src="./js/boot.js?v=51f23175"></script>
+  <script type="module" src="./js/boot.js?v=3cff0128"></script>
 </body>
 </html>

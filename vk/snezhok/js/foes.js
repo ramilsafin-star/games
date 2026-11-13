@@ -2,10 +2,10 @@
 // метельный дух, снежища снеговика, шарики-подборы, снежки пушки, шипы и пушечка на Снежке.
 // Модели — мягкий low-poly в стиле Снежка: простые фигуры, лица нарисованы на холсте.
 // Правила (rules.js, run.js) о графике не знают; здесь только то, что видно.
-import { T, TAU, GEO, V, rand, lit, hot, part, at, canvasTexture, labelTexture, flare } from "./kit.js?v=51f23175";
-import { tone, GLOW, PUFF, STAR, RING } from "./fx.js?v=51f23175";
-import { merge } from "./models.js?v=51f23175";
-import { impX, throwPos, volleyState, isMonster, isPickup } from "./rules.js?v=51f23175";
+import { T, TAU, GEO, V, rand, lit, hot, part, at, canvasTexture, labelTexture, flare } from "./kit.js?v=3cff0128";
+import { tone, GLOW, PUFF, STAR, RING } from "./fx.js?v=3cff0128";
+import { merge } from "./models.js?v=3cff0128";
+import { impX, throwPos, volleyState, isMonster, isPickup } from "./rules.js?v=3cff0128";
 
 // ---------- Общие материалы: живут всю игру, уровень их не освобождает ----------
 const std = (color, o = {}) => new T.MeshStandardMaterial({ color, roughness: 0.75, ...o });

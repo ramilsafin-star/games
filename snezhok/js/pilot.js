@@ -2,7 +2,7 @@
 // в браузере. Видит то же, что игрок: ворота, сугробы и препятствия впереди. Умение задаётся
 // временем реакции, дальностью взгляда, дрожью руки, вниманием к препятствиям и тем,
 // насколько он думает у ворот.
-import { HALF, LATERAL, GRAVITY, BRIDGE_HALF, radiusOf, applyGate, touches, rng, clamp, isPickup, impX } from "./rules.js?v=dba1bb88";
+import { HALF, LATERAL, GRAVITY, BRIDGE_HALF, radiusOf, applyGate, touches, rng, clamp, isPickup, impX } from "./rules.js?v=c359cce9";
 
 export const SKILLS = {
   // внимательный игрок: выбирает лучшие ворота, объезжает почти всё

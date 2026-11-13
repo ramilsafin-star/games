@@ -1,6 +1,6 @@
 // Модели «Снежного кома»: ёлки, камни, ворота, заборы, прессы, снеговик-босс, облики кома.
 // Всё собирается из простых фигур и текстур, нарисованных на холсте, — без файлов.
-import { T, TAU, GEO, hot, lit, part, at, canvasTexture, labelTexture, thinFog } from "./kit.js?v=dba1bb88";
+import { T, TAU, GEO, hot, lit, part, at, canvasTexture, labelTexture, thinFog } from "./kit.js?v=c359cce9";
 
 // ---------- Склейка геометрий в одну (вершинные цвета) ----------
 export function merge(list) {
@@ -306,23 +306,26 @@ const postMat = thinFog(new T.MeshStandardMaterial({ color: "#f6faff", roughness
 const capGood = thinFog(lit("#7fd0ff", 1.6), 0.3);
 const capBad = thinFog(lit("#ff6a7a", 1.6), 0.3);
 export const GATE_H = 4.6;
+const gateLabels = new Map();
 export function gateModel(gate, labels) {
   const group = new T.Group();
   const panels = [];
-  const own = []; // что удалить вместе с воротами (общие материалы не трогаем)
   for (const [k, p] of gate.panels.entries()) {
     const good = p.op.k === "+" || p.op.k === "*";
     const w = p.x1 - p.x0;
     const mat = panelMaterial(good);
     const panel = part(GEO.plane, mat, w - 0.25, GATE_H - 0.2, 1);
     panel.position.set((p.x0 + p.x1) / 2, GATE_H / 2, 0);
-    const tex = labelTexture(labels[k], { color: "#ffffff", stroke: good ? "#0c4f9a" : "#8a1424", size: 100 });
+    const key = `${labels[k]}:${good}`;
+    if (!gateLabels.has(key)) {
+      gateLabels.set(key, labelTexture(labels[k], { color: "#ffffff", stroke: good ? "#0c4f9a" : "#8a1424", size: 100 }));
+    }
+    const tex = gateLabels.get(key);
     const label = new T.Mesh(GEO.plane, thinFog(new T.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false }), 0.2));
     const lw = Math.min(w - 0.4, 4.2);
     label.scale.set(lw, lw / 2, 1);
     label.position.set((p.x0 + p.x1) / 2, GATE_H * 0.68, 0.05);
     label.renderOrder = 3;
-    own.push(mat, tex, label.material);
     group.add(panel, label);
     panels.push({ panel, label, good, mat });
   }
@@ -338,21 +341,26 @@ export function gateModel(gate, labels) {
     group.add(post, cap);
   }
   group.userData.panels = panels;
-  group.userData.own = own;
   return group;
 }
 
 // ---------- Снеговик-босс ----------
 const HATS = ["#d6283c", "#5fd4ff", "#7a4cff", "#2a2226"];
 const SCARVES = ["#2a8a4a", "#2b6cd6", "#ffcf3a", "#ff6a2a"];
+const snow = new T.MeshStandardMaterial({ color: "#ffffff", roughness: 0.75 });
+const coal = new T.MeshStandardMaterial({ color: "#1d1f26", roughness: 0.5 });
+const carrot = new T.MeshStandardMaterial({ color: "#ff8a1e", roughness: 0.6 });
+const stick = new T.MeshStandardMaterial({ color: "#6b4a32", roughness: 0.9 });
+const hats = HATS.map((color, i) => new T.MeshStandardMaterial({ color, roughness: 0.6, emissive: i === 1 ? "#2a8ab0" : "#000000", emissiveIntensity: 0.3 }));
+const scarves = SCARVES.map((color) => new T.MeshStandardMaterial({ color, roughness: 0.7 }));
+const hatStar = lit("#ffe27a", 2.2);
+const hatBand = lit("#ff6a2a", 1.8);
+const snowmanMaterials = new Set([snow, coal, carrot, stick, ...hats, ...scarves, hatStar, hatBand]);
+export const keepSnowmanMaterial = (material) => snowmanMaterials.has(material);
+
 export function snowmanModel(mountain) {
   const g = new T.Group();
-  const snow = new T.MeshStandardMaterial({ color: "#ffffff", roughness: 0.75 });
-  const coal = new T.MeshStandardMaterial({ color: "#1d1f26", roughness: 0.5 });
-  const carrot = new T.MeshStandardMaterial({ color: "#ff8a1e", roughness: 0.6 });
-  const hatMat = new T.MeshStandardMaterial({ color: HATS[mountain], roughness: 0.6, emissive: mountain === 1 ? "#2a8ab0" : "#000000", emissiveIntensity: 0.3 });
-  const scarfMat = new T.MeshStandardMaterial({ color: SCARVES[mountain], roughness: 0.7 });
-  const stick = new T.MeshStandardMaterial({ color: "#6b4a32", roughness: 0.9 });
+  const hatMat = hats[mountain], scarfMat = scarves[mountain];
   const body = new T.Group();
   g.add(body);
   const bottom = at(part(GEO.ball, snow, 3.3), 0, 3.0, 0);
@@ -389,10 +397,10 @@ export function snowmanModel(mountain) {
   } else if (mountain === 2) {
     const cone = at(part(GEO.cone, hatMat, 1.5, 2.8), 0, 2.4, -0.1);
     cone.rotation.z = 0.25;
-    head.add(cone, at(part(GEO.cyl, hatMat, 1.9, 0.18, 1.9), 0, 1.15, -0.1), at(part(GEO.oct, lit("#ffe27a", 2.2), 0.22), 0.5, 3.6, 0));
+    head.add(cone, at(part(GEO.cyl, hatMat, 1.9, 0.18, 1.9), 0, 1.15, -0.1), at(part(GEO.oct, hatStar, 0.22), 0.5, 3.6, 0));
   } else {
     head.add(at(part(GEO.cyl, hatMat, 1.1, 1.7, 1.1), 0, 2.1, -0.1), at(part(GEO.cyl, hatMat, 1.8, 0.16, 1.8), 0, 1.3, -0.1));
-    head.add(at(part(GEO.cyl, lit("#ff6a2a", 1.8), 1.12, 0.25, 1.12), 0, 1.55, -0.1));
+    head.add(at(part(GEO.cyl, hatBand, 1.12, 0.25, 1.12), 0, 1.55, -0.1));
   }
   const scarf = at(part(GEO.cyl, scarfMat, 1.85, 0.5, 1.85), 0, 8.75, 0);
   const tail = at(part(GEO.box, scarfMat, 0.6, 1.8, 0.2), 0.9, 7.9, 1.6);
@@ -544,10 +552,13 @@ export function skinMaterial(id, env, snow) {
       return snow;
   }
 }
+const smoothSkin = new T.SphereGeometry(1, 40, 26);
+const iceSkin = new T.IcosahedronGeometry(1, 2);
+const discoSkin = new T.SphereGeometry(1, 24, 14);
 export function skinGeometry(id) {
-  if (id === "ice") return new T.IcosahedronGeometry(1, 2);
-  if (id === "disco") return new T.SphereGeometry(1, 24, 14);
-  return new T.SphereGeometry(1, 40, 26);
+  if (id === "ice") return iceSkin;
+  if (id === "disco") return discoSkin;
+  return smoothSkin;
 }
 // Хвостик мандарина
 export function leafModel() {

@@ -1,6 +1,6 @@
 // Эффекты «Снежного кома»: мягкие частицы (снежная пыль, блики, звёздочки, ударные кольца),
 // искры, комья снега, осколки льда и конфетти. Всё в пулах: на сцене три вызова отрисовки.
-import { T, TAU, rand, pick, V, hot, GEO } from "./kit.js?v=dba1bb88";
+import { T, TAU, rand, pick, V, hot, GEO } from "./kit.js?v=c359cce9";
 
 export const GLOW = 0,
   PUFF = 1,

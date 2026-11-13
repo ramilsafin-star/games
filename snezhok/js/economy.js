@@ -1,6 +1,6 @@
 // Снежинки (монеты), улучшения, облики кома и сохранение. Без DOM — проверяется в Node.
-import { LEVEL_COUNT } from "./levels.js?v=dba1bb88";
-import { START, WEAPON } from "./rules.js?v=dba1bb88";
+import { LEVEL_COUNT } from "./levels.js?v=c359cce9";
+import { START, WEAPON } from "./rules.js?v=c359cce9";
 
 export const SAVE_KEY = "snezhok-v1";
 

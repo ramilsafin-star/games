@@ -1,13 +1,13 @@
 // «Снежный ком»: экраны, управление, звук, сохранение, реклама VK и главный цикл.
-import { HALF, radiusOf, gateLabel, START } from "./rules.js?v=51f23175";
-import { buildLevel, LEVEL_COUNT, MOUNTAINS, INTRO, FOE_INTRO, QUEST_TEXT, mountainOf } from "./levels.js?v=51f23175";
-import { Run } from "./run.js?v=51f23175";
-import { makePilot } from "./pilot.js?v=51f23175";
-import { SAVE_KEY, UPGRADES, SKINS, upgradeCost, upgradeText, levelReward, readSave, writeSave, setBest, bestOf, gear, skinOpen, AD_AMMO } from "./economy.js?v=51f23175";
-import { readStorage, writeStorage } from "./kit.js?v=51f23175";
-import { Sound } from "./sound.js?v=51f23175";
-import { SnowView, TIERS } from "./view.js?v=51f23175";
-import { FOE_ICONS, CONFETTI } from "./icons.js?v=51f23175";
+import { HALF, radiusOf, gateLabel, START } from "./rules.js?v=3cff0128";
+import { buildLevel, LEVEL_COUNT, MOUNTAINS, PER_MOUNTAIN, INTRO, FOE_INTRO, QUEST_TEXT, mountainOf } from "./levels.js?v=3cff0128";
+import { Run } from "./run.js?v=3cff0128";
+import { makePilot } from "./pilot.js?v=3cff0128";
+import { SAVE_KEY, UPGRADES, SKINS, upgradeCost, upgradeText, levelReward, readSave, writeSave, setBest, bestOf, gear, skinOpen, AD_AMMO } from "./economy.js?v=3cff0128";
+import { readStorage, writeStorage } from "./kit.js?v=3cff0128";
+import { Sound } from "./sound.js?v=3cff0128";
+import { SnowView, TIERS } from "./view.js?v=3cff0128";
+import { FOE_ICONS, CONFETTI } from "./icons.js?v=3cff0128";
 
 const $ = (name) => document.getElementById(name);
 const host = () => window.vkGameHost;
@@ -42,15 +42,16 @@ let pilotKind = null;
 let pilotSeed = 1;
 let panel = null; // что открыто на панели
 let adBusy = false;
-let resultShown = false;
+let adOverlay = false;
+const adLocked = () => adBusy || adOverlay;
+let resultDelay = null;
 let intros = []; // подсказки уровня: о новом препятствии, монстре, подборе
 let introAt = 0;
 let slowmo = 0; // замедление после удара по снеговику
 let finaleShown = false; // объявление крепости или босса — до удара, а не поверх него
 let reward = null; // награда последнего уровня (для ×3)
 let tripled = false;
-let failCredit = 0; // снежинки неудачного заезда: зачисляются, если игрок не продолжил
-let shownCoins = save.co;
+let failCredit = null; // часть заезда, уже начисленная при поражении
 
 // ---------- Управление ----------
 const keys = { left: false, right: false };
@@ -58,6 +59,7 @@ const KEYMAP = { ArrowLeft: "left", KeyA: "left", ArrowRight: "right", KeyD: "ri
 let finger = null; // { id, x, from } — откуда тянут и где тогда был ком
 let target = null;
 const playing = () => screen === "play" && run && (run.mode === "ready" || run.playing);
+const canPause = () => screen === "play" && (playing() || resultDelay !== null);
 
 function dragScale() {
   const w = view.size?.w || innerWidth;
@@ -88,7 +90,7 @@ addEventListener("pointercancel", lift);
 addEventListener("contextmenu", (e) => e.preventDefault());
 addEventListener("keydown", (e) => {
   if (e.code === "Escape" && !e.repeat) {
-    if (playing() && !paused && run.mode !== "ready") pause();
+    if (canPause() && !paused && run.mode !== "ready") pause();
     else if (paused && panel === "pause") resume();
     return;
   }
@@ -121,7 +123,7 @@ function input(h) {
 
 // ---------- VK: свёрнутая игра, реклама ----------
 function quiet() {
-  if (playing() && !paused && run.mode !== "ready") pause();
+  if (canPause() && !paused && run.mode !== "ready") pause();
   Sound.hush();
 }
 function updateVisibility() {
@@ -132,10 +134,10 @@ document.addEventListener("visibilitychange", updateVisibility);
 addEventListener("vk-game-visibility", updateVisibility);
 addEventListener("vk-ad", (e) => {
   if (e.detail?.on) {
-    adBusy = true;
+    adOverlay = true;
     quiet();
   } else {
-    adBusy = false;
+    adOverlay = false;
     if (!document.hidden && !host()?.hidden && save.snd && !paused) Sound.unlock();
   }
 });
@@ -144,7 +146,7 @@ for (const type of ["pointerdown", "pointerup", "click", "keydown"])
   addEventListener(
     type,
     (e) => {
-      if (!adBusy) return;
+      if (!adLocked()) return;
       e.stopImmediatePropagation();
       e.preventDefault();
     },
@@ -152,27 +154,26 @@ for (const type of ["pointerdown", "pointerup", "click", "keydown"])
   );
 addEventListener("vk-reward-ready", () => paintRewardButtons());
 const rewardOk = () => !!(host()?.inVk && host().rewardReady);
-// Межэкранная реклама: только после уровня, частоту ограничивает vk-host
-async function adBreak() {
-  if (adBusy) return false;
+// Межэкранная реклама: только после уровня, частоту ограничивает vk-host.
+async function showAd(button, kind) {
+  if (adLocked()) return false;
+  const rewarded = kind === "rewarded";
+  if (rewarded && !rewardOk()) return false;
+  const notice = $("ad-notice");
+  if (notice) notice.hidden = true;
   adBusy = true;
+  button.disabled = true;
+  let shown = false;
   try {
-    await host()?.interstitial?.();
+    shown = Boolean(await host()?.[kind]?.());
+  } catch {
+    // Игра продолжает работать, если SDK недоступен.
   } finally {
+    button.disabled = false;
     adBusy = false;
   }
-  return true;
-}
-async function rewarded() {
-  if (adBusy || !rewardOk()) return false;
-  adBusy = true;
-  let ok = false;
-  try {
-    ok = !!(await host().rewarded());
-  } finally {
-    adBusy = false;
-  }
-  return ok;
+  if (rewarded && !shown && notice) notice.hidden = false;
+  return !rewarded || shown;
 }
 
 // ---------- Надписи ----------
@@ -259,7 +260,7 @@ function paintSound() {
   $("sound").setAttribute("aria-pressed", String(!!save.snd));
 }
 $("sound").addEventListener("click", () => {
-  if (adBusy) return;
+  if (adLocked()) return;
   save.snd = save.snd ? 0 : 1;
   Sound.set(!!save.snd);
   if (save.snd) {
@@ -271,7 +272,7 @@ $("sound").addEventListener("click", () => {
 });
 $("pause").addEventListener("click", () => {
   Sound.tap();
-  if (playing() && !paused) pause();
+  if (canPause() && !paused) pause();
 });
 
 function paintTitle() {
@@ -283,13 +284,26 @@ function paintTitle() {
   text($("pick-mountain"), MOUNTAINS[m].name + (best ? ` · лучшее ×${best}` : ""));
   $("prev").disabled = n <= 1;
   $("next").disabled = n >= Math.min(save.lv, LEVEL_COUNT);
+  for (const b of mountainButtons) {
+    b.disabled = Number(b.dataset.level) > save.lv;
+    b.setAttribute("aria-pressed", String(mountainOf(Number(b.dataset.level)) === m));
+  }
   text($("play"), save.lv > LEVEL_COUNT && n === LEVEL_COUNT ? "Играть ещё" : n < Math.min(save.lv, LEVEL_COUNT) ? "Переиграть" : "Играть");
   paintCoins();
 }
-$("prev").addEventListener("click", () => pickLevel(-1));
-$("next").addEventListener("click", () => pickLevel(1));
-function pickLevel(step) {
-  const n = Math.max(1, Math.min(Math.min(save.lv, LEVEL_COUNT), save.at + step));
+const mountains = $("mountains");
+mountains.innerHTML = MOUNTAINS.map(({ name }, i) =>
+  `<button type="button" data-level="${1 + i * PER_MOUNTAIN}" aria-pressed="false">${name}</button>`
+).join("");
+const mountainButtons = mountains.querySelectorAll("button");
+mountains.addEventListener("click", (e) => {
+  const button = e.target.closest("button[data-level]");
+  if (button && !button.disabled) pickLevel(Number(button.dataset.level));
+});
+$("prev").addEventListener("click", () => pickLevel(save.at - 1));
+$("next").addEventListener("click", () => pickLevel(save.at + 1));
+function pickLevel(requested) {
+  const n = Math.max(1, Math.min(Math.min(save.lv, LEVEL_COUNT), requested));
   if (n === save.at) return;
   Sound.tap();
   save.at = n;
@@ -326,6 +340,7 @@ function showMenuScene() {
   view.snap = true;
 }
 function toTitle() {
+  resultDelay = null;
   closePanel();
   paused = false;
   pilot = null;
@@ -342,11 +357,10 @@ function startLevel(n, extra = {}) {
   level = buildLevel(n);
   save.at = n;
   persist();
-  if (view.level !== level) view.load(level);
-  else view.load(level); // предметы и следы — с чистого листа
+  view.load(level); // предметы и следы — с чистого листа
   run = new Run(level, { ...gear(save.up), ...extra });
   paused = false;
-  resultShown = false;
+  resultDelay = null;
   slowmo = 0;
   intros = [];
   if (level.intro) intros.push({ at: level.introAt, text: INTRO[level.intro], icon: "" });
@@ -355,7 +369,7 @@ function startLevel(n, extra = {}) {
   buildGear();
   reward = null;
   tripled = false;
-  failCredit = 0;
+  failCredit = null;
   finger = target = null;
   setScreen("play");
   view.snap = true;
@@ -368,7 +382,7 @@ function startLevel(n, extra = {}) {
   hint.hidden = false;
   const touch = matchMedia("(pointer: coarse)").matches;
   hint.innerHTML =
-    n === 1 || save.lv <= 2
+    n <= 2
       ? `<i class="swipe"></i>${touch ? "Тяни пальцем влево-вправо" : "Тяни мышью или жми A/D"}<br><b>Синие ворота</b> растят ком, <span class="bad">красные</span> — тают`
       : `<i class="swipe"></i>${touch ? "Коснись и тяни — ком покатится" : "Нажми и тяни — ком покатится"}`;
   finaleShown = false;
@@ -380,15 +394,16 @@ function startLevel(n, extra = {}) {
 function begin() {
   if (!run || run.mode !== "ready") return;
   run.begin();
-  $("hint").hidden = true;
+  if (level.n > 2) $("hint").hidden = true;
   $("gear").hidden = false;
   Sound.start();
 }
 function pause() {
-  if (paused) return;
+  if (paused || !canPause()) return;
   paused = true;
   finger = target = null;
   keys.left = keys.right = false;
+  Sound.hush();
   openPanel("pause", `<div class="eyebrow"><i></i> УРОВЕНЬ ${level.n}</div><h2 id="panel-title">Пауза</h2>
     <button class="primary" data-action="resume">Продолжить</button>
     <div class="pair"><button class="choice" data-action="restart">Заново</button><button class="choice" data-action="menu">В меню</button></div>`);
@@ -474,16 +489,19 @@ function openSkins() {
     <div class="pair" style="grid-template-columns:1fr"><button class="choice" data-action="back">Назад</button></div>`);
 }
 
-function showFinish() {
-  const r = levelReward(level, run, save.up[1]);
+function creditFinish() {
+  if (reward) return;
+  const r = (reward = levelReward(level, run, save.up[1]));
   save.kl += run.kills.all;
-  reward = r;
   tripled = false;
   save.co += r.total;
   setBest(save, level.n, r.mult);
   if (level.n === save.lv && save.lv <= LEVEL_COUNT) save.lv = level.n + 1;
   save.at = Math.min(LEVEL_COUNT, Math.max(save.at, level.n < LEVEL_COUNT ? level.n + 1 : level.n));
   persist();
+}
+function showFinish() {
+  const r = reward;
   const broke = level.finale.kind === "boss" ? true : run.walls.every((w) => w.broken);
   const title = level.finale.kind === "boss" ? "Снеговик повержен!" : broke ? "Крепость разбита!" : "Уровень пройден!";
   const facts = [
@@ -502,6 +520,7 @@ function showFinish() {
     <div class="facts">${facts}</div>
     <div class="reward" id="reward"><i class="flake"></i><b class="count">+0</b></div>
     <button class="ad" data-reward="triple" data-action="triple" hidden>×3 снежинки за рекламу</button>
+    ${adNotice}
     <button class="primary" data-action="next">${last ? "Все горы пройдены!" : "Дальше"}</button>
     <div class="pair"><button class="choice" data-action="again">Ещё раз</button><button class="choice" data-action="menu">В меню</button></div>`);
   paintCoins();
@@ -542,10 +561,8 @@ function confetti(count) {
   confetti.timer = setTimeout(() => (box.textContent = ""), 4200);
 }
 const plural = (n, one, few, many) => (n % 10 === 1 && n % 100 !== 11 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? few : many);
+const adNotice = '<p id="ad-notice" role="status" hidden>Ролик недоступен. Можно попробовать снова.</p>';
 function showFail() {
-  failCredit = run.coins;
-  save.kl += run.kills.all;
-  persist();
   const why = run.failReason === "fall" ? "Сорвался с моста!" : run.failReason === "boss" ? `${level.finale.boss.name} крупнее!` : "Ком растаял!";
   const tip =
     run.failReason === "boss"
@@ -556,21 +573,23 @@ function showFail() {
   openPanel("fail", `<div class="eyebrow"><i></i> УРОВЕНЬ ${level.n}</div>
     <h2 id="panel-title">${why}</h2>
     <p>${tip}</p>
-    <p>Собранные снежинки останутся: <b>+${run.coins}</b></p>
+    <p>Снежинки зачислены: <b>+${run.coins}</b></p>
     <button class="ad" data-reward="continue" data-action="continue" hidden>Продолжить с этого места за рекламу</button>
     ${level.n >= 2 ? `<button class="ad gun" data-reward="gun" data-action="gun-ad" hidden>Ещё раз со снежной пушкой</button>` : ""}
+    ${adNotice}
     <button class="primary" data-action="again">Ещё раз</button>
     <div class="pair" style="grid-template-columns:1fr"><button class="choice" data-action="menu">В меню</button></div>`);
 }
 function creditFail() {
-  if (!failCredit) return;
-  save.co += failCredit;
-  failCredit = 0;
+  if (failCredit) return;
+  failCredit = { coins: run.coins, kills: run.kills.all };
+  save.co += failCredit.coins;
+  save.kl += failCredit.kills;
   persist();
 }
 
 $("sheet").addEventListener("click", async (e) => {
-  if (adBusy) return;
+  if (adLocked()) return;
   const b = e.target.closest("[data-action]");
   if (!b || b.disabled) return;
   const action = b.dataset.action;
@@ -578,10 +597,8 @@ $("sheet").addEventListener("click", async (e) => {
   Sound.tap();
   if (action === "resume") resume();
   else if (action === "restart") startLevel(level.n);
-  else if (action === "menu") {
-    creditFail();
-    toTitle();
-  } else if (action === "back") {
+  else if (action === "menu") toTitle();
+  else if (action === "back") {
     closePanel();
     paintTitle();
   } else if (action === "tab") {
@@ -621,20 +638,18 @@ $("sheet").addEventListener("click", async (e) => {
     openSkins();
   } else if (action === "next" || action === "again") {
     // реклама — только здесь, между уровнями, и не чаще, чем разрешит vk-host
-    creditFail();
     const n = action === "next" ? Math.min(LEVEL_COUNT, level.n + 1) : level.n;
+    if (!(await showAd(b, "interstitial"))) return;
     if (action === "next" && level.n >= LEVEL_COUNT) {
-      if (!(await adBreak())) return;
       toTitle();
       banner("Все четыре горы пройдены!", "ПОБЕДА");
       return;
     }
-    if (!(await adBreak())) return;
     startLevel(n);
     updateVisibility();
   } else if (action === "triple") {
     if (tripled || !reward) return;
-    const ok = await rewarded();
+    const ok = await showAd(b, "rewarded");
     if (!ok) return;
     tripled = true;
     save.co += reward.total * 2;
@@ -646,19 +661,24 @@ $("sheet").addEventListener("click", async (e) => {
     paintRewardButtons();
   } else if (action === "gun-ad") {
     // ролик за награду: тот же уровень заново, а в пушке — снежки с собой
-    const ok = await rewarded();
+    const ok = await showAd(b, "rewarded");
     if (!ok) return;
-    creditFail();
     startLevel(level.n, { ammo: AD_AMMO });
     banner(`${AD_AMMO} снежков в пушке!`, "СНЕЖНАЯ ПУШКА", false, "tip", "gun");
     updateVisibility();
   } else if (action === "continue") {
     if (!run.canContinue()) return;
-    const ok = await rewarded();
+    const ok = await showAd(b, "rewarded");
     if (!ok || !run.continueRun()) return;
-    failCredit = 0;
+    if (failCredit) {
+      save.co -= failCredit.coins;
+      save.kl -= failCredit.kills;
+      failCredit = null;
+      persist();
+    }
     closePanel();
-    resultShown = false;
+    resultDelay = null;
+    Sound.mood(1);
     finaleShown = run.s >= level.length;
     handleEvents();
     Sound.unlock();
@@ -771,11 +791,13 @@ function handleEvents() {
       case "won":
         Sound.won();
         Sound.mood(0);
-        setTimeout(() => run?.mode === "won" && !resultShown && ((resultShown = true), showFinish()), 1100);
+        creditFinish();
+        resultDelay = 1.1;
         break;
       case "fail":
         Sound.mood(0);
-        setTimeout(() => run?.mode === "fail" && !resultShown && ((resultShown = true), showFail()), 1300);
+        creditFail();
+        resultDelay = 1.3;
         break;
     }
   }
@@ -807,7 +829,7 @@ function frame(now) {
     fps.frames = 0;
     fps.since = now;
   }
-  if (screen === "play" && run && !paused && !adBusy) {
+  if (screen === "play" && run && !paused && !adLocked() && !document.hidden && !host()?.hidden) {
     // после удара по снеговику мир на миг замирает
     const slow = slowmo > 0 ? 0.3 : 1;
     slowmo = Math.max(0, slowmo - dt);
@@ -827,13 +849,21 @@ function frame(now) {
       Sound.hint();
     }
     if (!finaleShown && run.mode === "run" && run.s > level.length - 12) finaleBanner();
+    if (resultDelay !== null) {
+      resultDelay -= dt;
+      if (resultDelay <= 0) {
+        resultDelay = null;
+        if (run.mode === "won") showFinish();
+        else if (run.mode === "fail") showFail();
+      }
+    }
   }
-  if (paused || adBusy) {
+  if (paused || adLocked()) {
     // на паузе сцена стоит — рисуем редко, только чтобы не пропал кадр после поворота экрана
     if (!view.needsDraw) return;
     view.needsDraw = false;
   }
-  view.draw(run, paused || adBusy ? 0 : dt * (slowmo > 0 ? 0.3 : 1), screen === "title" ? "menu" : "play", ms);
+  view.draw(run, paused || adLocked() ? 0 : dt * (slowmo > 0 ? 0.3 : 1), screen === "title" ? "menu" : "play", ms);
   if (screen === "play") paintHud();
 }
 // ---------- Оружие, задание и лавина: плашки в левом нижнем углу ----------
@@ -883,6 +913,7 @@ function paintGear() {
 }
 
 function paintHud() {
+  if (run.s >= 26 || run.mode === "won" || run.mode === "fail") $("hint").hidden = true;
   paintGear();
   $("hud-progress").style.transform = `scaleX(${Math.min(1, run.s / (level.finale.end - 4)).toFixed(3)})`;
   // в заезде — снежинки этого заезда, на панелях — копилка
@@ -947,7 +978,7 @@ window.snezhok = {
   },
   save,
   persist,
-  state: () => ({ screen, paused, panel, adBusy, mode: run?.mode, s: run?.s, size: run?.size, coins: save.co, lv: save.lv, at: save.at, n: level?.n, fps: fps.value, perf: { ...view.perf }, kills: run?.kills.all, armed: run?.armed, spikeT: run?.spikeT, ammo: run?.ammo }),
+  state: () => ({ screen, paused, panel, adBusy: adLocked(), mode: run?.mode, s: run?.s, size: run?.size, coins: save.co, lv: save.lv, at: save.at, n: level?.n, fps: fps.value, perf: { ...view.perf }, kills: run?.kills.all, armed: run?.armed, spikeT: run?.spikeT, ammo: run?.ammo }),
   quality: (mode) => view.setQuality(mode, startTier()),
   log: testLog,
   fps: () => [...fps.log],

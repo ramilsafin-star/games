@@ -1,20 +1,20 @@
 // Сцена «Снежного кома». Правила считают трассу прямой (s — вперёд, x — вбок), а здесь она
 // изгибается и идёт под уклон: каждая точка (s, x, y) переводится в мир через «рельсы» path.
 // Правила (rules.js, run.js) ничего не знают о графике; здесь только то, что видно.
-import { T, TAU, GEO, V, clamp, rand, hot, lit, part, at, canvasTexture, labelTexture, glowTexture } from "./kit.js?v=dba1bb88";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=dba1bb88";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=dba1bb88";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=dba1bb88";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=dba1bb88";
-import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=dba1bb88";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=dba1bb88";
-import { createFx, tone, GLOW, PUFF, STAR, RING } from "./fx.js?v=dba1bb88";
-import { firGeometry, spireGeometry, rockGeometry, pileGeometry, rampGeometry, snowTexture, flakeTexture, crackTexture, bricksTexture, signTexture, gateModel, snowmanModel, skinMaterial, skinGeometry, GATE_H } from "./models.js?v=dba1bb88";
-import { Hero } from "./hero.js?v=dba1bb88";
-import { HALF, BRIDGE_HALF, radiusOf, gateLabel, logX, crusherLift, geyserState, rng } from "./rules.js?v=dba1bb88";
-import { FoeView, keepFoeMaterial } from "./foes.js?v=dba1bb88";
-import { heading } from "./levels.js?v=dba1bb88";
-import { SKINS } from "./economy.js?v=dba1bb88";
+import { T, TAU, GEO, V, clamp, rand, hot, lit, part, at, canvasTexture, labelTexture, glowTexture } from "./kit.js?v=c359cce9";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=c359cce9";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=c359cce9";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=c359cce9";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=c359cce9";
+import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=c359cce9";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=c359cce9";
+import { createFx, tone, GLOW, PUFF, STAR, RING } from "./fx.js?v=c359cce9";
+import { firGeometry, spireGeometry, rockGeometry, pileGeometry, rampGeometry, snowTexture, flakeTexture, crackTexture, bricksTexture, signTexture, gateModel, snowmanModel, keepSnowmanMaterial, skinMaterial, skinGeometry, GATE_H } from "./models.js?v=c359cce9";
+import { Hero } from "./hero.js?v=c359cce9";
+import { HALF, BRIDGE_HALF, radiusOf, gateLabel, logX, crusherLift, geyserState, rng } from "./rules.js?v=c359cce9";
+import { FoeView, keepFoeMaterial } from "./foes.js?v=c359cce9";
+import { heading } from "./levels.js?v=c359cce9";
+import { SKINS } from "./economy.js?v=c359cce9";
 
 export const SLOPE = 0.12;
 const PITCH = Math.atan(SLOPE);
@@ -506,7 +506,7 @@ export class SnowView {
     this.world.traverse((node) => {
       if (node.isInstancedMesh) node.dispose();
       if (node.isMesh && node.userData.own) node.geometry.dispose();
-      if (node.material && !keep.has(node.material) && !keepFoeMaterial(node.material)) mats.add(node.material);
+      if (node.material && !keep.has(node.material) && !keepFoeMaterial(node.material) && !keepSnowmanMaterial(node.material)) mats.add(node.material);
     });
     for (const w of this.walls || []) w.plaque.material.map?.dispose();
     this.boss?.sign.material.map?.dispose();
@@ -907,7 +907,6 @@ export class SnowView {
       const model = gateModel(it, it.panels.map((p) => gateLabel(p.op)));
       path.place(model, it.s, 0, 0, false);
       world.add(model);
-      this.disposables.push(...model.userData.own);
       const rec = { it, kind: "gate", model, passed: -1, fade: 0 };
       this.gates.push(rec);
       this.items.set(it.id, rec);
@@ -975,7 +974,6 @@ export class SnowView {
       boss.rotation.y += Math.PI; // смотрит на игрока
       boss.traverse((n) => n.isMesh && (n.castShadow = true));
       world.add(boss);
-      boss.traverse((n) => n.material && this.disposables.push(n.material));
       const sign = new T.Mesh(GEO.plane, new T.MeshBasicMaterial({ transparent: true, depthWrite: false, toneMapped: false }));
       sign.scale.set(5.2, 2.6, 1);
       sign.renderOrder = 4;

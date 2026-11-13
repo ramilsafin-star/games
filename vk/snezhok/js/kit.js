@@ -1,5 +1,5 @@
 // Общие мелочи для сцены: материалы, заготовки геометрии, надписи на холсте, хранилище.
-import * as T from "../vendor/three/three.module.min.js?v=51f23175";
+import * as T from "../vendor/three/three.module.min.js?v=3cff0128";
 
 export { T };
 export const TAU = Math.PI * 2;

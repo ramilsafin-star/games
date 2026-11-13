@@ -3,7 +3,7 @@
 // Препятствия ставятся только вне коридора, а движущиеся получают такую фазу, чтобы в миг,
 // когда ком едет коридором, они были в стороне. Поэтому любой уровень заведомо проходим;
 // validate() это перепроверяет. Никакой графики: этот же код гоняют проверки в Node.
-import { HALF, BRIDGE_HALF, AIR_TIME, JUMP, GRAVITY, START, radiusOf, applyGate, isGood, rng, hash, clamp, logX, crusherDown, geyserState, touches, crushGain, isMonster, isPickup, throwPos, MONSTER } from "./rules.js?v=51f23175";
+import { HALF, BRIDGE_HALF, AIR_TIME, JUMP, GRAVITY, START, radiusOf, applyGate, isGood, rng, hash, clamp, logX, crusherDown, geyserState, touches, crushGain, isMonster, isPickup, throwPos, MONSTER } from "./rules.js?v=3cff0128";
 
 export const MOUNTAINS = [
   { id: "firs", name: "Ёлочный склон", boss: "Снеговик Сугробыч" },

@@ -3,7 +3,7 @@ import {
 	Float32BufferAttribute,
 	OrthographicCamera,
 	Mesh
-} from '../three.module.min.js?v=dba1bb88';
+} from '../three.module.min.js?v=c359cce9';
 
 /**
  * Abstract base class for all post processing passes.
