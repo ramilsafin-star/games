@@ -1374,11 +1374,26 @@ body.touch #touch-look {
   background: #ff3a3a;
   box-shadow: 0 0 8px #ff3a3a;
 }
-#obj {
+#battle-info {
   position: absolute;
   top: max(10px, env(safe-area-inset-top));
   left: 50%;
   transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  max-width: 54vw;
+}
+#battle-context {
+  padding: 4px 9px;
+  border-radius: 8px;
+  background: rgba(8, 14, 24, 0.82);
+  color: var(--cyan);
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+#obj {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1389,7 +1404,7 @@ body.touch #touch-look {
   font-weight: 700;
   font-size: 14px;
   white-space: nowrap;
-  max-width: 54vw;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -1595,6 +1610,12 @@ body.touch #touch-look {
   font-weight: 900;
   margin-left: 4px;
 }
+#nades .selected {
+  display: inline-block;
+  padding: 0 3px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+}
 .n-frag {
   color: var(--acc2);
 }
@@ -1682,8 +1703,23 @@ body.touch #touch-look {
   font-size: 22px;
   color: #ffd04a;
 }
+#marks .mk.det small {
+  width: 32px;
+  height: 4px;
+  margin-top: 0;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #ffd04a var(--detection), rgba(8, 14, 24, 0.82) var(--detection));
+}
 #marks .mk.det.hot b {
-  color: #ff3a2a;
+  font-size: 11px;
+  color: #ff806d;
+  animation: blink 0.65s infinite;
+}
+#marks .mk.det.hot small {
+  background: linear-gradient(90deg, #ff6656 var(--detection), rgba(8, 14, 24, 0.82) var(--detection));
+}
+@media (prefers-reduced-motion: reduce) {
+  #marks .mk.det.hot b { animation: none; }
 }
 #marks .mk.scan b {
   width: 14px;
@@ -2018,6 +2054,7 @@ body.touch #touch {
   right: calc(max(18px, env(safe-area-inset-right)) + var(--u) * 4.75);
   bottom: calc(var(--bottom) + var(--u) * 0.35);
 }
+#t-squad.ordered { border-color: var(--cyan); color: var(--cyan); }
 #t-squad {
   right: max(12px, env(safe-area-inset-right));
   top: calc(max(10px, env(safe-area-inset-top)) + 50px);
@@ -2061,7 +2098,7 @@ body.touch #radio {
   bottom: calc(var(--bottom) + 46px);
   width: min(420px, 46vw);
 }
-body.touch #obj {
+body.touch #battle-info {
   font-size: 12px;
   max-width: 44vw;
 }
@@ -2206,7 +2243,7 @@ html.vk-banner {
 }
 
 /* телефон: цель задания справа сверху, чтобы не налезать на щит и радар */
-body.touch #obj {
+body.touch #battle-info {
   left: auto;
   right: calc(max(12px, env(safe-area-inset-right)) + 54px);
   transform: none;

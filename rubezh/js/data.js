@@ -51,7 +51,7 @@ export const WEAPONS = {
   },
   sokol: {
     name: "Сокол", kind: "Боевая винтовка", slot: "pri", icon: "dmr", scope: 2,
-    dmg: 52, rpm: 330, auto: false, mag: 20, reserve: 100, reload: 2.5, equip: 0.55,
+    dmg: 60, rpm: 330, auto: false, mag: 20, reserve: 100, reload: 2.5, equip: 0.55,
     hip: 2.8, ads: 0.1, move: 1.9, bloom: 0.65, bloomMax: 3.4, recover: 7,
     kick: 1.6, kickX: 0.5, range: [45, 90, 0.85], pen: 0.75, speed: 0.88, zoom: 2.0, noise: 38,
     price: 3500, cost: 3300, unlock: 4,

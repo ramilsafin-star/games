@@ -1,7 +1,7 @@
 // Профиль игрока «Рубежа»: сохранение (ключ rubezh-v1, меньше 4000 байт), покупки, итоги заданий,
 // звёзды, звание и достижения. Без графики — проверяется в tests/sim.mjs.
-import { WEAPONS, GUNS, PRIMARY, SECONDARY, UPGRADES, UPGRADE_IDS, upgradePrice, GRENADES, GRENADE_IDS, GEAR, KITS, KIT_IDS, ECON, DIFFICULTY, ACHIEVEMENTS, rankOf } from "./data.js?v=7c816b4c";
-import { MISSIONS } from "./missions.js?v=7c816b4c";
+import { WEAPONS, GUNS, PRIMARY, SECONDARY, UPGRADES, UPGRADE_IDS, upgradePrice, GRENADES, GRENADE_IDS, GEAR, KITS, KIT_IDS, ECON, DIFFICULTY, ACHIEVEMENTS, rankOf } from "./data.js?v=83cf1cc4";
+import { MISSIONS } from "./missions.js?v=83cf1cc4";
 
 export const SAVE_KEY = "rubezh-v1";
 const N = MISSIONS.length;
@@ -185,9 +185,9 @@ export function missionResult(s, r) {
   return { stars, before, rows, total, acc, fast, ghost, xp: Math.round(xp), rankUp: rankOf(s.xp).index > rankBefore, first };
 }
 // статистика боя → профиль (и за проигранные раунды тоже)
-export function addFightStats(s, st, secs) {
-  for (const k of ["kills", "cores", "coreKills", "knife", "emp", "molot", "relays", "shots", "hits", "boss"]) addStat(s, k, st[k] || 0);
-  addStat(s, "secs", secs);
+export function addFightStats(s, st, secs, sign = 1) {
+  for (const k of ["kills", "cores", "coreKills", "knife", "emp", "molot", "relays", "shots", "hits", "boss"]) addStat(s, k, sign * Math.round(st[k] || 0));
+  addStat(s, "secs", sign * Math.round(secs));
 }
 
 // ---------- Достижения ----------

@@ -3,8 +3,8 @@
 // В бою «Стрелки» уходят в укрытия и заходят с фланга, «Бастион» прёт щитом вперёд,
 // «Оса» перелетает между точками и бьёт заряженным лучом, «Колобок» катится и взрывается,
 // «Молот» поливает очередями и пускает ракеты. Бойцы идут за игроком и держат позицию по команде.
-import { MATE } from "./data.js?v=cb8e2b87";
-import { clamp, wrap, turnTo, yawTo, DEG, TAU, lerp } from "./util.js?v=cb8e2b87";
+import { MATE } from "./data.js?v=1434d71a";
+import { clamp, wrap, turnTo, yawTo, DEG, TAU, lerp } from "./util.js?v=1434d71a";
 
 const FOV = 2.1; // поле зрения робота без тревоги (рад)
 const FOV_COMBAT = 3.6;
@@ -261,11 +261,17 @@ function thinkShooter(g, a, dt) {
     if (vis) aimAndFire(g, a, t, dist, dt);
     return;
   }
+  if (a.mode === "cover" && a.arrived) decide(g, a, t, dist);
+  if (a.mode === "cover" && a.goal) {
+    if (vis) aimAndFire(g, a, t, dist, dt);
+    return;
+  }
   if (vis) {
     aimAndFire(g, a, t, dist, dt);
     a.decideT -= dt;
-    if (a.decideT <= 0 || (a.mode === "cover" && a.arrived)) decide(g, a, t, dist);
+    if (a.decideT <= 0) decide(g, a, t, dist);
   } else {
+    if (a.mode === "peek" && a.goal) return;
     a.mode = "";
     lostTarget(g, a, dt);
     // зона удержания: волны идут к кругу
@@ -276,6 +282,7 @@ function decide(g, a, t, dist) {
   const d = a.def;
   a.decideT = 1.4 + g.rand() * 1.8;
   const r = g.rand();
+  const wasArrived = a.arrived;
   a.arrived = false;
   if (a.type === "bastion") {
     a.goal = dist > 3.5 ? { x: t.x, y: t.y, z: t.z } : null;
@@ -289,7 +296,7 @@ function decide(g, a, t, dist) {
     return;
   }
   const hurt = a.hp < a.maxHp * 0.5;
-  if (a.mode === "cover" && a.arrived !== undefined) {
+  if (a.mode === "cover" && wasArrived) {
     // из укрытия — выглянуть: шаг к цели
     a.mode = "peek";
     a.goal = { x: lerp(a.x, t.x, 0.25), y: t.y, z: lerp(a.z, t.z, 0.25) };
@@ -337,7 +344,7 @@ function aimAndFire(g, a, t, dist, dt) {
   const d = a.def;
   const want = yawTo(a.x, a.z, t.x, t.z);
   a.faceT = 0.4;
-  a.yaw = turnTo(a.yaw, want, d.turn * dt * (a.mods || 1));
+  a.yaw = turnTo(a.yaw, want, d.turn * dt);
   const err = Math.abs(wrap(want - a.yaw));
   const react = d.react * g.diff.react;
   if (a.seeT < react || dist > d.range * 1.25 || err > 0.3) return;
@@ -530,7 +537,7 @@ function thinkOsa(g, a, dt) {
       a.beam = null;
       g.emit("chargeOff", { id: a.id });
     } else if (a.chargeT <= 0) {
-      const m = [a.x, a.y - 0.05, a.z];
+      const m = muzzleOf(a);
       let dx = a.beam[0] - m[0], dy = a.beam[1] - m[1], dz = a.beam[2] - m[2];
       const L = Math.hypot(dx, dy, dz);
       fireRay(g, a, m, dx / L, dy / L, dz / L, d.shot, true);
@@ -696,7 +703,7 @@ export function thinkMate(g, a, dt) {
       const ry = r.fly ? r.y : r.y + r.h * 0.6;
       if (!g.world.sees(a.x, ey, a.z, r.x, ry, r.z, "bullet")) continue;
       if (g.smokes.length && g.smoked(a.x, ey, a.z, r.x, ry, r.z)) continue;
-      const s = d * (r.target === p && r.state === "combat" ? 0.7 : 1) * (r.def.camera ? 3 : 1);
+      const s = r === a.focus ? -1 : d * (r.target === p && r.state === "combat" ? 0.7 : 1) * (r.def.camera ? 3 : 1);
       if (s < bs) {
         bs = s;
         best = r;
@@ -704,9 +711,32 @@ export function thinkMate(g, a, dt) {
     }
     if (best !== a.target) a.seeT = 0;
     a.target = best;
+    const mark = g.marks.find((m) => Math.abs(a.y - m.y) < 2 && Math.hypot(a.x - m.x, a.z - m.z) < m.r + 0.5);
+    if (mark) {
+      const angle = Math.atan2(a.z - mark.z, a.x - mark.x);
+      const distance = mark.r + 1.8;
+      const [x, z, y] = g.world.randomNear(mark.x + Math.cos(angle) * distance, mark.z + Math.sin(angle) * distance, a.y, 0.6, g.rand);
+      if (Math.hypot(x - mark.x, z - mark.z) > mark.r) {
+        a.shelter = { x, y, z };
+        a.shelterUntil = g.t + Math.max(0.8, mark.t + 0.5);
+      }
+    } else if (a.hp < 50 && best && g.t >= (a.shelterUntil || 0) && g.t - a.hurtT < 2.5) {
+      const cover = g.world.cover(a.x, a.z, a.y, best.x, chest(g, best), best.z, 7, g.rand);
+      if (cover) {
+        const [x, z, y] = cover;
+        a.shelter = { x, y, z };
+        a.shelterUntil = g.t + 3;
+      }
+    }
   }
-  // куда идти
-  if (a.cmd === "hold" && a.hold) a.goal = Math.hypot(a.x - a.hold.x, a.z - a.hold.z) > 1 ? { ...a.hold } : null;
+  // Выйти из опасной зоны, затем вернуться к команде игрока.
+  if (a.shelter && g.t < a.shelterUntil) {
+    a.goal = Math.hypot(a.x - a.shelter.x, a.z - a.shelter.z) > 0.6 ? a.shelter : null;
+    a.goalSpeed = 1.25;
+  } else if (a.cmd === "hold" && a.hold) {
+    a.goal = Math.hypot(a.x - a.hold.x, a.z - a.hold.z) > 1 ? a.hold : null;
+    a.goalSpeed = 1;
+  }
   else if (p.alive) {
     const back = [[-1.7, 2.3], [1.7, 2.5], [0, 3.6], [-2.6, 4.2]][a.idx % 4];
     const s = Math.sin(p.yaw), c = Math.cos(p.yaw);

@@ -1,8 +1,8 @@
 // Приборы боя поверх 3D: прицел, отметки попаданий, лента отключений, направление урона,
 // щит и броня, патроны, цель задания, метки на экране, радар, рация, всплывающие награды.
-import { WEAPONS, GRENADES, KITS } from "./data.js?v=7c816b4c";
-import { fmtTime, wrap, yawTo, clamp } from "./util.js?v=7c816b4c";
-import { TRAINING } from "./sim.js?v=7c816b4c";
+import { WEAPONS, GRENADES, KITS } from "./data.js?v=83cf1cc4";
+import { fmtTime, wrap, yawTo, clamp } from "./util.js?v=83cf1cc4";
+import { TRAINING } from "./sim.js?v=83cf1cc4";
 
 const $ = (id) => document.getElementById(id);
 function text(el, v) {
@@ -204,7 +204,7 @@ export class Hud {
     $("ammo").classList.toggle("empty", !W.melee && A.mag === 0);
     $("ammo").classList.toggle("lowammo", !W.melee && A.mag > 0 && A.mag <= Math.ceil(W.mag * 0.25));
     $("ammo").classList.toggle("reloading", p.reloadT > 0);
-    const nd = p.grenades.map((k) => `<i class="n-${k}" title="${GRENADES[k].name}">${NADE_ICON[k]}</i>`).join("") || '<i class="none">—</i>';
+    const nd = p.grenades.map((k, i) => `<i class="n-${k}${i === 0 ? " selected" : ""}" title="${GRENADES[k].name}${i === 0 ? " · выбрана" : ""}">${NADE_ICON[k]}</i>`).join("") || '<i class="none">—</i>';
     if (this.nadesHtml !== nd) {
       this.nadesHtml = nd;
       $("nades").innerHTML = nd;
@@ -219,6 +219,9 @@ export class Hud {
     if (ob.kind === "skirmish") timer = ob.planted ? fmtTime(ob.planted.left) : fmtTime(ob.clock);
     if (ob.kind === "hold") timer = fmtTime(ob.need - ob.held);
     text($("obj-time"), timer);
+    const context = o.match ? `Раунд ${o.match.round} · ${o.match.wins} : ${o.match.losses}` : o.daily?.name;
+    show($("battle-context"), !!context);
+    text($("battle-context"), context || "");
     $("obj").classList.toggle("urgent", (ob.kind === "defuse" && ob.left < 20) || (ob.kind === "hold" && !ob.inZone));
     // босс
     const boss = g.boss;
@@ -236,10 +239,13 @@ export class Hud {
     }
     show($("t-use"), !!ob.useHint);
     show($("t-kit"), kitOn);
-    show($("t-squad"), g.agents.some((a) => a.team === "squad" && a.alive));
+    const mate = g.agents.find((a) => a.team === "squad" && a.alive);
+    const squad = $("t-squad");
+    show(squad, !!mate);
+    squad.classList.toggle("ordered", mate?.cmd === "hold");
     const tn = $("t-nade");
     tn.dataset.n = p.grenades.length;
-    tn.dataset.kind = p.grenades[o.gslot || 0] || p.grenades[0] || "";
+    tn.dataset.kind = p.grenades[0] || "";
     show($("t-gswap"), p.grenades.length > 1 && p.grenades[0] !== p.grenades[1]);
     // подсказка тренировки
     if (ob.kind === "training") {
@@ -258,7 +264,7 @@ export class Hud {
   updateMarks(g, o) {
     const want = [];
     const ob = g.obj, p = g.player;
-    const add = (key, x, y, z, label, cls) => want.push({ key, x, y, z, label, cls });
+    const add = (key, x, y, z, label, cls, progress = null) => want.push({ key, x, y, z, label, cls, progress });
     if (ob.sites && !ob.planted && ob.kind !== "defuse") for (const s of ob.sites) add("site" + s.label, s.x, s.y + 1.6, s.z, s.label, "site");
     if (ob.planted) add("charge", ob.planted.x, ob.planted.y + 1.2, ob.planted.z, ob.planted.label, "site charge");
     if (ob.kind === "defuse") {
@@ -274,8 +280,10 @@ export class Hud {
     for (const a of g.agents) {
       if (!a.alive) continue;
       if (a.team === "squad") add("m" + a.id, a.x, a.y + 2.15, a.z, a.name, "mate");
-      if (a.team === "robot" && g.mission.stealth && !g.alarm && !a.def.dummy && (a.aware > 0.2 || a.state === "alert")) {
-        add("r" + a.id, a.x, a.y + (a.fly ? 0.7 : a.h + 0.35), a.z, a.state === "combat" ? "!" : "?", a.state === "combat" ? "det hot" : "det");
+      if (a.team === "robot" && g.mission.stealth && !g.alarm && !a.def.dummy && (a.aware > 0.2 || a.state === "alert" || a.alarmT > 0)) {
+        const sending = a.alarmT > 0;
+        const progress = sending ? 1 - a.alarmT / (a.def.camera ? 0.05 : 1.7) : a.aware;
+        add("r" + a.id, a.x, a.y + (a.fly ? 0.7 : a.h + 0.35), a.z, sending ? "Тревога" : "?", sending ? "det hot" : "det", progress);
       }
       if (a.team === "robot" && g.reveal > 0 && !a.def.dummy) add("s" + a.id, a.x, a.y + (a.fly ? 0 : a.h * 0.6), a.z, "", "scan");
     }
@@ -296,6 +304,7 @@ export class Hud {
       const d = Math.hypot(m.x - p.x, m.z - p.z);
       const near = m.cls.startsWith("det") || m.cls === "scan" || m.cls === "mate";
       text(el.lastChild, near ? "" : Math.round(d) + " м");
+      if (m.progress !== null) el.style.setProperty("--detection", `${Math.round(clamp(m.progress, 0, 1) * 100)}%`);
       let x = s.x, y = s.y, edge = false;
       if (near && (s.behind || x < 0 || x > W || y < 0 || y > H)) {
         el.style.display = "none";

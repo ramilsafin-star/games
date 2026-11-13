@@ -10,9 +10,9 @@ import {
 	NeutralToneMapping,
 	CustomToneMapping,
 	SRGBTransfer
-} from '../three.module.min.js?v=7c816b4c';
-import { Pass, FullScreenQuad } from './Pass.js?v=7c816b4c';
-import { OutputShader } from '../shaders/OutputShader.js?v=7c816b4c';
+} from '../three.module.min.js?v=83cf1cc4';
+import { Pass, FullScreenQuad } from './Pass.js?v=83cf1cc4';
+import { OutputShader } from '../shaders/OutputShader.js?v=83cf1cc4';
 
 /**
  * This pass is responsible for including tone mapping and color space conversion

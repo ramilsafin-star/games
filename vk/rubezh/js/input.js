@@ -18,7 +18,6 @@ export class Input {
     this.lockFailed = false;
     this.crouchToggle = false;
     this.aimToggle = false;
-    this.wheel = 0;
     this.bind();
   }
   enabled() {
@@ -155,8 +154,9 @@ export class Input {
       const el = $(id);
       if (!el) return;
       let pid = -1, lx = 0, ly = 0;
+      const canLook = name === "fire" || name === "aim" || kind === "release";
       el.addEventListener("pointerdown", (e) => {
-        if (!this.enabled()) return;
+        if (!this.enabled() || pid !== -1) return;
         e.preventDefault();
         e.stopPropagation();
         this.touchMode = e.pointerType !== "mouse" || this.touchMode;
@@ -165,13 +165,13 @@ export class Input {
         ly = e.clientY;
         el.setPointerCapture?.(e.pointerId);
         el.classList.add("on");
-        if (kind === "hold") this.hold[name] = true;
+        if (kind === "hold" || kind === "release") this.hold[name] = true;
         else if (kind === "toggle") this[name + "Toggle"] = !this[name + "Toggle"];
         else this.taps[name] = true;
         if (this.onButton) this.onButton(name);
       });
       el.addEventListener("pointermove", (e) => {
-        if (e.pointerId !== pid || (name !== "fire" && name !== "aim")) return;
+        if (e.pointerId !== pid || !canLook || !this.enabled()) return;
         this.lookMove(e.clientX - lx, e.clientY - ly);
         lx = e.clientX;
         ly = e.clientY;
@@ -180,7 +180,8 @@ export class Input {
         if (e.pointerId !== pid) return;
         pid = -1;
         el.classList.remove("on");
-        if (kind === "hold") this.hold[name] = false;
+        if (kind === "release" && this.hold[name] && e.type === "pointerup" && this.enabled()) this.taps[name] = true;
+        if (kind === "hold" || kind === "release") this.hold[name] = false;
       };
       for (const n of ["pointerup", "pointercancel", "lostpointercapture"]) el.addEventListener(n, up);
     };
@@ -190,7 +191,7 @@ export class Input {
     btn("t-crouch", "crouch", "toggle");
     btn("t-reload", "reload", "tap");
     btn("t-jump", "jump", "tap");
-    btn("t-nade", "grenade", "tap");
+    btn("t-nade", "grenade", "release");
     btn("t-gswap", "gnext", "tap");
     btn("t-swap", "next", "tap");
     btn("t-knife", "melee", "tap");
@@ -244,7 +245,7 @@ export class Input {
     if (document.pointerLockElement) document.exitPointerLock?.();
   }
   // кнопки на этот кадр
-  read() {
+  read(consumeTaps = true) {
     const k = this.keys;
     let mx = 0, mz = 0;
     if (k.has("KeyW") || k.has("ArrowUp")) mz += 1;
@@ -272,7 +273,7 @@ export class Input {
       ...this.taps,
     };
     this.look.x = this.look.y = 0;
-    this.taps = {};
+    if (consumeTaps) this.taps = {};
     return inp;
   }
   reset() {

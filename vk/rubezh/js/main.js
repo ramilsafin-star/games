@@ -1,15 +1,15 @@
 // «Рубеж: Железный бунт» — экраны, ход задания по раундам, магазин, «Схватка», задание дня, связь с VK.
-import { WEAPONS, PRIMARY, SECONDARY, GUNS, UPGRADES, UPGRADE_IDS, upgradePrice, GRENADES, GRENADE_IDS, GEAR, KITS, KIT_IDS, DIFFICULTY, ECON, ACHIEVEMENTS, DAILY_MODS, rankOf, ROBOTS } from "./data.js?v=7c816b4c";
-import { MISSIONS, TIMES } from "./missions.js?v=7c816b4c";
-import { MAP_INFO, MAP_IDS, getMap } from "./maps.js?v=7c816b4c";
-import { Game, trainingMission, weaponStats } from "./sim.js?v=7c816b4c";
-import { Autopilot, applyLook } from "./bot.js?v=7c816b4c";
-import * as S from "./save.js?v=7c816b4c";
-import { View, QUALITY, detectTier } from "./view.js?v=7c816b4c";
-import { Hud } from "./hud.js?v=7c816b4c";
-import { Input } from "./input.js?v=7c816b4c";
-import { Sound } from "./sound.js?v=7c816b4c";
-import { fmtNum, fmtTime, clamp, wrap, yawTo, lookDir, DEG, hashString, rng } from "./util.js?v=7c816b4c";
+import { WEAPONS, PRIMARY, SECONDARY, GUNS, UPGRADES, UPGRADE_IDS, upgradePrice, GRENADES, GRENADE_IDS, GEAR, KITS, KIT_IDS, DIFFICULTY, ECON, ACHIEVEMENTS, DAILY_MODS, rankOf, ROBOTS } from "./data.js?v=83cf1cc4";
+import { MISSIONS, TIMES } from "./missions.js?v=83cf1cc4";
+import { MAP_INFO, MAP_IDS, getMap } from "./maps.js?v=83cf1cc4";
+import { Game, trainingMission, weaponStats } from "./sim.js?v=83cf1cc4";
+import { Autopilot, applyLook } from "./bot.js?v=83cf1cc4";
+import * as S from "./save.js?v=83cf1cc4";
+import { View, QUALITY, detectTier } from "./view.js?v=83cf1cc4";
+import { Hud } from "./hud.js?v=83cf1cc4";
+import { Input } from "./input.js?v=83cf1cc4";
+import { Sound } from "./sound.js?v=83cf1cc4";
+import { fmtNum, fmtTime, clamp, wrap, yawTo, lookDir, DEG, hashString, rng } from "./util.js?v=83cf1cc4";
 
 const $ = (id) => document.getElementById(id);
 const host = () => window.vkGameHost;
@@ -664,11 +664,11 @@ $("ps-settings").onclick = () => {
   go("settings", false);
 };
 $("ps-restart").onclick = () => {
-  accumulate(game, false);
+  accumulate(game);
   startRound(true);
 };
 $("ps-menu").onclick = () => modal("Выйти в меню?", "Прогресс этого задания не сохранится, заработанные кредиты останутся.", () => {
-  accumulate(game, false);
+  accumulate(game);
   toMenu();
 });
 let settingsFrom = null;
@@ -687,7 +687,7 @@ function toMenu() {
 }
 
 // результат раунда → профиль (кредиты боя — сразу в кошелёк)
-function accumulate(g, counted = true) {
+function accumulate(g) {
   if (!g || g._counted) return;
   g._counted = true;
   if (run.kind === "skirmish") return;
@@ -698,7 +698,6 @@ function accumulate(g, counted = true) {
   if (g.alarm) run.alarm = true;
   S.addFightStats(save, g.stats, g.t);
   store();
-  void counted;
 }
 function roundOver() {
   const g = game;
@@ -724,8 +723,7 @@ function roundOver() {
   }
   // проигрыш
   accumulate(g);
-  if (g.reason === "down") run.deaths++;
-  else run.deaths++;
+  run.deaths++;
   const R = { down: ["Щит пробит", "Тебя эвакуировали с поля боя. Попробуй другой путь или другое оружие."], time: ["Время вышло", "Задание нужно выполнить быстрее."], defused: ["Заряд снят", "Робот добрался до заряда. Держи подходы к нему."], bomb: ["Бомба взорвалась", "Не успели обезвредить. Сапёрный набор ускоряет работу вдвое."] }[g.reason] || ["Раунд проигран", ""];
   text("lost-title", R[0]);
   text("lost-text", R[1]);
@@ -760,16 +758,22 @@ $("lost-retry").onclick = () => {
 };
 $("lost-menu").onclick = () => toMenu();
 $("lost-revive").onclick = async () => {
+  const round = game;
+  const missionRun = run;
+  if (screen !== "lost" || !round?._counted || round.reason !== "down" || missionRun.revived) return;
   const ok = await rewarded();
-  if (!ok || !game) return;
+  if (!ok || screen !== "lost" || game !== round || run !== missionRun) return;
   run.revived = true;
+  run.deaths--;
   game._counted = false;
   // откатываем учёт проигранного раунда: бой продолжается
   run.time -= game.t;
   run.credits -= game.credits;
   save.c -= game.credits;
   for (const [k, v] of Object.entries(game.stats)) run.stats[k] -= v;
+  S.addFightStats(save, game.stats, game.t, -1);
   game.revive();
+  store();
   go("play", false);
 };
 
@@ -777,7 +781,6 @@ $("lost-revive").onclick = async () => {
 function finishMission() {
   const m = run.mission;
   if (run.kind === "daily") return finishDaily();
-  save.c -= run.credits; // missionResult начислит всё вместе
   const res = S.missionResult(save, { mission: m, diff: run.diff, time: run.time, stats: run.stats, credits: run.credits, deaths: run.deaths, alarm: run.alarm });
   const acc = res.acc;
   const got = S.checkAchievements(save, { acc, won: true, rescueClean: run.stats.rescue === 2 });
@@ -940,12 +943,10 @@ RENDER.skirmish = () => {
   }
 };
 function startMatch(mapId) {
-  const map = getMap(mapId);
   const mission = { id: "sk-" + mapId, map: mapId, name: "Схватка: " + MAP_INFO[mapId].name, time: { port: "dusk", dome: "sunset", tower: "day", metro: "metro" }[mapId], weather: mapId === "port" ? "drizzle" : mapId === "dome" ? "haze" : null, mates: 4, rounds: [] };
   newRun("skirmish", mission, save.diff, {
-    match: { map: mapId, money: ECON.match.start, wins: 0, losses: 0, streak: 0, round: 1, hold: { pri: null, sec: "iskra" }, lo: { g: [null, null], v: 0, h: 0, k: "none" }, paidGear: 0, kills: 0 },
+    match: { map: mapId, money: ECON.match.start, wins: 0, losses: 0, streak: 0, round: 1, seed: Math.floor(Math.random() * 0xffffffff), hold: { pri: null, sec: "iskra" }, lo: { g: [null, null], v: 0, h: 0, k: "none" }, paidGear: 0, kills: 0 },
   });
-  void map;
   arTab = "pri";
   go("arsenal");
 }
@@ -961,7 +962,7 @@ function matchBuy(id) {
   Sound.buy();
 }
 // раунд «Схватки»: состав роботов растёт от раунда к раунду
-function matchSpec(round) {
+function matchSpec(round, seed) {
   const comp = [
     ["zhuk", "zhuk", "zhuk", "strelok", "strelok"],
     ["zhuk", "zhuk", "strelok", "strelok", "strelok"],
@@ -971,7 +972,12 @@ function matchSpec(round) {
     ["strelok", "strelok", "bastion", "osa", "molot"],
     ["strelok", "strelok", "bastion", "bastion", "molot"],
   ][Math.min(6, round - 1)];
+  const random = rng(seed ^ round);
   const spots = ["A", "A", "B", "B", "TB"];
+  for (let i = spots.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [spots[i], spots[j]] = [spots[j], spots[i]];
+  }
   return { kind: "skirmish", spawn: "TA", sites: ["A", "B"], plant: 3, defend: 30, time: 115, robots: comp.map((t, i) => [t, t === "osa" ? "perch" : spots[i], i === 4 ? { hunt: true } : {}]), waves: [] };
 }
 function matchStartRound() {
@@ -980,7 +986,7 @@ function matchStartRound() {
   const gear = S.gearCost(m.lo) - m.paidGear;
   m.money -= Math.max(0, gear);
   m.paidGear = S.gearCost(m.lo);
-  run.mission.rounds = [matchSpec(m.round)];
+  run.mission.rounds = [matchSpec(m.round, m.seed)];
   run.round = 0;
   startRound();
 }
@@ -1117,7 +1123,6 @@ RENDER.settings = () => {
   };
 };
 // из настроек паузы — назад в паузу
-const origBack = back;
 document.querySelectorAll("#settings [data-back]").forEach((b) =>
   b.addEventListener("click", (e) => {
     if (settingsFrom === "pause") {
@@ -1127,10 +1132,8 @@ document.querySelectorAll("#settings [data-back]").forEach((b) =>
     }
   }, true),
 );
-void origBack;
 
 // ---------- Помощь в прицеливании и автоогонь (телефон) ----------
-const aimPt = { x: 0, y: 0, z: 0 };
 function crosshairTarget(g, coneDeg) {
   const p = g.player;
   const ey = g.eye();
@@ -1178,13 +1181,10 @@ function frame(now) {
 }
 function playFrame(real) {
   const g = game;
-  let inp = input.read();
+  const dt = real * g.tickSlowmo(real) * speedK;
+  acc += dt;
+  const inp = input.read(acc >= DT);
   const p = g.player;
-  // автопилот (проверки)
-  if (bot) {
-    const b = bot.input(DT);
-    inp = { ...b, lookDX: b.lookDX, lookDY: b.lookDY };
-  }
   // помощь прицеливанию на телефоне: медленнее у робота и мягкое притяжение при стрельбе
   let onTarget = false;
   if (p.alive && g.phase === "live") {
@@ -1197,24 +1197,32 @@ function playFrame(real) {
     }
     if (input.touchMode && save.o.af && t && t.exact && !bot && !g.weapon().melee) inp.fire = true;
   }
-  const look = { x: inp.lookDX, y: inp.lookDY };
-  applyLook(g, inp.lookDX, inp.lookDY);
+  const look = { x: 0, y: 0 };
+  if (!bot) {
+    look.x = inp.lookDX;
+    look.y = inp.lookDY;
+    applyLook(g, look.x, look.y);
+  }
   // фиксированный шаг правил; замедление на победе над боссом
-  const slow = g.tickSlowmo(real);
-  const dt = real * slow * speedK;
-  acc += dt;
   let n = 0;
-  const one = { ...inp, lookDX: inp.lookDX, lookDY: inp.lookDY };
   while (acc >= DT && n < 8 * speedK) {
-    g.step(DT, n === 0 ? one : { ...inp, reload: false, grenade: false, melee: false, jump: false, next: false, slot: null, last: false, kit: false, squad: false, gnext: false, lookDX: 0, lookDY: 0 });
+    if (bot) {
+      const controls = bot.input(DT);
+      applyLook(g, controls.lookDX, controls.lookDY);
+      look.x += controls.lookDX;
+      look.y += controls.lookDY;
+      g.step(DT, controls);
+    } else {
+      g.step(DT, n === 0 ? inp : { ...inp, reload: false, grenade: false, melee: false, jump: false, next: false, slot: null, last: false, kit: false, squad: false, gnext: false, lookDX: 0, lookDY: 0 });
+    }
     acc -= DT;
     n++;
   }
-  if (inp.gnext && g.player.grenades.length > 1) g.player.grenades.push(g.player.grenades.shift());
+  if (!bot && n > 0 && inp.gnext && g.player.grenades.length > 1) g.player.grenades.push(g.player.grenades.shift());
   view.frame(g, dt, real, look, { fov: save.o.fov });
   for (const e of g.events) hud.handle(g, e);
   g.events.length = 0;
-  hud.update(g, real, { onTarget, touch: input.touchMode, heart: () => Sound.heart() });
+  hud.update(g, real, { onTarget, touch: input.touchMode, heart: () => Sound.heart(), match: run.match, daily: run.mod });
   if (g.phase !== "live") {
     endT += real;
     if (endT > (g.phase === "won" ? 1.6 : 1.3)) {

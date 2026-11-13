@@ -8,9 +8,9 @@
   <meta name="description" content="Тактический 3D-шутер от первого лица: отряд «Рубеж» против взбунтовавшихся роботов заводского ИИ. Кампания на 12 заданий, оружие и улучшения, «Схватка» 5×5, тренировка.">
   <link rel="icon" href="./icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="./icon-180.png">
-  <script src="./vendor/vk/vk-bridge.min.js?v=7c816b4c"></script>
-    <script src="./js/vk-host.js?v=7c816b4c" data-keys="rubezh-v1" data-ad-gap="120"></script>
-    <link rel="stylesheet" href="./style.css?v=7c816b4c">
+  <script src="./vendor/vk/vk-bridge.min.js?v=83cf1cc4"></script>
+    <script src="./js/vk-host.js?v=83cf1cc4" data-keys="rubezh-v1" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=83cf1cc4">
 </head>
 <body data-screen="boot">
   <canvas id="stage" aria-label="Игровое поле"></canvas>
@@ -32,7 +32,10 @@
     <div id="dmg"></div>
     <div id="scope" hidden><div class="ring"></div><i class="h"></i><i class="v"></i><b></b></div>
     <div id="marks"></div>
-    <div id="obj"><span id="obj-text"></span><b id="obj-time"></b></div>
+    <div id="battle-info">
+      <div id="obj"><span id="obj-text"></span><b id="obj-time"></b></div>
+      <div id="battle-context" hidden></div>
+    </div>
     <div id="boss" hidden><span>«Наковальня»</span><div class="track"><i id="boss-bar"></i></div></div>
     <canvas id="radar" width="150" height="150"></canvas>
     <ol id="feed"></ol>
@@ -52,13 +55,13 @@
       <button id="t-reload" class="tb" aria-label="Перезарядка"><svg viewBox="0 0 24 24"><path d="M19 12a7 7 0 1 1-2-4.9M19 4v4h-4"/></svg></button>
       <button id="t-crouch" class="tb" aria-label="Присесть"><svg viewBox="0 0 24 24"><circle cx="12" cy="6" r="2.4"/><path d="M8 20l2-6 4 1 2 5M10 14l1-4h3"/></svg></button>
       <button id="t-jump" class="tb" aria-label="Прыжок"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/><path d="M6 20h12"/></svg></button>
-      <button id="t-nade" class="tb" aria-label="Граната"><svg viewBox="0 0 24 24"><circle cx="12" cy="14" r="6"/><path d="M10 8V5h4v3M14 5l3-2"/></svg></button>
+      <button id="t-nade" class="tb" aria-label="Граната: веди для прицеливания, отпусти для броска"><svg viewBox="0 0 24 24"><circle cx="12" cy="14" r="6"/><path d="M10 8V5h4v3M14 5l3-2"/></svg></button>
       <button id="t-gswap" class="tb mini" aria-label="Сменить гранату"><svg viewBox="0 0 24 24"><path d="M5 9h12l-3-3M19 15H7l3 3"/></svg></button>
       <button id="t-swap" class="tb" aria-label="Сменить оружие"><svg viewBox="0 0 24 24"><path d="M3 10h13l2-2h3v4H3zM6 12v4h3v-4"/></svg></button>
       <button id="t-knife" class="tb" aria-label="Нож"><svg viewBox="0 0 24 24"><path d="M4 20l9-9M13 11l7-7-1 6-4 3z"/></svg></button>
       <button id="t-use" class="tb use" hidden aria-label="Действие"><svg viewBox="0 0 24 24"><path d="M8 12V6a1.5 1.5 0 0 1 3 0v5M11 11V4.5a1.5 1.5 0 0 1 3 0V11M14 11V6a1.5 1.5 0 0 1 3 0v8a6 6 0 0 1-6 6h-1a5 5 0 0 1-4-2l-3-4 1.5-1.5L8 15"/></svg></button>
       <button id="t-kit" class="tb" hidden aria-label="Набор"><svg viewBox="0 0 24 24"><rect x="5" y="7" width="14" height="12" rx="2"/><path d="M12 10v6M9 13h6M9 7V5h6v2"/></svg></button>
-      <button id="t-squad" class="tb mini" hidden aria-label="Отряд"><svg viewBox="0 0 24 24"><circle cx="8" cy="8" r="2.5"/><circle cx="16" cy="8" r="2.5"/><path d="M3 19c0-3 2.5-5 5-5s5 2 5 5M11 19c0-3 2.5-5 5-5s5 2 5 5"/></svg></button>
+      <button id="t-squad" class="tb mini" hidden aria-label="Команда отряду"><svg viewBox="0 0 24 24"><circle cx="8" cy="8" r="2.5"/><circle cx="16" cy="8" r="2.5"/><path d="M3 19c0-3 2.5-5 5-5s5 2 5 5M11 19c0-3 2.5-5 5-5s5 2 5 5"/></svg></button>
     </div>
     <button id="pause-btn" class="round" aria-label="Пауза"><svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></button>
   </section>
@@ -214,6 +217,6 @@
   <div id="toast" aria-live="polite"></div>
   <div id="modal" hidden><div class="center-card"><h2 id="md-title"></h2><p id="md-text"></p><div class="btns"><button class="ghost" id="md-no">Отмена</button><button class="primary" id="md-yes">Да</button></div></div></div>
 
-  <script type="module" src="./js/boot.js?v=7c816b4c"></script>
+  <script type="module" src="./js/boot.js?v=83cf1cc4"></script>
 </body>
 </html>

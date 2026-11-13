@@ -1,11 +1,11 @@
 // Правила раунда «Рубежа» без графики: игрок, оружие, роботы, гранаты, ракеты, цели задания.
 // Один и тот же код идёт в браузере и в Node (tests/sim.mjs гоняет автопилот по всем заданиям).
 // Вид и звук читают состояние и очередь событий game.events.
-import { WEAPONS, GRENADES, ROBOTS, MATE, MATE_NAMES, DIFFICULTY, PLAYER, ECON, KITS } from "./data.js?v=cb8e2b87";
-import { getMap } from "./maps.js?v=cb8e2b87";
-import { World } from "./world.js?v=cb8e2b87";
-import { rng, clamp, wrap, lookDir, yawTo, DEG, TAU, lerp } from "./util.js?v=cb8e2b87";
-import { thinkRobot, thinkMate, thinkVip, moveAgent, alertAll } from "./ai.js?v=cb8e2b87";
+import { WEAPONS, GRENADES, ROBOTS, MATE, MATE_NAMES, DIFFICULTY, PLAYER, ECON, KITS } from "./data.js?v=1434d71a";
+import { getMap } from "./maps.js?v=1434d71a";
+import { World } from "./world.js?v=1434d71a";
+import { rng, clamp, wrap, lookDir, yawTo, DEG, TAU, lerp } from "./util.js?v=1434d71a";
+import { thinkRobot, thinkMate, thinkVip, moveAgent, alertAll } from "./ai.js?v=1434d71a";
 
 // Учебная мишень полигона
 const DUMMY = {
@@ -443,13 +443,32 @@ export class Game {
       const mates = this.agents.filter((a) => a.team === "squad" && a.alive);
       if (mates.length) {
         const hold = mates[0].cmd !== "hold";
+        let target = null, point = null;
+        if (hold) {
+          const [dx, dy, dz] = lookDir(p.yaw, p.pitch);
+          const eye = this.eye();
+          const wall = this.world.ray(p.x, eye, p.z, dx, dy, dz, 25, "bullet");
+          const ground = dy < 0 ? (p.y - eye) / dy : Infinity;
+          const hit = this.hitAgents(p.x, eye, p.z, dx, dy, dz, Math.min(25, wall?.t ?? Infinity, ground), "robot");
+          target = hit?.agent ?? null;
+          const distance = Math.min(ground, wall?.ny > 0.5 ? wall.t : Infinity);
+          if (!target && distance >= 3 && distance < 25 && (!wall || distance <= wall.t)) {
+            point = { x: p.x + dx * distance, y: eye + dy * distance, z: p.z + dz * distance };
+          }
+        }
         for (const a of mates) {
           a.cmd = hold ? "hold" : "follow";
-          a.hold = hold ? { x: a.x, z: a.z, y: a.y } : null;
+          a.focus = target;
+          if (point) {
+            const angle = a.idx * Math.PI / 2;
+            const [x, z, y] = this.world.randomNear(point.x + Math.cos(angle) * 1.6, point.z + Math.sin(angle) * 1.6, point.y, 0.8, this.rand);
+            a.hold = { x, y, z };
+          } else a.hold = hold ? { x: a.x, z: a.z, y: a.y } : null;
           a.path = null;
+          a.thinkT = 0;
         }
         this.emit("squad", { hold });
-        this.radioSay(hold ? "Держим позицию!" : "Идём за тобой!", mates[0].name);
+        this.radioSay(target ? "Берём цель под огонь!" : point ? "Выдвигаемся к точке!" : hold ? "Держим позицию!" : "Идём за тобой!", mates[0].name);
       }
     }
     // смотрели ли вокруг (для тренировки)

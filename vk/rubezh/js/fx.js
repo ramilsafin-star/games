@@ -1,7 +1,7 @@
 // Эффекты боя, все из заранее созданных пулов (ничего не создаётся во время стрельбы):
 // искры и огонь (светящиеся точки), дым и масло (мягкие пятна), трассеры и лучи (ленты к камере),
 // следы пуль, обломки роботов и болты, гильзы, ударные волны, вспышки света.
-import { T, PRIM, canvasTexture, glowTexture, TAU } from "./kit.js?v=7c816b4c";
+import { T, PRIM, canvasTexture, glowTexture, TAU } from "./kit.js?v=83cf1cc4";
 
 const V = () => new T.Vector3();
 const tmp = V(), tmp2 = V(), up = new T.Vector3(0, 1, 0);
@@ -124,6 +124,7 @@ function beamSystem(scene, N) {
   mesh.frustumCulled = false;
   mesh.renderOrder = 10;
   scene.add(mesh);
+  const headPoint = V();
   const items = Array.from({ length: N }, () => ({ life: 0, max: 1, a: V(), b: V(), c: new T.Color(), w: 0.04, speed: 0, keep: false }));
   let next = 0;
   const write = (i) => {
@@ -137,13 +138,15 @@ function beamSystem(scene, N) {
       const tail = Math.max(0, head - Math.min(7, L * 0.5));
       tmp.copy(b).sub(a).normalize();
       a = tmp2.copy(it.a).addScaledVector(tmp, tail);
-      b = V().copy(it.a).addScaledVector(tmp, head);
+      b = headPoint.copy(it.a).addScaledVector(tmp, head);
     }
-    for (let v = 0; v < 4; v++) {
-      A.set([a.x, a.y, a.z], (i * 4 + v) * 3);
-      B.set([b.x, b.y, b.z], (i * 4 + v) * 3);
-      const f = it.keep ? 1 : k;
-      C.set([it.c.r * f, it.c.g * f, it.c.b * f, it.life > 0 ? it.w : 0], (i * 4 + v) * 4);
+    const f = it.keep ? 1 : k;
+    const width = it.life > 0 ? it.w : 0;
+    for (let v = i * 4; v < i * 4 + 4; v++) {
+      const p = v * 3, c = v * 4;
+      A[p] = a.x; A[p + 1] = a.y; A[p + 2] = a.z;
+      B[p] = b.x; B[p + 1] = b.y; B[p + 2] = b.z;
+      C[c] = it.c.r * f; C[c + 1] = it.c.g * f; C[c + 2] = it.c.b * f; C[c + 3] = width;
     }
   };
   return {

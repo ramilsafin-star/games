@@ -1,6 +1,6 @@
 // Текстуры поверхностей, нарисованные на холсте при загрузке (файлов картинок нет).
 // Рисунок светлый: цвет даёт цвет вершин коробки, текстура — фактуру.
-import { canvasTexture, noiseRand, T } from "./kit.js?v=cb8e2b87";
+import { canvasTexture, noiseRand, T } from "./kit.js?v=1434d71a";
 
 // метров на один повтор текстуры
 export const TEX_SCALE = {

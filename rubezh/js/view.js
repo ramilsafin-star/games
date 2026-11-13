@@ -1,20 +1,20 @@
 // Вид «Рубежа»: рендер, уровни качества (сами снижаются, если кадров мало), пост-обработка
 // (свечение, цветокоррекция, виньетка, размытие при уроне, сглаживание FXAA — без MSAA),
 // камера от первого лица с отдачей и тряской, оружие в руках, роботы и эффекты по событиям правил.
-import { T, PRIM, glowTexture, canvasTexture, TAU } from "./kit.js?v=cb8e2b87";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=cb8e2b87";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=cb8e2b87";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=cb8e2b87";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=cb8e2b87";
-import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=cb8e2b87";
-import { buildScene, makeEnvironment } from "./scene.js?v=cb8e2b87";
-import { createFx } from "./fx.js?v=cb8e2b87";
-import { buildRobot, buildGun, modelMats } from "./models.js?v=cb8e2b87";
-import { Sound } from "./sound.js?v=cb8e2b87";
-import { TIMES } from "./missions.js?v=cb8e2b87";
-import { World } from "./world.js?v=cb8e2b87";
-import { getMap } from "./maps.js?v=cb8e2b87";
-import { lookDir, clamp, lerp } from "./util.js?v=cb8e2b87";
+import { T, PRIM, glowTexture, canvasTexture, TAU } from "./kit.js?v=1434d71a";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=1434d71a";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=1434d71a";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=1434d71a";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=1434d71a";
+import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=1434d71a";
+import { buildScene, makeEnvironment } from "./scene.js?v=1434d71a";
+import { createFx } from "./fx.js?v=1434d71a";
+import { buildRobot, buildGun, modelMats } from "./models.js?v=1434d71a";
+import { Sound } from "./sound.js?v=1434d71a";
+import { TIMES } from "./missions.js?v=1434d71a";
+import { World } from "./world.js?v=1434d71a";
+import { getMap } from "./maps.js?v=1434d71a";
+import { lookDir, clamp, lerp } from "./util.js?v=1434d71a";
 
 // ---------- Уровни качества ----------
 export const QUALITY = {
