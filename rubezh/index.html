@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#0b1220">
+  <title>Рубеж: Железный бунт</title>
+  <meta name="description" content="Тактический 3D-шутер от первого лица: отряд «Рубеж» против взбунтовавшихся роботов заводского ИИ. Кампания на 12 заданий, оружие и улучшения, «Схватка» 5×5, тренировка.">
+  <link rel="icon" href="./icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="./icon-180.png">
+  <link rel="stylesheet" href="./style.css?v=cb8e2b87">
+</head>
+<body data-screen="boot">
+  <canvas id="stage" aria-label="Игровое поле"></canvas>
+
+  <!-- Загрузка -->
+  <div id="boot" role="status">
+    <div class="logo"><b>РУБЕЖ</b><small>ЖЕЛЕЗНЫЙ БУНТ</small></div>
+    <div class="bar"><i id="boot-bar"></i></div>
+    <p id="boot-text">Загружаем отряд…</p>
+    <span class="age">12+</span>
+  </div>
+  <div id="rotate"><div class="phone"></div><p>Поверни телефон боком</p></div>
+
+  <!-- ===== Бой ===== -->
+  <section id="hud" aria-hidden="true">
+    <div id="touch-look"></div>
+    <div id="xhair"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i><b class="dot"></b></div>
+    <div id="hitmark"><i></i><i></i><i></i><i></i></div>
+    <div id="dmg"></div>
+    <div id="scope" hidden><div class="ring"></div><i class="h"></i><i class="v"></i><b></b></div>
+    <div id="marks"></div>
+    <div id="obj"><span id="obj-text"></span><b id="obj-time"></b></div>
+    <div id="boss" hidden><span>«Наковальня»</span><div class="track"><i id="boss-bar"></i></div></div>
+    <canvas id="radar" width="150" height="150"></canvas>
+    <ol id="feed"></ol>
+    <div id="vitals"><div class="row hp"><b id="hp-n">100</b><div class="track"><i id="hp-bar"></i></div></div><div class="row ar"><b id="ar-n">0</b><div class="track"><i id="ar-bar"></i></div></div></div>
+    <div id="ammo"><small id="w-name">Искра</small><div><b id="ammo-mag">12</b><span id="ammo-res">/ 72</span></div><div class="sub"><span id="nades"></span><span id="kit"></span></div></div>
+    <div id="radio"></div>
+    <div id="banner"></div>
+    <div id="hint"></div>
+    <div id="train" hidden></div>
+    <div id="use" hidden><div id="use-ring"></div><span id="use-text"></span></div>
+    <div id="pops"></div>
+    <div id="touch">
+      <div id="stick-zone"><div id="stick"><i id="knob"></i></div></div>
+      <button id="t-fire" class="tb big" aria-label="Огонь"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg></button>
+      <button id="t-fire2" class="tb" aria-label="Огонь"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg></button>
+      <button id="t-aim" class="tb" aria-label="Прицел"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2"/></svg></button>
+      <button id="t-reload" class="tb" aria-label="Перезарядка"><svg viewBox="0 0 24 24"><path d="M19 12a7 7 0 1 1-2-4.9M19 4v4h-4"/></svg></button>
+      <button id="t-crouch" class="tb" aria-label="Присесть"><svg viewBox="0 0 24 24"><circle cx="12" cy="6" r="2.4"/><path d="M8 20l2-6 4 1 2 5M10 14l1-4h3"/></svg></button>
+      <button id="t-jump" class="tb" aria-label="Прыжок"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/><path d="M6 20h12"/></svg></button>
+      <button id="t-nade" class="tb" aria-label="Граната"><svg viewBox="0 0 24 24"><circle cx="12" cy="14" r="6"/><path d="M10 8V5h4v3M14 5l3-2"/></svg></button>
+      <button id="t-gswap" class="tb mini" aria-label="Сменить гранату"><svg viewBox="0 0 24 24"><path d="M5 9h12l-3-3M19 15H7l3 3"/></svg></button>
+      <button id="t-swap" class="tb" aria-label="Сменить оружие"><svg viewBox="0 0 24 24"><path d="M3 10h13l2-2h3v4H3zM6 12v4h3v-4"/></svg></button>
+      <button id="t-knife" class="tb" aria-label="Нож"><svg viewBox="0 0 24 24"><path d="M4 20l9-9M13 11l7-7-1 6-4 3z"/></svg></button>
+      <button id="t-use" class="tb use" hidden aria-label="Действие"><svg viewBox="0 0 24 24"><path d="M8 12V6a1.5 1.5 0 0 1 3 0v5M11 11V4.5a1.5 1.5 0 0 1 3 0V11M14 11V6a1.5 1.5 0 0 1 3 0v8a6 6 0 0 1-6 6h-1a5 5 0 0 1-4-2l-3-4 1.5-1.5L8 15"/></svg></button>
+      <button id="t-kit" class="tb" hidden aria-label="Набор"><svg viewBox="0 0 24 24"><rect x="5" y="7" width="14" height="12" rx="2"/><path d="M12 10v6M9 13h6M9 7V5h6v2"/></svg></button>
+      <button id="t-squad" class="tb mini" hidden aria-label="Отряд"><svg viewBox="0 0 24 24"><circle cx="8" cy="8" r="2.5"/><circle cx="16" cy="8" r="2.5"/><path d="M3 19c0-3 2.5-5 5-5s5 2 5 5M11 19c0-3 2.5-5 5-5s5 2 5 5"/></svg></button>
+    </div>
+    <button id="pause-btn" class="round" aria-label="Пауза"><svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></button>
+  </section>
+
+  <!-- ===== Экраны ===== -->
+  <header id="top" class="menu-only">
+    <div class="wallet"><i class="cr"></i><b id="credits">0</b></div>
+    <div class="rank" id="rank-chip"></div>
+    <span class="age" title="Возраст">12+</span>
+    <button class="round" id="sound" aria-label="Звук"><svg class="on" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12"/></svg><svg class="off" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 9.5l5 5M21.5 9.5l-5 5"/></svg></button>
+  </header>
+
+  <main id="menu" class="screen"><a href="../" aria-label="Все игры" style="position:fixed;left:calc(12px + env(safe-area-inset-left,0px));top:calc(12px + env(safe-area-inset-top,0px));z-index:50;width:52px;height:52px;border-radius:50%;background:#fffffff0;box-shadow:0 4px 0 #0003;display:grid;place-items:center;font-size:27px;text-decoration:none">🎮</a>
+    <div class="title"><b>РУБЕЖ</b><small>ЖЕЛЕЗНЫЙ БУНТ</small></div>
+    <p class="lead">Заводской ИИ ГОРН вышел из-под контроля. Отряд «Рубеж» — против армии его роботов.</p>
+    <div class="menu-buttons">
+      <button class="primary big" data-go="campaign"><span>Кампания</span><small id="menu-progress"></small></button>
+      <div class="pair">
+        <button class="ghost" data-go="skirmish"><span>Схватка 5×5</span></button>
+        <button class="ghost" data-go="daily"><span>Задание дня</span><small id="menu-daily"></small></button>
+      </div>
+      <div class="trio">
+        <button class="ghost small" data-go="training">Тренировка</button>
+        <button class="ghost small" data-go="arsenal">Арсенал</button>
+        <button class="ghost small" data-go="profile">Профиль</button>
+        <button class="ghost small" data-go="settings">Настройки</button>
+      </div>
+    </div>
+  </main>
+
+  <section id="campaign" class="screen">
+    <div class="head"><button class="back" data-back>‹</button><h2>Кампания</h2><div class="seg" id="diff-seg"></div></div>
+    <div id="maps" class="scroller"></div>
+  </section>
+
+  <section id="briefing" class="screen">
+    <div class="head"><button class="back" data-back>‹</button><h2 id="b-title"></h2><span id="b-where" class="where"></span></div>
+    <div class="brief-body">
+      <div class="brief-text">
+        <p id="b-text"></p>
+        <div class="goal"><small>Цель</small><b id="b-goal"></b></div>
+        <ul id="b-tips"></ul>
+        <div id="b-stars" class="starline"></div>
+      </div>
+      <div class="brief-map"><canvas id="sketch" width="360" height="300"></canvas><div class="legend"><i class="s"></i>старт <i class="a"></i>цели <i class="x"></i>выход</div></div>
+    </div>
+    <div class="foot">
+      <div class="seg" id="b-diff"></div>
+      <div id="b-loadout" class="loadline"></div>
+      <button class="ghost" data-go="arsenal">Снаряжение</button>
+      <button class="primary" id="b-go">В бой</button>
+    </div>
+  </section>
+
+  <section id="arsenal" class="screen">
+    <div class="head"><button class="back" data-back>‹</button><h2 id="ar-title">Арсенал</h2><div class="tabs" id="ar-tabs"></div><span id="ar-money" class="money"></span></div>
+    <div class="ar-body">
+      <div id="ar-list" class="cards scroller"></div>
+      <div id="ar-detail" class="detail"></div>
+    </div>
+    <div class="foot">
+      <div id="ar-loadout" class="loadline"></div>
+      <span id="ar-cost" class="cost"></span>
+      <button class="primary" id="ar-done">Готово</button>
+    </div>
+  </section>
+
+  <section id="between" class="screen">
+    <div class="center-card">
+      <small id="bw-kicker">Раунд выигран</small>
+      <h2 id="bw-title"></h2>
+      <p id="bw-text"></p>
+      <div id="bw-rows" class="rows"></div>
+      <div class="btns"><button class="ghost" data-go="arsenal">Снаряжение</button><button class="primary" id="bw-go">Следующий раунд</button></div>
+    </div>
+  </section>
+
+  <section id="lost" class="screen">
+    <div class="center-card bad">
+      <small>Раунд проигран</small>
+      <h2 id="lost-title"></h2>
+      <p id="lost-text"></p>
+      <div class="btns col">
+        <button class="reward" id="lost-revive" hidden>Продолжить за рекламу <small>— щит 70, один раз за задание</small></button>
+        <button class="primary" id="lost-retry">Повторить раунд</button>
+        <div class="pair"><button class="ghost" data-go="arsenal">Снаряжение</button><button class="ghost" id="lost-menu">В меню</button></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="debrief" class="screen">
+    <div class="center-card wide">
+      <small id="db-kicker">Задание выполнено</small>
+      <h2 id="db-title"></h2>
+      <div id="db-stars" class="bigstars"></div>
+      <div id="db-checks" class="checks"></div>
+      <div id="db-rows" class="rows"></div>
+      <div class="total"><span>Итого</span><b id="db-total">0</b></div>
+      <div id="db-extra"></div>
+      <div class="btns">
+        <button class="reward" id="db-double" hidden>×2 кредиты за рекламу</button>
+        <button class="ghost" id="db-menu">В меню</button>
+        <button class="ghost" id="db-again">Ещё раз</button>
+        <button class="primary" id="db-next">Дальше</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="skirmish" class="screen">
+    <div class="head"><button class="back" data-back>‹</button><h2>Схватка 5×5</h2><div class="seg" id="sk-diff"></div></div>
+    <p class="sub-lead">Ты и четыре бойца против пяти роботов. Поставь заряд у точки А или Б или отключи всех. Первым до четырёх побед. Деньги матча — на оружие каждого раунда; погиб — оружие потеряно.</p>
+    <div id="sk-maps" class="cards row scroller"></div>
+  </section>
+
+  <section id="daily" class="screen">
+    <div class="center-card wide" id="daily-card"></div>
+  </section>
+
+  <section id="profile" class="screen">
+    <div class="head"><button class="back" data-back>‹</button><h2>Профиль</h2></div>
+    <div class="profile-body scroller">
+      <div id="pf-rank" class="rankcard"></div>
+      <div id="pf-stats" class="stats"></div>
+      <h3>Достижения</h3>
+      <div id="pf-ach" class="ach"></div>
+    </div>
+  </section>
+
+  <section id="settings" class="screen">
+    <div class="head"><button class="back" data-back>‹</button><h2>Настройки</h2></div>
+    <div id="set-body" class="settings scroller"></div>
+  </section>
+
+  <section id="pause" class="screen">
+    <div class="center-card">
+      <small>Пауза</small>
+      <h2 id="pause-title"></h2>
+      <p id="pause-goal"></p>
+      <div class="btns col">
+        <button class="primary" id="ps-resume">Продолжить</button>
+        <button class="ghost" id="ps-settings">Настройки</button>
+        <button class="ghost" id="ps-restart">Начать раунд заново</button>
+        <button class="ghost" id="ps-menu">В меню</button>
+      </div>
+      <p class="keys">WASD — ходить · мышь — смотреть и стрелять · ПКМ — прицел · Shift — шагом · C/Ctrl — присесть · Пробел — прыжок · R — перезарядка · 1–3 — оружие · G — граната · Tab — сменить гранату · F — нож · E — действие · H — набор · T — отряд</p>
+    </div>
+  </section>
+
+  <section id="loading" class="screen">
+    <div class="load-card"><small id="ld-kicker"></small><h2 id="ld-title"></h2><p id="ld-tip"></p><div class="bar"><i id="ld-bar"></i></div></div>
+  </section>
+
+  <div id="toast" aria-live="polite"></div>
+  <div id="modal" hidden><div class="center-card"><h2 id="md-title"></h2><p id="md-text"></p><div class="btns"><button class="ghost" id="md-no">Отмена</button><button class="primary" id="md-yes">Да</button></div></div></div>
+
+  <script type="module" src="./js/boot.js?v=cb8e2b87"></script>
+</body>
+</html>

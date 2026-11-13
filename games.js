@@ -210,4 +210,11 @@ const GAMES = [
     cover: "covers/fonariki-web.jpg",
     color: "#663fab",
   },
+  {
+    id: "rubezh",
+    title: "Рубеж: Железный бунт · 12+",
+    url: "rubezh/",
+    cover: "covers/rubezh.jpg",
+    color: "#9c3f18",
+  },
 ];
