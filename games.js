@@ -203,4 +203,11 @@ const GAMES = [
     cover: "covers/snezhok.jpg",
     color: "#2f7fd8",
   },
+  {
+    id: "fonariki-web",
+    title: "Фонарики до рассвета",
+    url: "fonariki-web/",
+    cover: "covers/fonariki-web.jpg",
+    color: "#663fab",
+  },
 ];
