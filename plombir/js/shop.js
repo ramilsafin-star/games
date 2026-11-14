@@ -1,6 +1,6 @@
-import { flavors } from "./models.js?v=91b23d48";
-import { Park } from "./park.js?v=91b23d48";
-import { icon, speaker, picto, tune } from "./icons.js?v=91b23d48";
+import { flavors } from "./models.js?v=c5143e6d";
+import { Park } from "./park.js?v=c5143e6d";
+import { icon, speaker, picto, tune } from "./icons.js?v=c5143e6d";
 
 const el = (id) => document.getElementById(id);
 // Порядок гостей совпадает с pals в models.js. voice — файл в voices/ со словами из thanks.
@@ -16,9 +16,10 @@ const scene = el("park"),
 const toppings = [
   { id: "syrup", name: "Сироп", with: "с сиропом", tile: "#ffdde4", rim: "#cb91a0" },
   { id: "stars", name: "Посыпка", with: "с посыпкой", tile: "#fff0b8", rim: "#d3ad63" },
+  { id: "wafer", name: "Трубочка", with: "с трубочкой", tile: "#ffeac9", rim: "#d8a268", unlock: 8 },
   { id: "cherry", name: "Вишенка", with: "с вишенкой", tile: "#eddff7", rim: "#b199be" },
 ];
-const tasty = ["Клубничное", "Ванильное", "Шоколадное", "Мятное"];
+const tasty = ["Клубничное", "Ванильное", "Шоколадное", "Мятное", "Черничное", "Банановое"];
 // Заказы по кругу: сначала один шарик, потом украшение и два шарика.
 // Пустой scoops — «хочу сюрприз», подходит любой вкус.
 // 17 заказов на 6 гостей: одни и те же пары гость-заказ повторяются нескоро.
@@ -57,8 +58,18 @@ function save(key, value) {
     localStorage.setItem("plombir-" + key, String(value));
   } catch {}
 }
-const saved = Number(read("served"));
-let served = Number.isSafeInteger(saved) && saved >= 0 ? saved : 0;
+const towerOrders = [
+  { scoops: [0, 1, 2], top: "cherry" },
+  { scoops: [3, 2, 1], top: "stars" },
+  { scoops: [4, 5, 3], top: "wafer" },
+];
+function counter(key) {
+  const value = Number(read(key));
+  return Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+let streak = counter("streak"), tickets = counter("tickets"), firstOrder = true;
+let cup = read("cup") === "on";
+let served = counter("served");
 let round = served,
   step = 1,
   stack = [],
@@ -91,7 +102,7 @@ const art = el("paper-cone");
 function paper() {
   art.replaceChildren();
   const cone = document.createElement("i");
-  cone.className = "paper-waffle";
+  cone.className = cup ? "paper-cup" : "paper-waffle";
   art.append(cone);
   stack.forEach((f, i) => {
     const ball = document.createElement("i");
@@ -187,11 +198,12 @@ function orderVoice(delay = 0) {
   if (step === 3) return talk([own(perfect ? "perfect" : "thanks")], delay);
   const ids = !order.scoops.length
     ? ["surprise"]
-    : order.scoops.length === 1
-      ? [flavors[order.scoops[0]].id]
-      : ["two-" + order.scoops.map((i) => flavors[i].id).join("-")];
+    : order.scoops.length === 2
+      ? ["two-" + order.scoops.map((i) => flavors[i].id).join("-")]
+      : order.scoops.map((i) => flavors[i].id);
   if (order.top) ids.push("top-" + order.top);
-  talk(ids.map(own), delay);
+  const clips = ids.map((id) => ["blueberry", "banana", "top-wafer"].includes(id) ? id : own(id));
+  talk(clips, delay);
 }
 function wishText() {
   if (!order.scoops.length) return "Хочу сюрприз!";
@@ -251,6 +263,17 @@ function wants() {
 }
 function show() {
   el("served").textContent = served;
+  el("combo").textContent = [streak && `Серия ×${streak}`, tickets && `Билеты: ${tickets}`].filter(Boolean).join(" · ");
+  el("clear-cone").hidden = !stack.length || step === 3;
+  el("cone-type").hidden = step !== 1 || stack.length > 0;
+  el("cone-type").textContent = cup ? "Стаканчик" : "Рожок";
+  el("cone-type").setAttribute("aria-label", cup ? "Основа: стаканчик. Сменить" : "Основа: рожок. Сменить");
+  for (const button of document.querySelectorAll("[data-unlock]")) {
+    const limit = Number(button.dataset.unlock);
+    button.disabled = served < limit;
+    button.querySelector("small").hidden = !button.disabled;
+    button.hidden = button.disabled;
+  }
   el("step-icon").textContent = step;
   el("action-title").textContent =
     step === 3
@@ -291,7 +314,12 @@ function show() {
   if (!park) paper();
 }
 function begin() {
-  order = requests[round % requests.length];
+  const variant = round % 17;
+  if (round >= 10 && (round - 10) % 3 === 0) order = towerOrders[Math.floor((round - 10) / 3) % towerOrders.length];
+  else if (variant === 5) order = { scoops: [4] };
+  else if (variant === 8) order = { scoops: [1], top: "wafer" };
+  else if (variant === 12) order = { scoops: [5] };
+  else order = requests[variant];
   const i = round % guests.length;
   guest = guests[i];
   stack = [];
@@ -307,6 +335,7 @@ function begin() {
 }
 function add(i) {
   if (step !== 1 || stack.length >= 3) return;
+  if (flavors[i].unlock > served) return;
   unlock();
   Sound.pop();
   stack.push(i);
@@ -320,7 +349,9 @@ function add(i) {
 function decorate(kind) {
   if (step !== 2) return;
   unlock();
-  Sound.tap();
+  if (toppings.find((item) => item.id === kind)?.unlock > served) return;
+  if (kind === "syrup") Sound.drizzle();
+  else Sound.tap();
   chosen = kind;
   park?.decorate(kind);
   show();
@@ -330,6 +361,11 @@ function give() {
   if (step === 3 || !stack.length) return;
   unlock();
   perfect = check().all;
+  streak = perfect ? streak + 1 : 0;
+  const earnedTicket = streak > 0 && streak % 3 === 0;
+  if (earnedTicket) tickets++;
+  save("streak", streak);
+  save("tickets", tickets);
   if (perfect) Sound.fanfare();
   else Sound.gift();
   step = 3;
@@ -337,7 +373,7 @@ function give() {
   el("fallback").classList.add("given");
   served++;
   save("served", served);
-  note("");
+  note(earnedTicket ? "Золотой билет за три точных заказа!" : "");
   show();
   bump();
   orderVoice(perfect ? 1.1 : 0);
@@ -356,6 +392,10 @@ function card(item) {
   btn.style.setProperty("--tile", item.tile);
   btn.style.setProperty("--rim", item.rim);
   btn.innerHTML = icon(item.id) + "<span>" + item.name + "</span>";
+  if (item.unlock) {
+    btn.dataset.unlock = item.unlock;
+    btn.insertAdjacentHTML("beforeend", `<small>🔒 ${item.unlock}</small>`);
+  }
   return btn;
 }
 function ownsDrag(e) {
@@ -442,13 +482,16 @@ scene.addEventListener("pointerdown", (e) => {
   }
   if (step !== 2 || !park.nearCone(e.clientX, e.clientY)) return;
   scene.setPointerCapture(e.pointerId);
-  stroke = { pointer: e.pointerId, points: [], line: null };
+  stroke = { pointer: e.pointerId, points: [], line: null, x: e.clientX, y: e.clientY };
   const pt = park.inkPoint(e.clientX, e.clientY);
   if (pt) stroke.points.push(pt);
 });
 scene.addEventListener("pointermove", (e) => {
   if (!stroke || stroke.pointer !== e.pointerId || stroke.points.length >= 64)
     return;
+  if (Math.hypot(e.clientX - stroke.x, e.clientY - stroke.y) < 5) return;
+  stroke.x = e.clientX;
+  stroke.y = e.clientY;
   const pt = park.inkPoint(e.clientX, e.clientY);
   if (!pt) return;
   const last = stroke.points.at(-1);
@@ -457,6 +500,7 @@ scene.addEventListener("pointermove", (e) => {
   if (stroke.points.length > 1) {
     if (!stroke.line) {
       park.clearDecoration();
+      Sound.drizzle();
       chosen = "syrup";
       show();
       cheer();
@@ -481,6 +525,28 @@ el("again-scoop").onclick = () => {
     show();
   }
 };
+el("cone-type").onclick = () => {
+  if (step !== 1 || stack.length) return;
+  unlock();
+  Sound.tap();
+  cup = !cup;
+  save("cup", cup ? "on" : "off");
+  park?.setCup(cup);
+  show();
+};
+park?.setCup(cup);
+el("clear-cone").onclick = () => {
+  if (!stack.length || step === 3) return;
+  unlock();
+  Sound.tap();
+  stack = [];
+  chosen = null;
+  step = 1;
+  matched = 0;
+  park?.clearCone();
+  note("");
+  show();
+};
 el("serve").onclick = give;
 el("next").onclick = () => {
   if (step !== 3) return;
@@ -491,7 +557,14 @@ el("next").onclick = () => {
   Sound.bell();
   orderVoice(0.75);
 };
+document.addEventListener("click", (event) => {
+  if (!firstOrder || !sound || step === 3 || event.target.closest("#order, #sound, .home-slot")) return;
+  firstOrder = false;
+  unlock();
+  orderVoice();
+}, { capture: true });
 el("order").onclick = () => {
+  firstOrder = false;
   unlock();
   orderVoice();
 };
@@ -527,5 +600,6 @@ document.addEventListener("visibilitychange", () => {
   } else if (sound && music && Sound.ctx) Music.start();
 });
 begin();
+if (served === 0) note("Нажми на вкус или перетащи шарик на рожок");
 soundButton();
 musicButton();

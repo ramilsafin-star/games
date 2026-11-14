@@ -1,12 +1,13 @@
 await window.vkGameHost?.ready;
 // «Ёжик-почтальон»: ребёнок рисует пальцем рельсы от почты до станции, вагончик с ёжиком едет сам.
 // Физика — physics.js (шаг 1/120 с, заезд повторяется точно), картинка — world.js, уровни — levels.js.
-import { World, SKINS, railUp } from "./world.js?v=bb8d6757";
-import { LEVELS, WORLDS, STORIES } from "./levels.js?v=bb8d6757";
-import { Run, DT, processStroke, makeRail, anchors, canDraw, blockedSegment, SNAP, drawStrokes, fixedRails, railAt, predictJumps, bendRail } from "./physics.js?v=bb8d6757";
+import { World, SKINS, railUp } from "./world.js?v=46671f0f";
+import { LEVELS, WORLDS, STORIES, FREE_LEVEL } from "./levels.js?v=46671f0f";
+import { Run, DT, processStroke, makeRail, anchors, canDraw, blockedSegment, SNAP, drawStrokes, fixedRails, railAt, predictJumps, bendRail } from "./physics.js?v=46671f0f";
 
 const el = (id) => document.getElementById(id);
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+const MAX_RAILS = 24;
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---------- Сохранение ----------
@@ -167,6 +168,19 @@ try {
 }
 world.setSkin(save.skin);
 
+const levelTimers = new Set();
+function afterLevel(ms, callback) {
+  const timer = setTimeout(() => {
+    levelTimers.delete(timer);
+    callback();
+  }, ms);
+  levelTimers.add(timer);
+}
+function clearLevelTimers() {
+  for (const timer of levelTimers) clearTimeout(timer);
+  levelTimers.clear();
+}
+let idle = 0;
 let li = 0,
   level = null,
   rails = [],
@@ -194,13 +208,22 @@ function sideOf(rail) {
 }
 // quiet — тихо построить уровень под заставкой, без голоса и подсказок
 function startLevel(i, quiet = false) {
-  li = Math.max(0, Math.min(LEVELS.length - 1, i));
-  level = LEVELS[li];
+  clearLevelTimers();
+  run = null;
+  stroke = drag = null;
+  idle = 0;
+  speakToken++;
+  voiceToken++;
+  stopVoice();
+  el("result").hidden = true;
+  el("title-stamps").textContent = `✉ Печатей: ${totalStamps()}`;
+  const free = i === "free";
+  li = free ? "free" : Math.max(0, Math.min(LEVELS.length - 1, i));
+  level = free ? FREE_LEVEL : LEVELS[li];
   const worldChanged = !world.data || world.data.world !== level.world;
   save.level = li;
   store();
   world.setLevel(level);
-  for (const h of handles) world.removeRail(h);
   rails = [];
   handles = [];
   history = [];
@@ -213,19 +236,19 @@ function startLevel(i, quiet = false) {
   hintAt = null;
   said.clear();
   el("hint").hidden = true;
-  el("lvl-num").textContent = level.id;
+  el("lvl-num").textContent = free ? "∞" : level.id;
   el("lvl-name").textContent = level.name;
   world.clearTrace();
   // Посылка уже доставлена — у станции её результат, иначе получатель ждёт с облачком
-  const delivered = (save.stars[level.id] || 0) > 0;
+  const delivered = !free && (save.stars[level.id] || 0) > 0;
   world.showGift(delivered ? story().gift : null, false);
-  world.setBubble(delivered ? null : story().icon);
+  world.setBubble(delivered || free ? null : story().icon);
   setMode("edit");
   resetWagon();
   refresh();
   hideHand();
   world.ghost(null);
-  if (quiet) return;
+  if (quiet || free) return;
   // Голос: знакомство, кто ждёт посылку, что нового на этой горке
   const seq = [];
   if (level.id === 1 && !save.heard.hello) {
@@ -233,6 +256,7 @@ function startLevel(i, quiet = false) {
     seq.push("hello");
   }
   if (!delivered) seq.push("story-" + level.story);
+  if (!delivered && level.id > 12) toast(story().text);
   if (level.id === 1 && !rails.length) seq.push("draw");
   const tip = level.hint || (level.id === 2 ? "rings" : level.rocks.length ? "cave" : null);
   if (tip && !save.heard[tip]) {
@@ -281,6 +305,7 @@ function freeEnds() {
     for (const end of [0, 1]) {
       const p = end ? r.pts.at(-1) : r.pts[0];
       const others = anchors(level, rails.filter((q) => q !== r));
+      others.push(end ? r.pts[0] : r.pts.at(-1));
       if (!others.some((a) => dist(a, p) < 1e-3)) out.push({ i, end, p, color: world.railColor(r.color) });
     }
   });
@@ -378,6 +403,7 @@ canvas.addEventListener("pointerdown", (e) => {
   if (mode !== "edit" || stroke || drag) return;
   const p = point(e);
   if (!p) return;
+  idle = 0;
   canvas.setPointerCapture(e.pointerId);
   hideHand();
   world.ghost(null);
@@ -486,7 +512,12 @@ function endPointer(e) {
   if (s.erase) return;
   const pts = processStroke(s.raw, level, rails);
   if (!pts) return refresh();
-  if (rails.length >= 24) deleteRail(0);
+  if (rails.length >= MAX_RAILS) {
+    toast("На горке уже 24 рельса. Сотри ненужный ластиком.");
+    refresh();
+    return;
+  }
+  idle = 0;
   const rail = makeRail(pts, "user", rid());
   insertRail(rail, rails.length, colorNext);
   history.push({ t: "add", rail });
@@ -550,6 +581,7 @@ el("go").onclick = () => {
   else if (mode === "run") stopRun();
 };
 function startRun() {
+  idle = 0;
   if (stroke || drag) endPointer();
   hideHand();
   world.ghost(null);
@@ -569,7 +601,7 @@ function stopRun() {
   Sound.stopRoll();
   setMode("edit");
   resetWagon();
-  if (!(save.stars[level.id] > 0)) world.setBubble(story().icon);
+  if (li !== "free" && !(save.stars[level.id] > 0)) world.setBubble(story().icon);
   refresh();
 }
 function handle(ev) {
@@ -619,6 +651,11 @@ function finished() {
   const r = run.result,
     rings = r.rings.length,
     stars = 1 + rings;
+  if (li === "free") {
+    setMode("result");
+    afterLevel(900, () => showResult(stars, r.tricks, [], []));
+    return;
+  }
   const before = totalStamps(),
     unlockedBefore = SKINS.filter((s) => s.need <= before).length,
     first = !(save.stars[level.id] > 0);
@@ -631,20 +668,20 @@ function finished() {
   const fresh = SKINS.filter((s) => s.need <= totalStamps()).slice(unlockedBefore);
   hintAt = null;
   setMode("result");
-  setTimeout(() => {
+  afterLevel(700, () => {
     world.deliver(run ? run.pos : level.finish);
     world.celebrate([level.finish[0] + 1.3, level.finish[1] + 0.5]);
     Sound.fanfare();
     const line = rings === level.rings.length ? "perfect" : "delivered";
     if (first) speak(line, "gift");
     else say(line, 0.3);
-  }, 700);
+  });
   // Коробка у получателя — открывается, у станции появляется подарок
-  setTimeout(() => {
+  afterLevel(1400, () => {
     world.showGift(story().gift, first);
     world.burst([level.finish[0] + 1.3, level.finish[1] + 1.2], 40, ["#ffd23f", "#ff8fd0", "#7fe8ff", "#ffffff"], 3.5);
-  }, 1400);
-  setTimeout(() => showResult(stars, r.tricks, newTricks, fresh), 2800);
+  });
+  afterLevel(2800, () => showResult(stars, r.tricks, newTricks, fresh));
 }
 // Неудача: что случилось, где, и голосом — что сделать
 function failed(reason, at) {
@@ -678,16 +715,17 @@ function failed(reason, at) {
   world.showTrace(trace, at);
   // После двух неудач на поле рядом с этим местом загорается лампочка
   if (fails >= 2) hintAt = [...at];
-  setTimeout(() => {
+  afterLevel(1700, () => {
     run = null;
     setMode("edit");
     resetWagon();
-    if (!(save.stars[level.id] > 0)) world.setBubble(story().icon);
+    if (li !== "free" && !(save.stars[level.id] > 0)) world.setBubble(story().icon);
     refresh();
-  }, 1700);
+  });
 }
 function showResult(stars, tricks, newTricks, fresh) {
-  el("result-title").textContent = stars === 3 ? "Все печати!" : "Посылка доставлена!";
+  el("result-title").textContent = li === "free" ? "Вагончик на станции!" : stars === 3 ? "Все печати!" : "Посылка доставлена!";
+  el("next").setAttribute("aria-label", li === "free" || li === LEVELS.length - 1 ? "Открыть карту" : "Следующая горка");
   [...el("result-stars").children].forEach((s, i) => s.classList.toggle("on", i < stars));
   const tr = el("result-tricks");
   tr.innerHTML = tricks.map((t) => `<span class="${newTricks.includes(t) ? "new" : ""}">${TRICKS[t].icon} ${TRICKS[t].name}</span>`).join("");
@@ -697,12 +735,13 @@ function showResult(stars, tricks, newTricks, fresh) {
     const s = fresh.at(-1);
     nw.innerHTML = `<img alt="" src="${skinIcon(s.id)}"><span>Новый вагончик: ${s.name}!</span>`;
     nw.hidden = false;
-    setTimeout(() => say("unlock"), 1600);
+    afterLevel(1600, () => say("unlock"));
   } else nw.hidden = true;
   el("result").hidden = false;
   Sound.star();
 }
 function backToEdit() {
+  clearLevelTimers();
   el("result").hidden = true;
   run = null;
   setMode("edit");
@@ -719,7 +758,7 @@ el("next").onclick = () => {
   Sound.tap();
   el("result").hidden = true;
   run = null;
-  if (li < LEVELS.length - 1) startLevel(li + 1);
+  if (li !== "free" && li < LEVELS.length - 1) startLevel(li + 1);
   else {
     backToEdit();
     openMap();
@@ -729,6 +768,13 @@ el("next").onclick = () => {
 // ---------- Каждый кадр ----------
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
 world.onFrame = (dt) => {
+  if (mode === "edit" && el("map").hidden && !stroke && !drag && !hintAt && !hand) {
+    idle += dt;
+    if (idle >= 25) {
+      hintAt = level.start;
+      el("hint").hidden = false;
+    }
+  }
   if (run && (mode === "run" || mode === "result")) {
     // В полёте время чуть замедляется — красиво и видно, куда летит
     const slow = run.mode === "air" && !reduced.matches ? 0.62 : 1;
@@ -813,6 +859,8 @@ function unlockedLevel(i) {
 }
 function openMap() {
   const box = el("worlds");
+  const hasFinal = Boolean(save.stars[LEVELS.at(-1).id]);
+  el("free-level").hidden = !hasFinal;
   box.innerHTML = WORLDS.map((w) => {
     const items = LEVELS.map((l, i) => ({ l, i })).filter((x) => x.l.world === w.id);
     return `<div class="world"><h3>${w.name}</h3><div class="levels">${items
@@ -821,7 +869,12 @@ function openMap() {
           open = unlockedLevel(i);
         const stars = [0, 1, 2].map((k) => (k < st ? "<em>★</em>" : "★")).join("");
         const gift = st ? STORIES[l.story].icon : open ? "📦" : "";
-        const tricks = (save.tricks[l.id] || []).map((t) => TRICKS[t].icon).join("");
+        const known = save.tricks[l.id] || [];
+        const possible = new Set([...(l.tricks || []), ...known]);
+        const tricks = [...possible].map((id) => {
+          const trick = TRICKS[id];
+          return `<span class="${known.includes(id) ? "earned" : "pending"}" title="${trick.name}">${trick.icon}</span>`;
+        }).join("");
         return `<button class="lvl ${l.world}${i === li ? " now" : ""}" data-level="${i}" ${open ? "" : "disabled"} aria-label="Горка ${l.id}: ${l.name}"><span class="gift">${gift}</span><b>${open ? l.id : "🔒"}</b><small>${l.name}</small><span class="st">${stars}</span><span class="tr">${tricks}</span></button>`;
       })
       .join("")}</div></div>`;
@@ -855,7 +908,7 @@ el("map").addEventListener("click", (e) => {
     el("map").hidden = true;
     el("result").hidden = true;
     run = null;
-    startLevel(+b.dataset.level);
+    startLevel(b.dataset.level === "free" ? "free" : Number(b.dataset.level));
   } else if (b.dataset.skin) {
     Sound.gift();
     save.skin = b.dataset.skin;
@@ -867,7 +920,7 @@ el("map").addEventListener("click", (e) => {
 });
 
 // ---------- Заставка ----------
-startLevel(Math.min(save.level || 0, LEVELS.length - 1), true);
+startLevel(save.level === "free" && save.stars[LEVELS.at(-1).id] ? "free" : Math.min(Number(save.level) || 0, LEVELS.length - 1), true);
 setMode("title");
 el("play").onclick = () => {
   unlock();
@@ -886,17 +939,26 @@ try {
   if (sessionStorage.getItem("yozhik-portrait")) document.body.classList.add("portrait-ok");
 } catch {}
 // Свернули вкладку во время заезда — заезд останавливается, рисунок остаётся
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) {
+function handleVisibility() {
+  if (document.hidden || window.vkGameHost?.hidden) {
     if (mode === "run") stopRun();
     if (stroke || drag) endPointer();
-    Music.stop();
+    speakToken++;
+    voiceToken++;
     stopVoice();
-  } else if (save.music && Sound.ctx && mode !== "title") Music.start();
-});
+    Sound.ctx?.suspend().catch(() => {});
+  } else Sound.ctx?.resume().catch(() => {});
+}
+document.addEventListener("visibilitychange", handleVisibility);
+window.addEventListener("vk-game-visibility", handleVisibility);
 // Клавиатура: пробел — поехали/стоп, Z или Backspace — отменить
 addEventListener("keydown", (e) => {
   if (mode === "title" && (e.key === "Enter" || e.key === " ")) return el("play").click();
+  if (!el("map").hidden || e.target.matches?.("button")) return;
+  if (mode === "edit" && (e.code === "Digit1" || e.code === "Digit2")) {
+    setTool(e.code === "Digit1" ? "pencil" : "eraser");
+    return;
+  }
   if (e.key === " " || e.key === "Enter") {
     e.preventDefault();
     el("go").click();

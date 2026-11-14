@@ -4,7 +4,7 @@ import * as T from "../vendor/three/three.module.min.js?v=2d0cf2e4";
 import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=2d0cf2e4";
 import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=2d0cf2e4";
 import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=2d0cf2e4";
-import { polish } from "./gfx.js?v=2d0cf2e4";
+import { polish } from "./gfx.js?v=ea8eb052";
 import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=2d0cf2e4";
 import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=2d0cf2e4";
 import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=2d0cf2e4";
@@ -48,8 +48,8 @@ const faces = new Map();
 function tileFace(text, kind) {
   const key = text + kind;
   if (faces.has(key)) return faces.get(key);
-  const bg = { hidden: ["#7a5cff", "#5a3fd8"], shown: ["#fffaf0", "#ffe8c8"], lost: ["#ffe0e8", "#ffc4d4"] }[kind];
-  const ink = { hidden: "#ffffffcc", shown: "#3a2470", lost: "#c8305a" }[kind];
+  const bg = { hidden: ["#7a5cff", "#5a3fd8"], shown: ["#fffaf0", "#ffe8c8"], hint: ["#fff8a5", "#ffd26c"], lost: ["#ffe0e8", "#ffc4d4"] }[kind];
+  const ink = { hidden: "#ffffffcc", shown: "#3a2470", hint: "#664113", lost: "#c8305a" }[kind];
   const tex = canvasTexture(128, 156, (x, w, h) => {
     const g = x.createLinearGradient(0, 0, 0, h);
     g.addColorStop(0, bg[0]);
@@ -69,8 +69,8 @@ function tileFace(text, kind) {
   return tex;
 }
 function stampTexture(i) {
-  const colors = ["#ff5f8a", "#ffb02e", "#3fbf7a", "#4f8bff"],
-    pics = ["🌸", "⭐", "🍀", "🌙"];
+  const colors = ["#ff5f8a", "#ffb02e", "#3fbf7a", "#4f8bff", "#b47cff", "#42bdbb"],
+    pics = ["🌸", "⭐", "🍀", "🌙", "💎", "🐚"];
   return canvasTexture(128, 150, (x, w, h) => {
     x.fillStyle = "#ffffff";
     x.fillRect(0, 0, w, h);
@@ -237,6 +237,8 @@ export class World {
     this.glow = { on: true, slow: 0, seen: 0 };
     this.build();
     this.tiles = [];
+    this.ray = new T.Raycaster();
+    this.pointer = new T.Vector2();
     this.resize = () => {
       const w = canvas.clientWidth,
         h = canvas.clientHeight;
@@ -464,15 +466,17 @@ export class World {
     sheet.castShadow = true;
     S.add(sheet);
     this.sheet = sheet;
-    this.stamps = [0, 1, 2, 3].map((i) => {
+    this.stamps = Array.from({ length: 6 }, (_, i) => {
       const m = new T.Mesh(new T.PlaneGeometry(0.62, 0.72), new T.MeshStandardMaterial({ map: stampTexture(i), transparent: true, roughness: 0.6 }));
-      m.position.set((i % 2 ? 0.38 : -0.38), i < 2 ? 0.44 : -0.42, 0.04);
+      m.position.set((i % 2 ? 0.38 : -0.38), 0.56 - Math.floor(i / 2) * 0.55, 0.04);
+      m.scale.setScalar(0.72);
       sheet.add(m);
       const ghost = new T.Mesh(new T.PlaneGeometry(0.62, 0.72), new T.MeshBasicMaterial({ color: "#e8d8c8", transparent: true, opacity: 0.6 }));
       ghost.position.copy(m.position);
+      ghost.scale.copy(m.scale);
       ghost.position.z = 0.035;
       sheet.add(ghost);
-      return { mesh: m, home: m.position.clone(), used: false };
+      return { mesh: m, ghost, home: m.position.clone(), used: false, motion: 0 };
     });
     // Дракоша
     this.dragon = dragon();
@@ -527,7 +531,12 @@ export class World {
   }
   // ---------- Слово ----------
   setCard(card, round) {
-    for (const t of this.tiles) t.mesh.removeFromParent();
+    const revision = this.cardRevision = (this.cardRevision || 0) + 1;
+    for (const t of this.tiles) {
+      t.mesh.removeFromParent();
+      t.mesh.geometry.dispose();
+      for (const material of new Set(t.mesh.material)) material.dispose();
+    }
     this.tiles = [];
     const words = card.word.split(" ");
     this.rows = words.length;
@@ -561,12 +570,16 @@ export class World {
     this.tiles.forEach((t, k) => {
       const y = t.mesh.position.y;
       t.mesh.scale.setScalar(0.001);
-      setTimeout(() => this.tween(0.35, (p) => {
-        t.mesh.scale.setScalar(Math.max(0.001, p < 0.7 ? (p / 0.7) * 1.15 : 1.15 - ((p - 0.7) / 0.3) * 0.15));
-        t.mesh.position.y = y + (1 - p) * 0.6;
-      }), k * 60);
+      setTimeout(() => {
+        if (revision !== this.cardRevision) return;
+        this.tween(0.35, (p) => {
+          t.mesh.scale.setScalar(Math.max(0.001, p < 0.7 ? (p / 0.7) * 1.15 : 1.15 - ((p - 0.7) / 0.3) * 0.15));
+          t.mesh.position.y = y + (1 - p) * 0.6;
+        });
+      }, k * 60);
     });
     // Картинка
+    this.picMat.map?.dispose();
     this.picMat.map = canvasTexture(256, 256, (x, w, h) => {
       const g = x.createRadialGradient(w / 2, h / 2, 10, w / 2, h / 2, w * 0.7);
       g.addColorStop(0, "#ffffff");
@@ -582,9 +595,9 @@ export class World {
     // Нарисованная картинка карточки (art/<asset>.webp); пока грузится — эмодзи
     if (card.asset) {
       const want = card.asset;
-      this.cardAsset = want;
       new T.TextureLoader().load("./art/" + want + ".webp", (tex) => {
-        if (this.cardAsset !== want) return tex.dispose();
+        if (this.cardRevision !== revision) return tex.dispose();
+        this.picMat.map?.dispose();
         tex.colorSpace = T.SRGBColorSpace;
         tex.anisotropy = 4;
         this.picMat.map = tex;
@@ -593,13 +606,14 @@ export class World {
     }
     this.picGlow.material.opacity = 0;
     this.picture.scale.setScalar(1);
-    for (const s of this.stamps) {
+    this.stamps.forEach((s, i) => {
+      s.motion++;
       s.used = false;
-      s.mesh.visible = true;
+      s.mesh.visible = s.ghost.visible = i < round.maxStamps;
       s.mesh.position.copy(s.home);
       s.mesh.rotation.set(0, 0, 0);
       s.mesh.material.opacity = 1;
-    }
+    });
     this.mailbox.flag.rotation.z = -pie / 2;
     this.fit();
   }
@@ -608,6 +622,7 @@ export class World {
     return this.tiles.find((t) => t.index === i);
   }
   reveal(indices, kind = "shown") {
+    const revision = this.cardRevision;
     indices.forEach((i, k) => {
       const t = this.tileAt(i);
       if (!t || t.open) return;
@@ -616,12 +631,16 @@ export class World {
       this.lookT = this.time;
       if (kind !== "shown") t.front.map = tileFace(t.ch, kind);
       setTimeout(() => {
+        if (revision !== this.cardRevision) return;
         const y = t.mesh.position.y;
         this.tween(0.45, (p) => {
           t.mesh.rotation.y = pie * (1 - p);
           t.mesh.position.y = y + Math.sin(p * pie) * 0.35;
         });
-        if (kind === "shown") this.burst(t.mesh.position.clone().add(new T.Vector3(0, 0.3, 0.3)), 14, ["#ffe066", "#ff9fd0", "#ffffff"], 2.6);
+        if (kind === "hint") this.tween(0.85, (p) => {
+          if (p === 1 && revision === this.cardRevision) t.front.map = tileFace(t.ch, "shown");
+        });
+        if (kind !== "lost") this.burst(t.mesh.position.clone().add(new T.Vector3(0, 0.3, 0.3)), 14, ["#ffe066", "#ff9fd0", "#ffffff"], 2.6);
       }, k * 120);
     });
   }
@@ -630,29 +649,52 @@ export class World {
     const s = this.stamps[n];
     if (!s || s.used) return;
     s.used = true;
+    const motion = ++s.motion;
     const m = s.mesh,
       from = m.position.clone();
     this.tween(0.9, (p) => {
+      if (motion !== s.motion) return;
       m.position.set(from.x + p * 1.4, from.y + Math.sin(p * pie) * 1.2 + p * 0.6, from.z + p * 0.8);
       m.rotation.set(p * 1.5, p * 3, p * 4);
       m.material.opacity = 1 - Math.max(0, p - 0.5) * 2;
-    }).then(() => (m.visible = false));
+    }).then(() => { if (motion === s.motion) m.visible = false; });
     this.mood.sad = 1;
+  }
+  restoreStamp(index) {
+    const stamp = this.stamps[index];
+    stamp.motion++;
+    stamp.used = false;
+    stamp.mesh.visible = true;
+    stamp.mesh.position.copy(stamp.home);
+    stamp.mesh.rotation.set(0, 0, 0);
+    stamp.mesh.material.opacity = 1;
+    this.burst(stamp.mesh.getWorldPosition(new T.Vector3()), 12, ["#ffe066", "#ffffff"], 2);
+  }
+  targetAt(x, y) {
+    const box = this.canvas.getBoundingClientRect();
+    this.pointer.set((x - box.left) / box.width * 2 - 1, 1 - (y - box.top) / box.height * 2);
+    this.ray.setFromCamera(this.pointer, this.camera);
+    if (this.ray.intersectObject(this.dragon.group).length) return "dragon";
+    if (this.ray.intersectObject(this.picPlane).length) return "picture";
+    return null;
   }
   happy() {
     this.mood.happy = 1;
   }
   // Победа: Дракоша дышит разноцветным огоньком, плитки сияют, письмо летит в ящик
   async won() {
+    const revision = this.cardRevision;
     this.mood.happy = 1;
     this.flame(1.4);
     this.tiles.forEach((t, k) =>
       setTimeout(() => {
+        if (revision !== this.cardRevision) return;
         const y = t.mesh.position.y;
         this.tween(0.4, (p) => (t.mesh.position.y = y + Math.sin(p * pie) * 0.5));
       }, k * 70),
     );
     await new Promise((r) => setTimeout(r, 900));
+    if (revision !== this.cardRevision) return;
     // Конверт вылетает из-за плиток и летит в почтовый ящик
     const env = new T.Group();
     const paper = new T.Mesh(new RoundedBoxGeometry(1.2, 0.8, 0.06, 2, 0.03), matte("#fffaf0"));
@@ -680,11 +722,17 @@ export class World {
       env.scale.setScalar(1 - p * 0.55);
     });
     env.removeFromParent();
+    env.traverse((object) => {
+      object.geometry?.dispose();
+      object.material?.dispose();
+    });
+    if (revision !== this.cardRevision) return;
     this.burst(slot, 30, ["#ffe066", "#ff9fd0", "#7fe8ff", "#ffffff"], 3.2);
     const f = this.mailbox.flag;
-    this.tween(0.5, (p) => (f.rotation.z = -pie / 2 + p * (pie / 2)));
+    this.tween(0.5, (p) => { if (revision === this.cardRevision) f.rotation.z = -pie / 2 + p * (pie / 2); });
     // Картинка сияет
     this.tween(0.6, (p) => {
+      if (revision !== this.cardRevision) return;
       this.picGlow.material.opacity = p * 0.7;
       this.picture.scale.setScalar(1 + Math.sin(p * pie) * 0.12);
     });

@@ -593,9 +593,7 @@ h2 {
   #order small {
     font-size: 8px;
   }
-  .speak-icon {
-    display: none;
-  }
+  .speak-icon { font-size: 12px; }
   h1 {
     font-size: clamp(24px, 6.4vw, 37px);
   }
@@ -953,4 +951,40 @@ h1 em {
     font-size: 13px;
     letter-spacing: 0;
   }
+}
+
+#clear-cone[hidden] { display: none; }
+#combo {
+  position: absolute;
+  inset: auto 12px 10px auto;
+  padding: 4px 9px;
+  border-radius: 12px;
+  background: #fff0b8;
+  color: #583816;
+  font-size: 13px;
+  font-weight: 800;
+  pointer-events: none;
+}
+#combo:empty { display: none; }
+#serve-row { flex-wrap: wrap; }
+
+#cone-type[hidden] { display: none; }
+#flavors:has(button[data-unlock]:not([hidden])) {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.choice[hidden] { display: none; }
+#flavors .choice, #toppings .choice { min-width: 0; }
+@media (max-width: 650px) {
+  #flavors:has(button[data-unlock]:not([hidden])) .choice { min-height: 43px; }
+}
+.paper-cup {
+  position: absolute;
+  bottom: 1px;
+  left: 50%;
+  translate: -50%;
+  width: 51px;
+  height: 39px;
+  border-radius: 3px 3px 12px 12px;
+  background: #f18ca5;
+  border-top: 6px solid #fff1c8;
 }

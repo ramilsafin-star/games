@@ -1,5 +1,5 @@
 import * as T from "../vendor/three/three.module.min.js?v=9a976c52";
-import "./gfx.js?v=9a976c52";
+import "./gfx.js?v=c5143e6d";
 import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=9a976c52";
 import {
   scenery,
@@ -19,7 +19,7 @@ import {
   balloons,
   butterfly,
   bulbs,
-} from "./models.js?v=9a976c52";
+} from "./models.js?v=c5143e6d";
 
 const clamp = T.MathUtils.clamp,
   mix = T.MathUtils.lerp;
@@ -90,6 +90,7 @@ export class Park {
     this.dog = puppy(this.scene);
     this.dog.position.set(-4.21, 0, 1.33);
     this.dog.rotation.y = 0.32;
+    this.cup = false;
     this.treat = this.freshCone();
     this.scene.traverse((m) => {
       if (m.isMesh && !m.material.transparent) {
@@ -236,7 +237,7 @@ export class Park {
   }
   // Рожок на подставке; новый появляется, когда прежний уносит гость
   freshCone() {
-    const treat = cone(this.scene);
+    const treat = cone(this.scene, this.cup);
     treat.traverse((m) => {
       if (m.isMesh) m.castShadow = m.receiveShadow = true;
     });
@@ -252,6 +253,12 @@ export class Park {
     away.guest.dab.visible = away.guest.tongue.visible = false;
     if (away.guest !== this.guests[this.id]) away.guest.root.visible = false;
     this.leaving = null;
+  }
+  setCup(cup) {
+    if (this.cup === cup) return;
+    this.cup = cup;
+    this.treat.removeFromParent();
+    this.treat = this.freshCone();
   }
   reset(id) {
     const now = performance.now() / 1000;
@@ -451,6 +458,12 @@ export class Park {
     this.parts.push(m);
     this.bounce = performance.now() / 1000;
   }
+  clearCone() {
+    this.clearDecoration();
+    for (const scoop of this.scoops) dropMeshes(scoop);
+    this.parts = [];
+    this.scoops = [];
+  }
   clearDecoration() {
     for (const part of [...this.strokes, this.decor].filter(Boolean)) {
       this.parts.splice(this.parts.indexOf(part), 1);
@@ -517,6 +530,7 @@ export class Park {
   give(perfect = false, color = "#ff9bb0") {
     this.delivered = performance.now() / 1000;
     this.perfect = perfect;
+    this.lickSound = false;
     this.guests[this.id].dab.material.color.set(color);
     if (perfect) this.confettiAt = this.delivered + 0.2;
   }
@@ -575,6 +589,10 @@ export class Park {
     g.eyes.scale.y = motion && t % 4.4 > 4.23 ? 0.14 : 1;
     g.dab.visible = !!g.lick && give > 0.82 && elapsed < 1;
     g.eyes.scale.x = 1 - 0.23 * lick * motion;
+    if (lick > 0.15 && !this.lickSound) {
+      this.lickSound = true;
+      Sound.lick();
+    }
     g.tongue.visible = lick > 0.03;
     g.tongue.position.y = -0.22 + 0.13 * lick;
     g.tail.rotation.z =
@@ -651,7 +669,7 @@ export class Park {
           (p < 1 ? -0.12 * (1 - p) : Math.sin(q * Math.PI * 2.5) * (1 - q) * 0.2);
       top.scale.set(1 + squash * 0.6, 1 - squash, 1 + squash * 0.6);
     }
-    this.dog.position.y = 0.012 * Math.sin(t * 3.8) * motion;
+    this.animateWorld(t, dt, motion);
     if (this.miss) {
       const p = clamp((t - this.miss.at) * 1.35, 0, 1);
       this.miss.ball.position.set(
@@ -665,7 +683,6 @@ export class Park {
         this.miss = null;
       }
     }
-    this.animateWorld(t, dt, motion);
     if (!force) this.aimCamera(dt);
     this.renderer.render(this.scene, this.camera);
   }

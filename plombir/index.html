@@ -11,7 +11,7 @@
     <meta name="description" content="Фургон мороженого в парке: собери рожок по заказу зверят." />
     <link rel="icon" href="./icon-192.png" />
     <link rel="apple-touch-icon" href="./icon-180.png" />
-    <link rel="stylesheet" href="./style.css?v=91b23d48" />
+    <link rel="stylesheet" href="./style.css?v=c5143e6d" />
   </head>
   <body>
     <main class="shop">
@@ -61,6 +61,7 @@
           ><span class="speak-icon" aria-hidden="true">♪</span>
         </button>
         <div id="scene-note" role="status"></div>
+        <div id="combo" aria-live="polite"></div>
       </section>
       <section class="bench" aria-labelledby="action-title">
         <div class="bench-head">
@@ -85,6 +86,8 @@
               hidden
             ></div>
             <div id="serve-row" class="finish-row">
+              <button id="cone-type" class="secondary">Рожок</button>
+              <button id="clear-cone" class="secondary" hidden>Сбросить</button>
               <button id="again-scoop" class="secondary">
                 <span>Ещё шарик</span></button
               ><button id="serve" class="primary">
@@ -101,8 +104,8 @@
         </div>
       </section>
     </main>
-    <script src="./js/audio.js?v=91b23d48"></script>
-    <script type="module" src="./js/shop.js?v=91b23d48"></script>
-    <script src="./js/juice.js?v=91b23d48"></script>
+    <script src="./js/audio.js?v=c5143e6d"></script>
+    <script type="module" src="./js/shop.js?v=c5143e6d"></script>
+    <script src="./js/juice.js?v=c5143e6d"></script>
   </body>
 </html>

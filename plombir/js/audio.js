@@ -126,6 +126,17 @@ const Sound = {
     this.tone({ type: "sine", f0: 620, f1: 1020, dur: 0.09, vol: 0.2 });
   },
 
+  lick() {
+    if (!this.ready()) return;
+    this.tone({ type: "sine", f0: 330, f1: 155, dur: 0.13, vol: 0.08 });
+    this.noise({ f0: 800, dur: 0.11, vol: 0.04, filter: "lowpass" });
+  },
+
+  drizzle() {
+    if (!this.ready()) return;
+    this.noise({ f0: 1200, dur: 0.16, vol: 0.065, filter: "bandpass" });
+  },
+
   gift() {
     if (!this.ready()) return;
     [784, 988, 1175, 1568].forEach((f, i) =>

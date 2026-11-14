@@ -1,9 +1,9 @@
 await window.vkGameHost?.ready;
 // «Почта Дракоши»: на письме стёрлось слово — угадывай буквы, пока не улетели четыре марки.
 // Правила — rules.js (проверяются tests/rules.mjs), 3D — world.js, слова и картинки — words.js.
-import { World } from "./world.js?v=2d0cf2e4";
-import { CARDS, THEMES } from "./words.js?v=2d0cf2e4";
-import { Round, Deck, ALPHABET, STAMPS } from "./rules.js?v=2d0cf2e4";
+import { World } from "./world.js?v=ea8eb052";
+import { CARDS, THEMES } from "./words.js?v=ea8eb052";
+import { Round, Deck, ALPHABET, STAMPS } from "./rules.js?v=ea8eb052";
 
 const el = (id) => document.getElementById(id);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -11,7 +11,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 // ---------- Сохранение ----------
 const KEY = "drakosha3d-v1";
 function load() {
-  const empty = { v: 1, album: {}, seen: {}, sound: true, music: true, heard: {}, packs: 0 };
+  const empty = { v: 1, album: {}, seen: {}, sound: true, music: true, heard: {}, packs: 0, difficulty: "standard", perfect: {} };
   try {
     const s = JSON.parse(localStorage.getItem(KEY));
     if (s && s.v === 1) return { ...empty, ...s };
@@ -43,6 +43,7 @@ el("themes-open").innerHTML = ICON.envelope;
 el("to-themes").innerHTML = ICON.envelope;
 el("album-open").innerHTML = ICON.album;
 el("album-close").innerHTML = ICON.close;
+el("themes-close").innerHTML = ICON.close;
 el("riddle").innerHTML = ICON.riddle;
 el("bulb").innerHTML = ICON.bulb;
 el("retry").innerHTML = ICON.again;
@@ -64,6 +65,7 @@ paintToggles();
 el("sound").onclick = () => {
   save.sound = !save.sound;
   Sound.setOn(save.sound);
+  if (!save.sound) stopVoice();
   unlock();
   store();
   paintToggles();
@@ -79,8 +81,14 @@ el("music").onclick = () => {
 const recordings = new Map();
 let voice = null,
   speakToken = 0;
+function stopVoice() {
+  speakToken++;
+  try { voice?.stop(); } catch {}
+  voice = null;
+}
 async function say(id, chain = false) {
   if (!chain) speakToken++;
+  const token = speakToken;
   if (!save.sound || !Sound.ctx) return;
   if (voice) {
     try {
@@ -100,6 +108,7 @@ async function say(id, chain = false) {
       recordings.set(id, p);
     }
     const buf = await recordings.get(id);
+    if (token !== speakToken || document.hidden || !save.sound) return;
     const src = ctx.createBufferSource();
     src.buffer = buf;
     src.connect(Sound.master);
@@ -107,6 +116,8 @@ async function say(id, chain = false) {
     voice = src;
     Music.duck(buf.duration + 0.2, 0.3);
     await new Promise((r) => (src.onended = r));
+    src.disconnect();
+    if (voice === src) voice = null;
   } catch {}
 }
 async function speak(...ids) {
@@ -134,17 +145,29 @@ let theme = null,
   results = [],
   round = null,
   streak = 0,
-  bulbUsed = false,
+  bulbCharges = 1,
+  winsInRow = 0,
   saidRepeat = false,
   mode = "title";
 const card = () => pack[pi];
 
 // ---------- Конверты (темы) ----------
+let returnMode;
+function closeThemes() {
+  el("themes").hidden = true;
+  mode = returnMode;
+  if (mode === "title") el("title").hidden = false;
+  if (mode === "done") el("done").hidden = false;
+}
+el("themes-close").onclick = closeThemes;
 function openThemes() {
+  returnMode = mode;
   mode = "themes";
+  el("difficulty").value = save.difficulty;
   el("theme-list").innerHTML = THEMES.map((t) => {
     const got = CARDS.filter((c) => c.theme === t.id && save.album[c.asset]).length;
-    return `<button class="env" style="--c:${t.color}" data-theme="${t.id}" aria-label="Конверт: ${t.name}"><span class="ic">${t.icon}</span><span class="seal"></span><b>${t.name}</b><small>открыток ${got} из 12</small></button>`;
+    const perfect = CARDS.filter((c) => c.theme === t.id && save.perfect[c.asset]).length;
+    return `<button class="env" style="--c:${t.color}" data-theme="${t.id}" aria-label="Конверт: ${t.name}"><span class="ic">${t.icon}</span><span class="seal"></span><b>${t.name}</b><small>${perfect === 12 ? "★ Золотой почтальон" : `открыток ${got} из 12`}</small></button>`;
   }).join("");
   el("themes").hidden = false;
 }
@@ -167,10 +190,13 @@ el("to-themes").onclick = () => {
 };
 function startPack(id) {
   theme = id;
-  const cards = CARDS.filter((c) => c.theme === id);
-  const deck = new Deck(cards, Math.random, save.seen[id] || []);
+  save.difficulty = el("difficulty").value;
+  const easy = save.difficulty === "easy";
+  const cards = CARDS.filter((c) => c.theme === id && (!easy || c.level <= 2));
+  const deckKey = easy ? id + "-easy" : id;
+  const deck = new Deck(cards, Math.random, save.seen[deckKey] || []);
   pack = deck.pack(6);
-  save.seen[id] = [...deck.seen];
+  save.seen[deckKey] = [...deck.seen];
   store();
   pi = 0;
   results = [];
@@ -181,7 +207,7 @@ function startPack(id) {
   if (!save.heard.how) {
     save.heard.how = 1;
     store();
-    speak("how", "stamps");
+    speak("how", ...(easy ? [] : ["stamps"]));
   }
 }
 function paintPack() {
@@ -191,9 +217,11 @@ function paintPack() {
 // ---------- Письмо ----------
 function startCard() {
   mode = "play";
-  round = new Round(card());
+  stopVoice();
+  round = new Round(card(), save.difficulty === "easy" ? 6 : STAMPS);
   streak = 0;
-  bulbUsed = false;
+  winsInRow = 0;
+  bulbCharges = round.hidden() >= 10 ? 2 : 1;
   saidRepeat = false;
   world.setCard(card(), round);
   buildKeys();
@@ -221,6 +249,15 @@ el("keys").addEventListener("pointerdown", (e) => {
 const LATIN = { KeyQ: "Й", KeyW: "Ц", KeyE: "У", KeyR: "К", KeyT: "Е", KeyY: "Н", KeyU: "Г", KeyI: "Ш", KeyO: "Щ", KeyP: "З", BracketLeft: "Х", BracketRight: "Ъ", KeyA: "Ф", KeyS: "Ы", KeyD: "В", KeyF: "А", KeyG: "П", KeyH: "Р", KeyJ: "О", KeyK: "Л", KeyL: "Д", Semicolon: "Ж", Quote: "Э", KeyZ: "Я", KeyX: "Ч", KeyC: "С", KeyV: "М", KeyB: "И", KeyN: "Т", KeyM: "Ь", Comma: "Б", Period: "Ю", Backquote: "Ё" };
 addEventListener("keydown", (e) => {
   if (e.repeat || e.metaKey || e.ctrlKey) return;
+  if (!el("album").hidden) {
+    if (e.key === "Escape") el("album-close").click();
+    return;
+  }
+  if (!el("themes").hidden) {
+    if (e.key === "Escape") closeThemes();
+    return;
+  }
+  if (e.target.matches?.("button, select")) return;
   if (mode === "title" && (e.key === "Enter" || e.key === " ")) return el("play").click();
   if (mode === "after" && (e.key === "Enter" || e.key === " ")) return el("next").click();
   if (mode !== "play") return;
@@ -238,7 +275,7 @@ function press(k) {
   const r = round.guess(k);
   apply(r, keyButton(r.key || k));
 }
-function apply(r, btn) {
+function apply(r, btn, hinted = false) {
   if (r.type === "ignored") return;
   if (r.type === "repeat") {
     Sound.nope();
@@ -258,14 +295,22 @@ function apply(r, btn) {
       btn.classList.add("hit");
       btn.disabled = true;
     }
-    world.reveal(r.at);
+    world.reveal(r.at, hinted ? "hint" : "shown");
     world.happy();
     Sound.flip(streak++);
     if (r.won) return win();
+    if (!hinted && ++winsInRow === 3) {
+      winsInRow = 0;
+      if (round.misses > 0) {
+        world.restoreStamp(--round.misses);
+        Sound.gift();
+      }
+    }
     // Похвала не на каждую букву — иногда
     if (r.at.length > 1 || Math.random() < 0.35) say(["yes1", "yes2", "yes3"][Math.floor(Math.random() * 3)]);
   } else if (r.type === "miss") {
     streak = 0;
+    winsInRow = 0;
     if (btn) {
       btn.classList.add("miss");
       btn.disabled = true;
@@ -274,19 +319,18 @@ function apply(r, btn) {
     Sound.tear();
     if (r.lost) return lose();
     if (r.left === 1) say("last");
-    else if (round.misses === 2 && !bulbUsed) speak(Math.random() < 0.5 ? "no1" : "no2", "helpme");
+    else if (round.misses === 2 && bulbCharges > 0) speak(Math.random() < 0.5 ? "no1" : "no2", "helpme");
     else say(Math.random() < 0.5 ? "no1" : "no2");
   }
 }
 el("bulb").onclick = () => {
   unlock();
-  if (mode !== "play" || bulbUsed) return;
+  if (mode !== "play" || !bulbCharges) return;
   const r = round.hint();
   if (!r) return;
-  bulbUsed = true;
-  el("bulb").disabled = true;
+  el("bulb").disabled = --bulbCharges === 0;
   Sound.sparkle ? Sound.sparkle() : Sound.gift();
-  apply(r, keyButton(r.key));
+  apply(r, keyButton(r.key), true);
 };
 el("riddle").onclick = () => {
   unlock();
@@ -294,16 +338,28 @@ el("riddle").onclick = () => {
   const t = el("riddle-text");
   t.textContent = card().hint;
   t.hidden = false;
-  clearTimeout(t._h);
-  t._h = setTimeout(() => (t.hidden = true), 6000);
+
   say("h-" + card().asset);
 };
+
+el("stage").addEventListener("click", (event) => {
+  if (mode !== "play" || !el("album").hidden) return;
+  const target = world.targetAt(event.clientX, event.clientY);
+  if (target === "picture") el("riddle").click();
+  if (target === "dragon") {
+    unlock();
+    world.happy();
+    world.flame(0.5);
+    Sound.gift();
+  }
+});
 
 async function win() {
   mode = "after";
   results[pi] = "won";
   const fresh = !save.album[card().asset];
   save.album[card().asset] = 1;
+  if (!round.hadMiss) save.perfect[card().asset] = 1;
   store();
   paintPack();
   el("keys").classList.add("off");
@@ -313,9 +369,12 @@ async function win() {
   speak("won", "w-" + card().asset);
   Sound.flame();
   world.flame(1.2);
-  const w = world.won();
-  setTimeout(() => Sound.whoosh(), 900);
-  await w;
+  const winningRound = round;
+  el("next").disabled = true;
+  setTimeout(() => { if (round === winningRound && !document.hidden) Sound.whoosh(); }, 900);
+  await world.won();
+  if (round !== winningRound) return;
+  el("next").disabled = false;
   Sound.clunk();
   Sound.fanfare();
   if (fresh) card()._fresh = true;
@@ -326,6 +385,7 @@ async function lose() {
   paintPack();
   const hidden = [...round.text].map((ch, i) => i).filter((i) => !round.tried.has(round.text[i] === "Ё" ? "Е" : round.text[i]) && round.text[i] !== " " && round.text[i] !== "-");
   world.lost(hidden);
+  el("next").disabled = false;
   el("keys").classList.add("off");
   el("after-word").textContent = card().word;
   el("retry").hidden = false;
@@ -392,7 +452,7 @@ el("album-list").addEventListener("click", (e) => {
   const b = e.target.closest("[data-asset]");
   if (!b) return;
   unlock();
-  say("w-" + b.dataset.asset);
+  speak("w-" + b.dataset.asset, "h-" + b.dataset.asset);
 });
 
 // ---------- Заставка ----------
@@ -413,10 +473,14 @@ el("play").onclick = () => {
   } else say("pick");
   openThemes();
 };
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) Music.stop();
-  else if (save.music && Sound.ctx && mode !== "title") Music.start();
-});
+function handleVisibility() {
+  if (document.hidden || window.vkGameHost?.hidden) {
+    stopVoice();
+    Sound.ctx?.suspend().catch(() => {});
+  } else Sound.ctx?.resume().catch(() => {});
+}
+document.addEventListener("visibilitychange", handleVisibility);
+window.addEventListener("vk-game-visibility", handleVisibility);
 if (new URLSearchParams(location.search).has("debug"))
   window.drakosha = {
     world,

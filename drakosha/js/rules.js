@@ -9,11 +9,13 @@ const OPEN = new Set([" ", "-"]); // пробелы и дефисы открыт
 export const keyOf = (ch) => (ch === "Ё" ? "Е" : ch);
 
 export class Round {
-  constructor(card) {
+  constructor(card, maxStamps = STAMPS) {
+    this.maxStamps = maxStamps;
     this.card = card;
     this.text = card.word.toUpperCase();
     this.tried = new Set(); // клавиши, которые уже нажимали
     this.misses = 0;
+    this.hadMiss = false;
     this.state = "play"; // play | won | lost
     this.events = [];
   }
@@ -43,9 +45,10 @@ export class Round {
       return r;
     }
     this.misses++;
-    const r = { type: "miss", key, left: STAMPS - this.misses };
+    this.hadMiss = true;
+    const r = { type: "miss", key, left: this.maxStamps - this.misses };
     // На последней ошибке результат фиксируется один раз
-    if (this.misses >= STAMPS) {
+    if (this.misses >= this.maxStamps) {
       this.state = "lost";
       r.lost = true;
     }
@@ -75,10 +78,10 @@ export class Deck {
       // Почти все сыграны — начинаем круг заново, но недавние в начало не ставим
       const rest = this.cards.filter((c) => this.seen.has(c.id));
       this.seen = new Set();
-      pool = [...pool, ...this.shuffle(rest)];
-    }
+      pool = [...this.shuffle(pool), ...this.shuffle(rest)];
+    } else pool = this.shuffle(pool);
     // Сначала покороче: лёгкие слова в начале конверта
-    const out = this.shuffle(pool).slice(0, n).sort((a, b) => a.level - b.level);
+    const out = pool.slice(0, n).sort((a, b) => a.level - b.level);
     for (const c of out) this.seen.add(c.id);
     return out;
   }

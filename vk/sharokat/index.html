@@ -10,7 +10,7 @@
     <link rel="apple-touch-icon" href="./icon-180.png" />
     <script src="./vendor/vk/vk-bridge.min.js?v=58bcaabc"></script>
     <script src="./js/vk-host.js?v=58bcaabc" data-keys="sharokat-v1" data-ad-gap="120"></script>
-    <link rel="stylesheet" href="./style.css?v=58bcaabc" />
+    <link rel="stylesheet" href="./style.css?v=f444f678" />
   </head>
   <body>
     <canvas id="game"></canvas>
@@ -18,14 +18,13 @@
     <div id="flash" class="flash" aria-live="polite"></div>
     <!-- Верхняя панель: дом, прогресс, кристаллы, звук -->
     <header class="top">
-      
       <div class="tools">
         <button id="music" class="round" aria-pressed="true">♪</button>
         <button id="sound" class="round" aria-pressed="true">🔊</button>
       </div>
     </header>
     <div id="hud" class="hud" hidden>
-      <button id="home" class="round" aria-label="В меню">⌂</button>
+      <button id="home" class="round" aria-label="Пауза">Ⅱ</button>
       <div class="bar">
         <small id="level-name"></small>
         <div class="progress"><i id="progress-fill"></i><b id="progress-ball"></b><span class="flag">🏁</span></div>
@@ -52,8 +51,22 @@
         <button id="shop-close" class="round close" aria-label="Закрыть">✕</button>
         <h3>Шары</h3>
         <div class="total">💎 <b id="wallet-shop">0</b></div>
+        <div class="skin-preview">
+          <canvas id="skin-preview" aria-label="Предпросмотр шара"></canvas>
+          <div><strong id="preview-name"></strong><button id="buy-skin" hidden></button></div>
+        </div>
         <div id="skins" class="skins"></div>
         <p id="shop-note" class="shop-note"></p>
+      </div>
+    </section>
+    <section id="pause" class="shop" role="dialog" aria-modal="true" aria-label="Пауза" hidden>
+      <div class="shop-card">
+        <h3>Пауза</h3>
+        <div class="actions">
+          <button id="resume" class="play small" aria-label="Продолжить">▶</button>
+          <button id="pause-again" class="round big" aria-label="Начать заново">↻</button>
+          <button id="pause-menu" class="round big" aria-label="В меню">⌂</button>
+        </div>
       </div>
     </section>
     <section id="finish" class="finish" hidden>
@@ -68,8 +81,8 @@
       </div>
     </section>
     <div id="nogl" class="nogl" hidden>Для этой игры нужен браузер с 3D-графикой</div>
-    <script src="./js/audio.js?v=58bcaabc"></script>
-    <script type="module" src="./js/game.js?v=58bcaabc"></script>
-    <script src="./js/juice.js?v=58bcaabc"></script>
+    <script src="./js/audio.js?v=f444f678"></script>
+    <script type="module" src="./js/game.js?v=f444f678"></script>
+    <script src="./js/juice.js?v=f444f678"></script>
   </body>
 </html>

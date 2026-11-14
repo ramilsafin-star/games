@@ -45,6 +45,8 @@ export const flavors = [
     rim: "#88b39c",
     fleck: "#3e9e83",
   },
+  { id: "blueberry", name: "Черника", color: "#a896ff", tile: "#e7ddff", rim: "#a894d7", fleck: "#6852b2", unlock: 5 },
+  { id: "banana", name: "Банан", color: "#ffe66d", tile: "#fff5bd", rim: "#c7a84e", fleck: "#bd8945", unlock: 12 },
 ];
 // Отделка: soft — бархатистые зверята и парк, gloss — лакированный фургон и леденцы
 let finish = "soft";
@@ -223,10 +225,15 @@ const creams = flavors.map((flavor, index) => {
   });
 });
 const coneGeo = new T.CylinderGeometry(0.43, 0.028, 0.92, 50, 1);
-export function cone(p) {
+export function cone(p, cup = false) {
   const g = group(p);
-  mesh(g, coneGeo, waffle, 0, 0.46, 0);
-  disk(g, 0, 0.91, 0, 0.445, 0.075, "#efb975");
+  if (cup) {
+    disk(g, 0, 0.62, 0, 0.40, 0.53, "#f18ca5");
+    disk(g, 0, 0.88, 0, 0.445, 0.08, "#fff1c8");
+  } else {
+    mesh(g, coneGeo, waffle, 0, 0.46, 0);
+    disk(g, 0, 0.91, 0, 0.445, 0.075, "#efb975");
+  }
   return g;
 }
 export function scoop(p, flavor, index = 0) {
@@ -269,7 +276,14 @@ export function topping(p, kind, height) {
 }
 function toppingParts(p, kind, height) {
   const g = group(p, 0, height, 0);
-  if (kind === "syrup") {
+  if (kind === "wafer") {
+    const tube = disk(g, 0.25, 0.35, 0.04, 0.08, 0.82, "#e6ad6f");
+    tube.rotation.z = -0.42;
+    for (let i = 0; i < 4; i++) {
+      const band = disk(g, 0.25 + (i - 1) * 0.075, 0.19 + i * 0.17, 0.04, 0.085, 0.035, "#b97a4e");
+      band.rotation.z = -0.42;
+    }
+  } else if (kind === "syrup") {
     const path = [];
     for (let i = 0; i <= 62; i++) {
       const a = i * 0.21,

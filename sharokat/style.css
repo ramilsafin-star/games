@@ -583,3 +583,19 @@ h1 em {
     grid-template-columns: repeat(7, 64px);
   }
 }
+
+.skin-preview { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.skin-preview canvas { width: 132px; height: 105px; }
+.skin-preview strong { display: block; }
+#buy-skin {
+  margin-top: 6px;
+  min-height: 38px;
+  border: 2px solid #fff;
+  border-radius: 16px;
+  background: #ffe16c;
+  padding: 4px 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shop-open.ping { animation: none; }
+}

@@ -862,3 +862,5 @@ button:focus-visible {
     animation: none;
   }
 }
+
+.tr .pending { opacity: .36; filter: grayscale(1); }

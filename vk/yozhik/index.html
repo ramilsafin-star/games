@@ -10,12 +10,11 @@
     <link rel="apple-touch-icon" href="./icon-180.png" />
     <script src="./vendor/vk/vk-bridge.min.js?v=bb8d6757"></script>
     <script src="./js/vk-host.js?v=bb8d6757" data-keys="yozhik-v1" data-ad-gap="120"></script>
-    <link rel="stylesheet" href="./style.css?v=bb8d6757" />
+    <link rel="stylesheet" href="./style.css?v=46671f0f" />
   </head>
   <body>
     <main class="app">
       <header class="top">
-        
         <button id="map-open" class="round" aria-label="Все горки"></button>
         <div class="level"><b id="lvl-num">1</b><span id="lvl-name"></span></div>
         <div id="stamps" class="stamps" aria-label="Печати"><i></i><i></i></div>
@@ -42,6 +41,7 @@
         <h1><span>Ёжик</span><span>почтальон</span></h1>
         <p>Нарисуй рельсы — довези посылку!</p>
       </div>
+      <p id="title-stamps"></p>
       <button id="play" class="big">▶ Играть</button>
     </section>
 
@@ -51,6 +51,7 @@
         <button id="map-close" class="round close" aria-label="Закрыть"></button>
         <h2>Горки</h2>
         <div id="worlds"></div>
+        <button id="free-level" class="big" data-level="free" hidden>∞ Свободная горка</button>
         <h2>Вагончики <small id="stamp-total"></small></h2>
         <div id="garage" class="garage"></div>
       </div>
@@ -82,8 +83,8 @@
     <div id="nogl" class="screen nogl" hidden>
       <p>Тут нужна 3D-графика (WebGL), а браузер её не включил. Попробуйте другой браузер.</p>
     </div>
-    <script src="./js/audio.js?v=bb8d6757"></script>
-    <script type="module" src="./js/game.js?v=bb8d6757"></script>
-    <script src="./js/juice.js?v=bb8d6757"></script>
+    <script src="./js/audio.js?v=46671f0f"></script>
+    <script type="module" src="./js/game.js?v=46671f0f"></script>
+    <script src="./js/juice.js?v=46671f0f"></script>
   </body>
 </html>

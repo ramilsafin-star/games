@@ -7,6 +7,9 @@ const drawings = {
   choco:
     '<g transform="rotate(17 31 31)"><rect x="17" y="13" width="29" height="37" rx="4" fill="#774b47" stroke="#633f41"/><g fill="#b67a5b" stroke="#794f44"><rect x="20" y="16" width="10" height="12" rx="2"/><rect x="33" y="16" width="10" height="12" rx="2"/><rect x="20" y="31" width="10" height="12" rx="2"/><rect x="33" y="31" width="10" height="12" rx="2"/></g><path d="M16 36l8 3 8-5 8 4 7-5v15q0 3-3 3H20q-4 0-4-4z" fill="#e8aa8e" stroke="#965d58"/></g>',
   mint: '<path d="M28 37Q23 16 48 13Q50 34 28 37Z" fill="#5cbd90" stroke="#357c67"/><path d="M29 39Q10 39 13 22Q28 22 29 39Z" fill="#98d78e" stroke="#4a896d"/><path d="m24 48 5-12 14-17M27 37l-10-10m18 2 6-1m-6 0 0-5" fill="none" stroke="#467b61" stroke-width="2"/>',
+  blueberry: '<g fill="#a792f5" stroke="#7157b0"><circle cx="25" cy="28" r="10"/><circle cx="40" cy="32" r="10"/><circle cx="30" cy="42" r="10"/></g>',
+  banana: '<path d="M15 22Q28 46 48 17Q49 44 32 49Q20 47 13 29Z" fill="#ffe66d" stroke="#b48938"/>',
+  wafer: '<rect x="25" y="9" width="12" height="44" rx="5" fill="#e6ad6f" stroke="#9f6542" transform="rotate(24 31 31)"/><path d="m31 20 9 4m-13 4 9 4m-13 4 9 4" stroke="#9f6542"/>',
   syrup:
     '<path d="M15 39q9-17 18-7t14-14M15 45q9-13 18-6t17-10" fill="none" stroke="#ab4568" stroke-width="5"/>',
   stars:

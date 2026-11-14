@@ -631,3 +631,22 @@ button:focus-visible {
 .key[hidden] {
   display: none;
 }
+
+.difficulty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+  font-weight: 700;
+}
+#difficulty {
+  min-height: 40px;
+  padding: 4px 9px;
+  color: inherit;
+  font: inherit;
+  border: 2px solid #ffbfa4;
+  border-radius: 12px;
+  background: #fffaf0;
+}

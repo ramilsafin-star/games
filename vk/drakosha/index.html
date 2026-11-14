@@ -10,12 +10,11 @@
     <link rel="apple-touch-icon" href="./icon-180.png" />
     <script src="./vendor/vk/vk-bridge.min.js?v=2d0cf2e4"></script>
     <script src="./js/vk-host.js?v=2d0cf2e4" data-keys="drakosha3d-v1" data-ad-gap="120"></script>
-    <link rel="stylesheet" href="./style.css?v=2d0cf2e4" />
+    <link rel="stylesheet" href="./style.css?v=ea8eb052" />
   </head>
   <body>
     <main class="app">
       <header class="top">
-        
         <button id="themes-open" class="round" aria-label="Конверты"></button>
         <button id="album-open" class="round" aria-label="Альбом открыток"></button>
         <div id="pack" class="pack" aria-label="Письма в конверте"></div>
@@ -52,7 +51,15 @@
 
     <section id="themes" class="screen dim" hidden>
       <div class="sheet">
+        <button id="themes-close" class="round close" aria-label="Закрыть"></button>
         <h2>Выбери конверт</h2>
+        <label class="difficulty">
+          Сложность
+          <select id="difficulty">
+            <option value="standard">Обычная · 4 марки</option>
+            <option value="easy">Малыш · 6 марок</option>
+          </select>
+        </label>
         <div id="theme-list" class="envelopes"></div>
       </div>
     </section>
@@ -80,8 +87,8 @@
     <div id="nogl" class="screen nogl" hidden>
       <p>Тут нужна 3D-графика (WebGL), а браузер её не включил. Попробуйте другой браузер.</p>
     </div>
-    <script src="./js/audio.js?v=2d0cf2e4"></script>
-    <script type="module" src="./js/game.js?v=2d0cf2e4"></script>
-    <script src="./js/juice.js?v=2d0cf2e4"></script>
+    <script src="./js/audio.js?v=ea8eb052"></script>
+    <script type="module" src="./js/game.js?v=ea8eb052"></script>
+    <script src="./js/juice.js?v=ea8eb052"></script>
   </body>
 </html>

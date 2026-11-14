@@ -4,12 +4,12 @@ import * as T from "../vendor/three/three.module.min.js?v=2aa0575c";
 import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=2aa0575c";
 import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=2aa0575c";
 import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=2aa0575c";
-import { polish } from "./gfx.js?v=2aa0575c";
+import { polish } from "./gfx.js?v=46671f0f";
 import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=2aa0575c";
 import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=2aa0575c";
 import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=2aa0575c";
-import { groundAt, platforms, railAt } from "./physics.js?v=2aa0575c";
-import { STORIES } from "./levels.js?v=2aa0575c";
+import { groundAt, platforms, railAt } from "./physics.js?v=46671f0f";
+import { STORIES } from "./levels.js?v=46671f0f";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;
@@ -443,7 +443,7 @@ export class World {
     this.data = level;
     const th = THEMES[level.world];
     this.theme = th;
-    const R = rng(level.id * 7919 + 13);
+    const R = rng((Number(level.id) || 17) * 7919 + 13);
     // Небо и свет
     this.scene.background = canvasTexture(4, 256, (x, w, h) => {
       const g = x.createLinearGradient(0, 0, 0, h);
@@ -478,12 +478,23 @@ export class World {
     else this.makeButterflies();
   }
   clearLevel() {
+    this.scene.background?.dispose?.();
+    const materials = new Set();
     for (const g of [this.level, this.railGroup]) {
       g.traverse((o) => {
-        if (o.geometry && !o.userData.shared) o.geometry.dispose();
+        if (o.userData.shared) return;
+        o.geometry?.dispose();
+        if (o.isInstancedMesh) o.dispose();
+        for (const material of [o.material].flat()) if (material) materials.add(material);
       });
       g.clear();
     }
+    const textures = new Set();
+    for (const material of materials) {
+      if (material.map && material.map !== glowTex) textures.add(material.map);
+      material.dispose();
+    }
+    for (const texture of textures) texture.dispose();
     this.weather = null;
     this.flock = null;
     this.birds = [];
@@ -1846,7 +1857,11 @@ export class World {
   }
   // Облачко над получателем: что он ждёт
   setBubble(icon) {
-    if (this.bubble) this.bubble.removeFromParent();
+    if (this.bubble) {
+      this.bubble.removeFromParent();
+      this.bubble.material.map.dispose();
+      this.bubble.material.dispose();
+    }
     this.bubble = null;
     if (!icon || !this.recipient) return;
     const tex = canvasTexture(160, 170, (x) => {

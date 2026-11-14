@@ -68,9 +68,16 @@ const rect = ([x0, y0, x1, y1]) => [
   [x1, y1],
   [x0, y1],
 ];
+// Верх платформы остаётся доступным для стыковки рельса.
+function towerWalls(level) {
+  return Object.values(platforms(level)).map(([x0, x1, top]) => {
+    const bottom = Math.min(groundAt(level, x0), groundAt(level, x1), groundAt(level, (x0 + x1) / 2)) - 0.3;
+    return rect([x0 + 0.025, bottom, x1 - 0.025, top - 0.09]);
+  });
+}
 // Камни и «нельзя рисовать» — многоугольники; для проверки линии и полёта
 function blockers(level, withNoDraw) {
-  const out = [...(level.rocks || [])];
+  const out = [...(level.rocks || []), ...towerWalls(level)];
   if (withNoDraw) for (const r of level.nodraw || []) out.push(rect(r));
   return out;
 }
@@ -158,7 +165,8 @@ export function processStroke(raw, level, rails) {
     const end = fromEnd ? pts.at(-1) : pts[0];
     let best = null,
       bd = SNAP;
-    for (const a of list) {
+    const candidates = fromEnd && length >= 3 ? [...list, pts[0]] : list;
+    for (const a of candidates) {
       const d = dist(a, end);
       if (d < bd) {
         bd = d;

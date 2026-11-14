@@ -1,20 +1,21 @@
 // «Шарокат»: шар катится по радужным горкам в небе. Здесь игровой цикл, физика шара, камера, меню.
 import * as T from "../vendor/three/three.module.min.js?v=96f16026";
 import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=96f16026";
-import { Track, trackMesh, railLights, tubeMeshes, HALF } from "./track.js?v=96f16026";
-import { R, sky, scenery, supports, gates, boostPads, obstacles, trampolines, gemField, skins, skinMaterial, ballMesh, effects } from "./world.js?v=96f16026";
+import { Track, trackMesh, railLights, tubeMeshes, HALF } from "./track.js?v=f444f678";
+import { R, sky, scenery, supports, gates, boostPads, obstacles, trampolines, gemField, skins, skinMaterial, ballMesh, effects } from "./world.js?v=f444f678";
 import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=96f16026";
 import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=96f16026";
 import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=96f16026";
 import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=96f16026";
 import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=96f16026";
-import { themeFor } from "./themes.js?v=96f16026";
+import { themeFor } from "./themes.js?v=f444f678";
 
 // 20 уровней: каждая из 10 тем встречается дважды
 const LEVELS = 20;
 const el = (id) => document.getElementById(id);
 const clamp = T.MathUtils.clamp;
 const KEY = "sharokat-v1";
+const STAR_REWARDS = [0, 25, 75, 180];
 // gems — кошелёк кристаллов, owned — купленные шары
 let save = { open: 1, stars: [], gems: 0, skin: "rainbow", sound: true, music: true };
 try {
@@ -66,6 +67,15 @@ scene.add(sun, sun.target);
 const heaven = sky(scene);
 const fx = effects(scene);
 const ball = ballMesh(scene, save.skin);
+const landingShadow = new T.Mesh(
+  new T.CircleGeometry(R * 0.8, 24),
+  new T.MeshBasicMaterial({ color: "#151835", transparent: true, opacity: 0.28, depthWrite: false }),
+);
+const shadowNormal = new T.Vector3(0, 0, 1);
+const down = new T.Vector3(0, -1, 0);
+const shadowRay = new T.Raycaster(undefined, down, 0, 20);
+landingShadow.visible = false;
+scene.add(landingShadow);
 
 // ---------- Уровень ----------
 let lvl = null,
@@ -91,13 +101,15 @@ function loadLevel(n) {
   hemi.intensity = theme.light[0];
   sun.intensity = theme.light[1];
   sun.color.set(theme.light[2]);
-  world.add(trackMesh(track, theme), railLights(track, theme), tubeMeshes(track));
+  const road = trackMesh(track, theme);
+  world.add(road, railLights(track, theme), tubeMeshes(track));
   const view = scenery(world, track, theme);
   const base = supports(world, track, theme);
   lvl = {
     n,
     theme,
     track,
+    road,
     view,
     gates: gates(world, track),
     chevrons: boostPads(world, track),
@@ -122,7 +134,8 @@ function cruise() {
   return Math.min(15 + lvl.n * 0.5, 21);
 }
 function resetBall(s) {
-  Object.assign(b, { s, u: 0, uTarget: 0, v: s ? cruise() * 0.7 : 0, h: 0, vh: 0, knock: 0, boost: 0, fallT: 0, grace: 0.8 });
+  Object.assign(b, { s, u: 0, uTarget: 0, v: s ? cruise() * 0.7 : 0, h: 0, vh: 0, knock: 0, boost: 0, fallT: 0, grace: 0.8, flying: false });
+  hitCooldown.clear();
   if (!s) {
     b.checkpoint = 0;
     b.gems = 0;
@@ -174,6 +187,9 @@ function collect(g) {
 function step(dt) {
   const tr = lvl.track;
   const before = b.s;
+  const left = keys.has("arrowleft") || keys.has("a") || keys.has("ф");
+  const right = keys.has("arrowright") || keys.has("d") || keys.has("в");
+  b.uTarget += (Number(right) - Number(left)) * 10 * dt;
   tr.at(b.s, F);
   // Скорость: держится у крейсерской, на спусках разгон, на подъёмах и в петлях замедление
   const goal = b.boost > 0 ? 28 : cruise();
@@ -228,7 +244,7 @@ function step(dt) {
   for (const g of tr.gems) if (!g.taken && Math.abs(g.s - b.s) < 3 && g.pos.distanceToSquared(pos) < 1.7) collect(g);
   // Батуты: подбрасывают шар, в воздухе дуга кристаллов
   for (const pad of tr.pads)
-    if (before < pad.s && b.s >= pad.s && b.h < 0.3) {
+    if (before < pad.s && b.s >= pad.s && b.h <= 0.45 && b.vh <= 0) {
       b.vh = pad.power;
       b.h = Math.max(b.h, 0.01);
       // Скорость не ниже крейсерской, чтобы перелететь провал
@@ -332,7 +348,23 @@ function aim(dt) {
   }
 }
 // ---------- Финиш ----------
-let finishT = -1;
+let finishT = -1, finishTimer;
+let pausedState = null;
+function pause() {
+  if (!["ready", "play", "fall"].includes(b.state)) return;
+  pausedState = b.state;
+  b.state = "paused";
+  keys.clear();
+  drag = null;
+  Sound.roll(0, false);
+  show("pause");
+}
+function resume() {
+  if (!pausedState) return;
+  b.state = pausedState;
+  pausedState = null;
+  show(b.state === "ready" ? "ready" : "play");
+}
 function finishLevel() {
   b.state = "finish";
   finishT = 0;
@@ -340,15 +372,18 @@ function finishLevel() {
   Music.duck(3);
   const share = lvl.total ? b.gems / lvl.total : 1;
   const stars = share >= 0.85 ? 3 : share >= 0.55 ? 2 : 1;
-  save.stars[lvl.n] = Math.max(save.stars[lvl.n] || 0, stars);
-  save.gems += b.gems;
+  const previousStars = save.stars[lvl.n] || 0;
+  const earned = b.gems + Math.max(0, STAR_REWARDS[stars] - (STAR_REWARDS[previousStars] || 0));
+  save.stars[lvl.n] = Math.max(previousStars, stars);
+  save.gems += earned;
   save.open = Math.max(save.open, Math.min(LEVELS, lvl.n + 2));
   store();
   // Хватает ли теперь кристаллов на новый шар
   const fresh = skins.filter((s) => !save.owned.includes(s.id) && s.cost <= save.gems);
-  setTimeout(() => {
+  finishTimer = setTimeout(() => {
+    if (b.state !== "finish") return;
     el("result-stars").innerHTML = [1, 2, 3].map((k) => '<span class="' + (k <= stars ? "on" : "") + '">★</span>').join("");
-    el("result-gems").textContent = "+" + b.gems;
+    el("result-gems").textContent = "+" + earned;
     el("next").hidden = lvl.n + 1 >= LEVELS;
     el("unlocked").hidden = !fresh.length;
     if (fresh.length) el("unlocked").textContent = "Хватает на новый шар: " + fresh[0].name + "!";
@@ -359,8 +394,10 @@ function finishLevel() {
 // ---------- Цикл ----------
 let last = 0;
 function frame(ms) {
+  if (document.hidden) { last = 0; return; }
   const dt = last ? clamp((ms - last) / 1000, 0, 1 / 20) : 0;
   last = ms;
+  if (b.state === "paused") return;
   clock += dt;
   if (lvl) {
     if (b.state === "play") {
@@ -392,6 +429,17 @@ function frame(ms) {
     lvl.gems.update(clock, b.s);
     lvl.chevrons.offset.y -= dt * 1.8;
     Sound.roll(b.state === "play" ? b.v : 0, b.state === "play" && !b.flying);
+    lvl.track.at(b.s, F);
+    landingShadow.visible = false;
+    if (b.state === "play" && (b.h > 0.1 || F.air) && !F.tube) {
+      shadowRay.ray.origin.copy(ball.position);
+      const road = shadowRay.intersectObject(lvl.road, true).find((hit) => hit.normal?.y > 0.25);
+      if (road) {
+        landingShadow.visible = true;
+        landingShadow.position.copy(road.point).addScaledVector(road.normal, 0.04);
+        landingShadow.quaternion.setFromUnitVectors(shadowNormal, road.normal);
+      }
+    }
     aim(dt);
     heaven.follow(camera.position);
     sun.position.copy(ball.position).add(new T.Vector3(-14, 30, 10));
@@ -404,6 +452,10 @@ function frame(ms) {
   }
   if (glow.on) composer.render();
   else renderer.render(scene, camera);
+  if (preview && !el("shop").hidden) {
+    preview.ball.rotation.y += dt * 0.8;
+    preview.renderer.render(preview.scene, preview.camera);
+  }
   watchSpeed(dt);
 }
 // ---------- Свечение (bloom): сияют кристаллы, неон, лава и солнечные блики ----------
@@ -441,7 +493,7 @@ function watchSpeed(dt) {
   }
 }
 function trailTint() {
-  return { rainbow: "#ffd1f0", melon: "#c8ffc4", beach: "#fff2a6", planet: "#a8d8ff", disco: "#ffffff", candy: "#ffc2dc", lava: "#ffb35c", stars: "#fff07a" }[save.skin];
+  return { rainbow: "#ffd1f0", melon: "#c8ffc4", beach: "#fff2a6", planet: "#a8d8ff", disco: "#ffffff", candy: "#ffc2dc", lava: "#ffb35c", stars: "#fff07a", ladybug: "#ff6d79", soccer: "#e8f0ff", tiger: "#ffaa54", moon: "#c6d9ff", donut: "#ff9bd5", pearl: "#f6d9ff", gold: "#ffda65", neon: "#51faff" }[save.skin];
 }
 function resize() {
   const w = canvas.clientWidth,
@@ -479,25 +531,31 @@ canvas.addEventListener("pointerup", endDrag);
 canvas.addEventListener("pointercancel", endDrag);
 const keys = new Set();
 addEventListener("keydown", (e) => {
-  keys.add(e.key);
-  if ((e.key === " " || e.key === "Enter") && b.state === "ready") go();
-  if (e.key === "Escape" && b.state !== "menu") toMenu();
+  keys.add(e.key.toLowerCase());
+  if (e.repeat || e.target.closest?.("button")) return;
+  if ((e.key === " " || e.key === "Enter") && b.state === "ready") {
+    e.preventDefault();
+    go();
+  }
 });
-addEventListener("keyup", (e) => keys.delete(e.key));
-setInterval(() => {
-  if (b.state !== "play") return;
-  const left = keys.has("ArrowLeft") || keys.has("a") || keys.has("ф"),
-    right = keys.has("ArrowRight") || keys.has("d") || keys.has("в");
-  b.uTarget += ((right ? 1 : 0) - (left ? 1 : 0)) * 0.16;
-}, 16);
+addEventListener("keydown", (e) => {
+  if (e.key !== "Escape" || e.repeat) return;
+  if (!el("shop").hidden) el("shop-close").click();
+  else if (b.state === "paused") resume();
+  else if (b.state === "finish") toMenu();
+  else pause();
+});
+addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
+addEventListener("blur", () => keys.clear());
 
 // ---------- Экраны ----------
 function show(name) {
-  for (const id of ["menu", "hud", "finish", "ready"]) el(id).hidden = true;
+  for (const id of ["menu", "hud", "finish", "ready", "pause"]) el(id).hidden = true;
   if (name === "menu") el("menu").hidden = false;
   if (name === "ready" || name === "play") el("hud").hidden = false;
   if (name === "ready") el("ready").hidden = false;
   if (name === "finish") el("finish").hidden = false;
+  if (name === "pause") el("pause").hidden = false;
 }
 function flash(text) {
   const n = el("flash");
@@ -507,9 +565,12 @@ function flash(text) {
   n.classList.add("on");
 }
 function startLevel(n) {
+  clearTimeout(finishTimer);
+  pausedState = null;
   unlock();
   loadLevel(n);
   b.state = "ready";
+  document.activeElement?.blur?.();
   el("gems").textContent = "0";
   show("ready");
 }
@@ -520,6 +581,8 @@ function go() {
   Sound.tick();
 }
 function toMenu() {
+  clearTimeout(finishTimer);
+  pausedState = null;
   b.state = "menu";
   if (!lvl || lvl.n !== Math.min(save.open, LEVELS) - 1) loadLevel(Math.min(save.open, LEVELS) - 1);
   b.state = "menu";
@@ -544,6 +607,39 @@ function menu() {
   el("shop-open").classList.toggle("ping", affordable);
 }
 // ---------- Магазин шаров ----------
+let preview, previewSkin;
+function showSkin(id) {
+  const skin = skins.find((item) => item.id === id);
+  previewSkin = id;
+  el("preview-name").textContent = skin.name;
+  el("buy-skin").hidden = save.owned.includes(id);
+  el("buy-skin").textContent = `Купить за 💎 ${skin.cost}`;
+  if (!preview) {
+    const canvas = el("skin-preview");
+    try {
+      const renderer = new T.WebGLRenderer({ canvas, alpha: true, antialias: true });
+      renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+      renderer.setSize(132, 105, false);
+      renderer.toneMapping = T.NeutralToneMapping;
+      const scene = new T.Scene();
+      const pmrem = new T.PMREMGenerator(renderer);
+      const room = new RoomEnvironment();
+      scene.environment = pmrem.fromScene(room, 0.04).texture;
+      room.dispose();
+      pmrem.dispose();
+      const camera = new T.PerspectiveCamera(36, 132 / 105, 0.1, 20);
+      camera.position.set(0, 0.25, 3.5);
+      camera.lookAt(0, 0, 0);
+      const sun = new T.DirectionalLight("#fff6df", 3);
+      sun.position.set(2, 3, 4);
+      scene.add(sun);
+      preview = { renderer, scene, camera, ball: ballMesh(scene, id) };
+    } catch {
+      canvas.hidden = true;
+    }
+  }
+  if (preview) preview.ball.material = skinMaterial(id);
+}
 function shop() {
   el("wallet-shop").textContent = save.gems;
   el("skins").innerHTML = skins
@@ -561,6 +657,8 @@ el("shop-open").onclick = () => {
   unlock();
   Sound.tick();
   shop();
+  showSkin(save.skin);
+  el("shop-note").textContent = "";
   el("shop").hidden = false;
 };
 el("shop-close").onclick = () => {
@@ -570,30 +668,45 @@ el("shop-close").onclick = () => {
 el("skins").onclick = (e) => {
   const btn = e.target.closest("[data-skin]");
   if (!btn) return;
-  const skin = skins.find((s) => s.id === btn.dataset.skin);
-  Sound.unlock();
-  if (!save.owned.includes(skin.id)) {
-    if (save.gems < skin.cost) {
-      // Не хватает: шар вздрагивает и показывает, сколько ещё собрать
-      btn.classList.remove("shake");
-      void btn.offsetWidth;
-      btn.classList.add("shake");
-      el("shop-note").textContent = "Нужно ещё 💎 " + (skin.cost - save.gems);
-      Sound.bump();
-      return;
-    }
-    save.gems -= skin.cost;
-    save.owned.push(skin.id);
-    el("shop-note").textContent = "Новый шар: " + skin.name + "!";
-    Sound.checkpoint();
-  } else Sound.tick();
-  save.skin = skin.id;
+  showSkin(btn.dataset.skin);
+  el("shop-note").textContent = "";
+  if (save.owned.includes(previewSkin)) selectSkin(previewSkin);
+  else Sound.tick();
+};
+el("buy-skin").onclick = () => {
+  const skin = skins.find((item) => item.id === previewSkin);
+  if (!skin || save.owned.includes(skin.id)) return;
+  const btn = el("skins").querySelector(`[data-skin="${skin.id}"]`);
+  if (save.gems < skin.cost) {
+    btn.classList.remove("shake");
+    void btn.offsetWidth;
+    btn.classList.add("shake");
+    el("shop-note").textContent = "Нужно ещё 💎 " + (skin.cost - save.gems);
+    Sound.bump();
+    return;
+  }
+  save.gems -= skin.cost;
+  save.owned.push(skin.id);
+  el("shop-note").textContent = "Новый шар: " + skin.name + "!";
+  Sound.checkpoint();
+  selectSkin(skin.id);
+  showSkin(skin.id);
+};
+function selectSkin(id) {
+  save.skin = id;
   store();
   ball.material = skinMaterial(save.skin);
   shop();
-};
+}
 el("play").onclick = () => startLevel(Math.min(save.open, LEVELS) - 1);
-el("home").onclick = toMenu;
+el("levels").onclick = (event) => {
+  const button = event.target.closest("[data-level]");
+  if (button && !button.disabled) startLevel(Number(button.dataset.level));
+};
+el("home").onclick = () => b.state === "finish" ? toMenu() : pause();
+el("resume").onclick = resume;
+el("pause-again").onclick = () => startLevel(lvl.n);
+el("pause-menu").onclick = toMenu;
 el("again").onclick = () => startLevel(lvl.n);
 el("next").onclick = () => startLevel(Math.min(lvl.n + 1, LEVELS - 1));
 el("to-menu").onclick = toMenu;
@@ -626,10 +739,14 @@ el("music").onclick = () => {
   if (save.music) unlock();
   else Music.stop();
 };
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) Music.stop();
-  else if (save.sound && save.music && Sound.ctx) Music.start();
-});
+function handleVisibility() {
+  if (document.hidden || window.vkGameHost?.hidden) {
+    pause();
+    Sound.ctx?.suspend().catch(() => {});
+  } else if (save.sound && Sound.ctx) Sound.ctx.resume().catch(() => {});
+}
+document.addEventListener("visibilitychange", handleVisibility);
+window.addEventListener("vk-game-visibility", handleVisibility);
 
 // ---------- Запуск ----------
 soundButtons();
