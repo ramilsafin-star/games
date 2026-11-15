@@ -11,16 +11,27 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Домик" />
     <meta name="theme-color" content="#8fdcff" />
-    <link rel="stylesheet" href="./style.css?v=e6637b83" />
+    <link rel="stylesheet" href="./style.css?v=855b832a" />
   </head>
   <body>
     <canvas id="game" aria-label="Большое дерево на поляне"></canvas>
+    <!-- Сюда портал вставляет кнопку «Все игры» -->
+    <nav class="home-slot"><a href="../" aria-label="Все игры" style="position:fixed;left:calc(12px + env(safe-area-inset-left,0px));top:calc(12px + env(safe-area-inset-top,0px));z-index:50;width:52px;height:52px;border-radius:50%;background:#fffffff0;box-shadow:0 4px 0 #0003;display:grid;place-items:center;font-size:27px;text-decoration:none">🎮</a></nav>
     <div id="steps" aria-hidden="true"></div>
     <button id="btn-sound" class="round" type="button" aria-label="Выключить звук">🔊</button>
+    <button id="btn-photo" class="round" type="button" aria-label="Сделать фото домика" hidden>📷</button>
     <div id="tray"></div>
     <button id="btn-ok" type="button" aria-label="Готово" hidden>✓</button>
     <div id="bin" aria-hidden="true">🗑️</div>
     <div id="hand" aria-hidden="true">👆</div>
+    <div id="photo-flash" aria-hidden="true"></div>
+    <dialog id="photo" aria-label="Открытка с домиком">
+      <img id="photo-preview" alt="Фотография домика" />
+      <div class="photo-actions">
+        <button id="photo-close" type="button">Закрыть</button>
+        <a id="photo-download" download="domik-na-dereve.png">Скачать фото</a>
+      </div>
+    </dialog>
     <p id="load" role="status">🌳</p>
     <script>
       // Простой синтаксис намеренно: сообщение покажется и там, где браузер не прочитает игру
@@ -38,8 +49,8 @@
         if (!window.Domik || !window.Domik.ready) window.domikFail();
       }, 30000);
     </script>
-    <script src="./js/audio.js?v=e6637b83"></script>
-    <script type="module" src="./js/game.js?v=e6637b83" onerror="window.domikFail()"></script>
-    <script src="./js/juice.js?v=e6637b83"></script>
-  <a href="../" aria-label="Все игры" style="position:fixed;left:calc(12px + env(safe-area-inset-left,0px));top:calc(12px + env(safe-area-inset-top,0px));z-index:50;width:52px;height:52px;border-radius:50%;background:#fffffff0;box-shadow:0 4px 0 #0003;display:grid;place-items:center;font-size:27px;text-decoration:none">🎮</a></body>
+    <script src="./js/audio.js?v=855b832a"></script>
+    <script type="module" src="./js/game.js?v=855b832a" onerror="window.domikFail()"></script>
+    <script src="./js/juice.js?v=855b832a"></script>
+  </body>
 </html>

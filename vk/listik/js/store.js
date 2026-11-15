@@ -1,7 +1,7 @@
 // Сцена магазина на Three.js: всё, что видно и что движется. Правила покупки живут в game.js.
-import * as T from "../vendor/three/three.module.min.js?v=4bdcc34a";
-import "./gfx.js?v=4bdcc34a";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=4bdcc34a";
+import * as T from "../vendor/three/three.module.min.js?v=b1be4298";
+import "./gfx.js?v=b1be4298";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=b1be4298";
 import {
   shop,
   counter,
@@ -21,7 +21,7 @@ import {
   heart,
   group,
   orb,
-} from "./models.js?v=4bdcc34a";
+} from "./models.js?v=b1be4298";
 
 const clamp = T.MathUtils.clamp,
   mix = T.MathUtils.lerp,
@@ -240,8 +240,9 @@ export class Store {
     this.coins = [];
     for (const n of this.notes) this.drop(n);
     this.notes = [];
-    if (this.paper) this.drop(this.paper.paper);
+    this.disposeReceipt(this.paper);
     this.paper = null;
+    this.drag = null;
     if (this.held) this.drop(this.held);
     this.held = null;
     this.drawerTarget = 0;
@@ -290,6 +291,13 @@ export class Store {
     );
   }
   hit(name, x, y) {
+    if (name === "notes") {
+      return !!this.near(x, y, this.notes.map((note) => [note, note.position, 0.34]));
+    }
+    if (name === "butterfly") {
+      const butterfly = this.butterfly?.g;
+      return !!butterfly?.visible && !!this.near(x, y, [[butterfly, butterfly.position, 0.4]]);
+    }
     const spotsOf = {
       bag: [this.sack.group.position.clone().setY(1.45), 0.5],
       card: this.held ? [this.held.getWorldPosition(new T.Vector3()), 0.42] : null,
@@ -303,6 +311,11 @@ export class Store {
     const s = spotsOf[name];
     return !!s && !!this.near(x, y, [[true, s[0], s[1]]]);
   }
+  tapButterfly(x, y) {
+    if (!this.hit("butterfly", x, y)) return false;
+    this.butterflyTapAt = this.now();
+    return true;
+  }
   // ---------- Сканер ----------
   flashScanner() {
     this.flashAt = this.now();
@@ -312,6 +325,7 @@ export class Store {
     it.state = "moving";
     const slot = this.trayFree(),
       scanAt = spots.scanner.clone().setY(1.2);
+    it.slot = slot;
     const from = it.mesh.position.clone(),
       edge = new T.Vector3(-0.95, spots.belt.y, spots.belt.z);
     this.beltRun = (this.beltRun || 0) + 1;
@@ -486,7 +500,13 @@ export class Store {
       r.paper.scale.setScalar(1 - p * 0.85);
       r.paper.rotation.z = p * 0.8;
     });
-    this.drop(r.paper);
+    this.disposeReceipt(r);
+  }
+  disposeReceipt(receipt) {
+    if (!receipt) return;
+    receipt.tex.dispose();
+    receipt.paper.material.dispose();
+    this.drop(receipt.paper);
   }
   // ---------- Экраны ----------
   screen(s) {
@@ -562,6 +582,9 @@ export class Store {
     if (n === "receipt") return this.paper ? this.paper.paper.getWorldPosition(new T.Vector3()).setY(1.08) : null;
     return null;
   }
+  scannerPoint() {
+    return this.screenPoint(spots.scanner.clone().setY(1.55));
+  }
   screenPoint(v) {
     const p = v.clone().project(this.camera),
       r = this.canvas.getBoundingClientRect();
@@ -569,7 +592,7 @@ export class Store {
   }
   // ---------- Праздник ----------
   cheer(big = false) {
-    this.heartsAt = this.now();
+    this.heartsAt = this.happy = this.now();
     if (big) this.confettiAt = this.now();
   }
   makeConfetti() {
@@ -793,7 +816,9 @@ export class Store {
       this.motes.material.opacity = 0.4 + 0.15 * Math.sin(t * 0.9);
       const bf = this.butterfly,
         a = t * 0.45;
-      const at = (q) => bf.g.position.set(Math.sin(q) * 5.2, 3.7 + Math.sin(q * 2.3) * 0.45 + Math.sin(t * 7) * 0.05, -1.5 + Math.cos(q * 1.7) * 0.5);
+      const hop = clamp((t - (this.butterflyTapAt ?? -9)) / 0.55, 0, 1);
+      const lift = Math.sin(hop * pie) * 0.5;
+      const at = (q) => bf.g.position.set(Math.sin(q) * 5.2, 3.7 + Math.sin(q * 2.3) * 0.45 + Math.sin(t * 7) * 0.05 + lift, -1.5 + Math.cos(q * 1.7) * 0.5);
       at(a + 0.02);
       const ahead = bf.g.position.clone();
       at(a);

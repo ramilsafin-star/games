@@ -1,5 +1,5 @@
 // Эффекты: искры, пыль, обломки, конфетти и салют. Одна отрисовка на всё светящееся и одна на обломки
-import * as T from "../vendor/three/three.module.min.js";
+import * as T from "../vendor/three/three.module.min.js?v=4b295c04";
 
 const GLOW_MAX = 700;
 const CHIP_MAX = 240;

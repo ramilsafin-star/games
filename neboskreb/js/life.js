@@ -1,9 +1,9 @@
 // Жизнь в готовых домах: вход и жильцы, садовник на балконе, сосед машет рукой, зонт у бассейна,
 // пловец, водолаз в аквариуме, вертолёт на площадке и гости, которые приезжают к открытию.
 // Лиц у человечков нет: на таком расстоянии хватает головы и яркой одежды
-import * as T from "../vendor/three/three.module.min.js";
-import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js";
-import { FLOOR_W } from "./floors.js";
+import * as T from "../vendor/three/three.module.min.js?v=4b295c04";
+import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js?v=4b295c04";
+import { FLOOR_W, MODULES } from "./floors.js?v=4b295c04";
 
 const HALF = FLOOR_W / 2;
 const WALK_Z = 26.8;
@@ -213,7 +213,8 @@ export class Life {
   // Дом закончен и находится рядом: fresh значит, что всё появляется прямо сейчас, на глазах
   enter(t, x0, fresh) {
     if (this.recs.has(t)) return;
-    const first = t.floors[0];
+    const body = t.floors.filter((floor) => !MODULES[floor.id]?.roof);
+    const first = body[0];
     if (!first) return;
     const rec = {
       t,
@@ -233,7 +234,6 @@ export class Life {
       const p = this.person(rec, { kind: "walker", inward: i === 0, wait: fresh ? 1.6 + i * 2.4 : Math.random() * 5 });
       this.people.push(p);
     }
-    const body = t.floors.filter((f) => !f.roofPart);
     const highest = (id, skipFirst) => {
       for (let i = body.length - 1; i >= (skipFirst ? 1 : 0); i--) if (body[i].id === id) return body[i];
       return null;

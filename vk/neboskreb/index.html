@@ -11,17 +11,20 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Небоскрёб" />
     <meta name="theme-color" content="#7cc4f2" />
-    <script src="./vendor/vk/vk-bridge.min.js?v=8eaa7c2c"></script>
-    <script src="./js/vk-host.js?v=8eaa7c2c" data-keys="neboskreb_save" data-ad-gap="120"></script>
-    <link rel="stylesheet" href="./style.css?v=8eaa7c2c" />
+    <script src="./vendor/vk/vk-bridge.min.js?v=62c3fecd"></script>
+    <script src="./js/vk-host.js?v=62c3fecd" data-keys="neboskreb_save" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=62c3fecd" />
   </head>
   <body>
     <canvas id="game" aria-label="Стройка: башенный кран и будущий небоскрёб"></canvas>
     <div id="hud" aria-hidden="true">
       <span id="stars" class="pill">⭐ 0</span>
       <span id="floors" class="pill">🏢 0</span>
+      <span id="streak" class="pill" hidden></span>
     </div>
     <button id="btn-sound" class="round" type="button" aria-label="Выключить звук">🔊</button>
+    <button id="btn-orbit" class="round" type="button" aria-label="Повернуть камеру на 90 градусов" hidden>🔄</button>
+    <button id="btn-mood" class="round" type="button" aria-label="Сменить время суток" hidden>☀️</button>
     <button id="btn-roof" class="round big" type="button" aria-label="Выбрать крышу" hidden><canvas width="170" height="170"></canvas></button>
     <button id="btn-city" class="round" type="button" aria-label="Мой город" hidden><span>🏙️</span><small>Мой город</small></button>
     <button id="btn-next" type="button" aria-label="Строить дальше" hidden>▶</button>
@@ -49,8 +52,8 @@
         if (!window.Neboskreb || !window.Neboskreb.ready) window.neboskrebFail();
       }, 30000);
     </script>
-    <script src="./js/audio.js?v=8eaa7c2c"></script>
-    <script type="module" src="./js/game.js?v=8eaa7c2c" onerror="window.neboskrebFail()"></script>
-    <script src="./js/juice.js?v=8eaa7c2c"></script>
+    <script src="./js/audio.js?v=62c3fecd"></script>
+    <script type="module" src="./js/game.js?v=62c3fecd" onerror="window.neboskrebFail()"></script>
+    <script src="./js/juice.js?v=62c3fecd"></script>
   </body>
 </html>

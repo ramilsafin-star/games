@@ -1,14 +1,44 @@
 // Мир игры: небо, поляна, большое дерево, свет и камера. Домик строится в house.js.
-import * as T from "../vendor/three/three.module.min.js?v=61ed2cc9";
-import "./gfx.js?v=61ed2cc9";
+import * as T from "../vendor/three/three.module.min.js?v=fd699af6";
+import "./gfx.js?v=fd699af6";
 
-export const mats = new Map();
+const mats = new Map();
+const sharedAssets = new WeakSet();
+
+export function keepAsset(asset) {
+  sharedAssets.add(asset);
+  return asset;
+}
+
+export function disposeGeometry(geometry) {
+  if (!sharedAssets.has(geometry)) geometry.dispose();
+}
+
+// Groups own their geometry and material unless it came from an explicit cache.
+export function clearParts(group, retainedMaterials = new Set()) {
+  const geometries = new Set();
+  const materials = new Set();
+  const textures = new Set();
+  group.traverse((node) => {
+    if (node.isInstancedMesh) node.dispose();
+    if (node.isMesh) geometries.add(node.geometry);
+    for (const material of Array.isArray(node.material) ? node.material : [node.material]) {
+      if (!material || sharedAssets.has(material) || retainedMaterials.has(material)) continue;
+      materials.add(material);
+      if (material.map && !sharedAssets.has(material.map)) textures.add(material.map);
+    }
+  });
+  group.clear();
+  for (const geometry of geometries) disposeGeometry(geometry);
+  for (const material of materials) material.dispose();
+  for (const texture of textures) texture.dispose();
+}
 export function mat(color, rough = 0.8, metal = 0) {
   const key = color + "/" + rough + "/" + metal;
   if (!mats.has(key))
     mats.set(
       key,
-      new T.MeshStandardMaterial({ color, roughness: rough, metalness: metal }),
+      keepAsset(new T.MeshStandardMaterial({ color, roughness: rough, metalness: metal })),
     );
   return mats.get(key);
 }
@@ -128,6 +158,8 @@ export class World {
     this.pitch = 0;
     this.zoom = 1;
     this.cosyMin = 0;
+    this.roomGlow = 0;
+    this.warmth = 0;
     this.indoor = 0;
     this.quality = Math.min(2, devicePixelRatio || 1);
     this.frameTotal = this.frameCount = 0;
@@ -376,7 +408,34 @@ export class World {
     this.bitMesh.count = 0;
     this.bitMesh.frustumCulled = false;
     this.scene.add(this.bitMesh);
-    // Падающие листья
+    this.apple = new T.Group();
+    const fruit = new T.Mesh(new T.SphereGeometry(0.27, 14, 10), mat("#ec453e", 0.35));
+    fruit.scale.set(1.08, 0.92, 1.05);
+    const stem = new T.Mesh(new T.CylinderGeometry(0.025, 0.032, 0.18, 7), mat("#764724"));
+    stem.position.y = 0.27;
+    const leaf = new T.Mesh(new T.SphereGeometry(0.12, 10, 6), mat("#65b943"));
+    leaf.scale.set(1.2, 0.22, 0.55);
+    leaf.position.set(0.11, 0.32, 0);
+    leaf.rotation.z = 0.4;
+    this.apple.add(fruit, stem, leaf);
+    this.apple.visible = false;
+    this.scene.add(this.apple);
+    this.appleMatrix = new T.Matrix4();
+    this.appleSample = new T.Vector3();
+    this.appleVelocity = new T.Vector3();
+
+    const trail = new T.BufferGeometry();
+    trail.setAttribute("position", new T.Float32BufferAttribute(new Float32Array(9), 3));
+    trail.setAttribute("color", new T.Float32BufferAttribute([0.05, 0.035, 0.02, 0.68, 0.48, 0.22, 1, 0.95, 0.72], 3));
+    this.shootingStar = new T.Line(trail, new T.LineBasicMaterial({
+      vertexColors: true, transparent: true, blending: T.AdditiveBlending, depthWrite: false, fog: false, toneMapped: false,
+    }));
+    this.shootingStar.frustumCulled = false;
+    this.shootingStar.visible = false;
+    this.starPoint = new T.Vector3();
+    this.starAt = 0;
+    this.scene.add(this.shootingStar);
+
     this.leafFall = new T.InstancedMesh(new T.CircleGeometry(0.16, 5), new T.MeshStandardMaterial({ side: T.DoubleSide, roughness: 0.9 }), 26);
     this.leafFall.frustumCulled = false;
     this.leafSeeds = Array.from({ length: 26 }, () => ({ x: (rng() - 0.5) * 18, y: rng() * 12, z: rng() * 12 - 5, p: rng() * 6.28, s: 0.5 + rng() * 0.6 }));
@@ -400,9 +459,10 @@ export class World {
   }
   // ---------- дерево ----------
   setTree(kind) {
+    this.apple.visible = false;
     if (this.tree) {
       this.scene.remove(this.tree);
-      this.tree.traverse((n) => n.geometry?.dispose());
+      clearParts(this.tree);
     }
     const info = TREES[kind],
       rng = seeded(kind.length * 31 + 7),
@@ -484,6 +544,7 @@ export class World {
         fruit.setMatrixAt(i, dummy.matrix);
       }
       crown.add(fruit);
+      root.userData.fruit = fruit;
     }
     root.add(crown);
     root.userData.crown = crown;
@@ -493,6 +554,65 @@ export class World {
     color.set(info.leaves[1]);
     this.leafFall.material.color.copy(color);
     this.treeKind = kind;
+  }
+  dropApple(point) {
+    const fruit = this.tree?.userData.fruit;
+    if (this.treeKind !== "apple" || !fruit) return;
+    let distance = Infinity;
+    for (let index = 0; index < fruit.count; index++) {
+      fruit.getMatrixAt(index, this.appleMatrix);
+      this.appleSample.setFromMatrixPosition(this.appleMatrix);
+      fruit.localToWorld(this.appleSample);
+      const gap = this.appleSample.distanceToSquared(point);
+      if (gap < distance) {
+        distance = gap;
+        this.apple.position.copy(this.appleSample);
+      }
+    }
+    this.apple.rotation.set(0, 0, 0.15);
+    this.appleVelocity.set(Math.sign(this.apple.position.x) * 0.8, -0.35, 0.9);
+    this.appleLife = 4.2;
+    this.apple.visible = true;
+  }
+  stepApple(dt) {
+    if (!this.apple.visible) return;
+    this.appleVelocity.y -= 12 * dt;
+    const position = this.apple.position;
+    position.addScaledVector(this.appleVelocity, dt);
+    this.apple.rotation.z += dt * this.appleVelocity.x * 2.6;
+    if (position.y < 0.3) {
+      position.y = 0.3;
+      this.appleVelocity.y = Math.abs(this.appleVelocity.y) < 0.5 ? 0 : -this.appleVelocity.y * 0.32;
+      this.appleVelocity.x *= 0.72;
+      this.appleVelocity.z *= 0.72;
+    }
+    this.appleLife -= dt;
+    this.apple.visible = this.appleLife > 0;
+  }
+  stepStar(night) {
+    const star = this.shootingStar;
+    if (night < 0.7 || this.cosyMin) {
+      this.starAt = 0;
+      star.visible = false;
+      return;
+    }
+    if (!this.starAt) this.starAt = this.time + 8 + Math.random() * 2;
+    const progress = (this.time - this.starAt) / 0.8;
+    star.visible = progress >= 0 && progress < 1;
+    if (!star.visible) {
+      if (progress >= 1) this.starAt = this.time + 8 + Math.random() * 2;
+      return;
+    }
+    const points = star.geometry.attributes.position;
+    for (let index = 0; index < 3; index++) {
+      const lead = index / 2;
+      const x = -0.84 + progress * 1.2 + lead * 0.27;
+      const y = 0.87 - progress * 0.27 - lead * 0.065;
+      const p = this.starPoint.set(x, y, 0.997).unproject(this.camera);
+      points.setXYZ(index, p.x, p.y, p.z);
+    }
+    points.needsUpdate = true;
+    star.material.opacity = Math.sin(Math.PI * progress);
   }
   // ---------- камера ----------
   focus(target, radius, yaw = 0, lift = 0.1) {
@@ -585,7 +705,8 @@ export class World {
     this.sun.color.set("#fff0d2").lerp(new T.Color("#ff9d6b"), n);
     this.scene.environmentIntensity = (0.55 - 0.3 * n) * (1 - 0.72 * this.indoor);
     this.scene.fog.color.set("#cdeeff").lerp(new T.Color("#5a4a86"), n);
-    this.cosy.intensity = Math.max(62 * n, this.cosyMin);
+    this.warmth += (this.roomGlow - this.warmth) * (1 - Math.exp(-dt * 6));
+    this.cosy.intensity = Math.max(62 * n, this.cosyMin) + this.warmth;
     this.fireflies.material.opacity = n;
     if (n > 0.02) {
       const a = this.fireflies.geometry.attributes.position;
@@ -661,6 +782,9 @@ export class World {
       this.look.z + Math.cos(yaw) * Math.cos(pitch) * this.dist,
     );
     this.camera.lookAt(this.look);
+    this.camera.updateMatrixWorld();
+    this.stepApple(dt);
+    this.stepStar(n);
     this.renderer.render(this.scene, this.camera);
   }
 }

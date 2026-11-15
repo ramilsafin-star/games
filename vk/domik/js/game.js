@@ -1,9 +1,9 @@
 await window.vkGameHost?.ready;
 // Ход игры: шаги стройки, касания, подсказки, сохранение. Читать ребёнку ничего не нужно.
-import * as T from "../vendor/three/three.module.min.js?v=61ed2cc9";
-import { World, TREES } from "./world.js?v=61ed2cc9";
-import { TreeHouse, DECK_Y } from "./house.js?v=61ed2cc9";
-import { Room, CATS, ITEMS, WALLPAPERS, FLOORS, swatchOf } from "./room.js?v=61ed2cc9";
+import * as T from "../vendor/three/three.module.min.js?v=fd699af6";
+import { World, TREES } from "./world.js?v=fd699af6";
+import { TreeHouse, DECK_Y } from "./house.js?v=fd699af6";
+import { Room, CATS, ITEMS, WALLPAPERS, FLOORS, swatchOf } from "./room.js?v=fd699af6";
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("game");
@@ -186,6 +186,7 @@ function enter(stage, how) {
   world.pitch = 0;
   world.zoom = 1;
   document.body.dataset.stage = stage;
+  $("btn-photo").hidden = stage !== "done" && stage !== "room";
   document.body.classList.toggle("free", state.edit || stage === "room");
   STAGE[stage](how);
 }
@@ -360,6 +361,7 @@ const STAGE = {
   },
   done(how) {
     const restored = how === true;
+    $("btn-photo").hidden = false;
     world.focus([-0.5, 6.1, 3], 10.6, -0.1, 0.06);
     house.rabbit.visible = true;
     house.setLights(true);
@@ -450,6 +452,15 @@ const STAGE = {
       ),
     );
     cats.classList.add("wide");
+    const turn = chip("<span>🔄</span>", "Повернуть выбранную вещь", () => {
+      if (room.turnSelected()) remember();
+    }, "shape cat");
+    turn.id = "btn-turn";
+    const tools = document.createElement("div");
+    tools.className = "room-tools";
+    cats.before(tools);
+    tools.append(turn, cats);
+    syncTurn();
     markOne(cats, cats.children[0]);
     showCat("furniture");
     showOk(true);
@@ -492,6 +503,10 @@ function showCat(id) {
   }
   fitRoom();
 }
+function syncTurn() {
+  const turn = $("btn-turn");
+  if (turn) turn.disabled = !room.canTurn(room.selected);
+}
 function fitRoom() {
   const top = $("tray").getBoundingClientRect().top;
   room.fit(innerHeight - top);
@@ -506,6 +521,8 @@ function addItem(id) {
     Voice.say("Тут уже тесно!");
     return;
   }
+  room.selected = it;
+  syncTurn();
   Sound.gift();
   Voice.say(it.def.name);
   house.jump("squirrel", 0.8);
@@ -684,6 +701,7 @@ function letGo(p, e) {
   } else if (p.moved) room.drop(p.item);
   else if (e) room.tap(p.item);
   else room.settle(p.item);
+  syncTurn();
   remember();
 }
 function overBin(e) {
@@ -708,6 +726,8 @@ canvas.addEventListener("pointerdown", (e) => {
   if (state.stage === "paint" && paintAt(e.clientX, e.clientY)) press.painting = true;
   if (state.stage === "room") {
     const it = room.pick(e.clientX, e.clientY);
+    room.selected = it;
+    syncTurn();
     if (it) {
       press.item = it;
       room.grab(it, e.clientX, e.clientY);
@@ -800,8 +820,7 @@ function tapFinal(x, y) {
     return;
   }
   if (obj && inside(obj, house.rabbit)) {
-    house.jump("rabbit", 1.4);
-    Sound.boing();
+    if (house.playRabbit()) Sound.boing();
     return;
   }
   const act = obj && find(obj, "act"),
@@ -832,11 +851,10 @@ function tapFinal(x, y) {
     return;
   }
   if (act === "slide") {
-    house.slideSquirrel(() => {
+    if (house.slideSquirrel(() => {
       Sound.land();
       house.jump("squirrel", 1);
-    });
-    Sound.whee();
+    })) Sound.whee();
     return;
   }
   if (act === "bird") {
@@ -863,13 +881,13 @@ function tapFinal(x, y) {
     Sound.pop();
     const colors = TREES[state.tree].leaves;
     world.burst(hit.point, colors, 26, 3.4);
+    if (inside(obj, world.tree.userData.crown)) world.dropApple(hit.point);
     return;
   }
   // По траве белочка сама прибежит к пальцу
   const near = ask([house.squirrel, house.rabbit], 90);
   if (near === house.rabbit) {
-    house.jump("rabbit", 1.2);
-    Sound.boing();
+    if (house.playRabbit()) Sound.boing();
     return;
   }
   if (near === house.squirrel) {
@@ -916,10 +934,46 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     Voice.stop();
     Sound.ctx?.suspend().catch(() => {});
+  } else if (save.sound) {
+    Sound.ctx?.resume().catch(() => {});
   }
 });
 // iPad разрешает звук только в конце касания
 addEventListener("pointerup", () => Sound.unlock());
+
+// ---------- открытка ----------
+const photo = $("photo");
+let photoUrl;
+$("btn-photo").addEventListener("click", () => {
+  const button = $("btn-photo");
+  if (button.disabled || photo.open) return;
+  button.disabled = true;
+  Sound.unlock();
+  world.renderer.render(world.scene, world.camera);
+  const capture = new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+  const flash = $("photo-flash").animate([{ opacity: 0.82 }, { opacity: 0 }], {
+    duration: matchMedia("(prefers-reduced-motion: reduce)").matches ? 100 : 380,
+    easing: "ease-out",
+  });
+  Promise.all([capture, flash.finished]).then(([blob]) => {
+    if (!blob || button.hidden || photo.open) return;
+    photoUrl = URL.createObjectURL(blob);
+    $("photo-preview").src = photoUrl;
+    $("photo-download").href = photoUrl;
+    photo.showModal();
+  }).finally(() => {
+    button.disabled = false;
+  });
+  world.burst(world.look, ["#ff5d5d", "#ffe14d", "#39c3f0", "#b07cff", "#ffffff"], 32, 4);
+  Sound.gift();
+});
+$("photo-close").addEventListener("click", () => photo.close());
+photo.addEventListener("close", () => {
+  if (photoUrl) URL.revokeObjectURL(photoUrl);
+  photoUrl = undefined;
+  $("photo-preview").removeAttribute("src");
+  $("photo-download").removeAttribute("href");
+});
 
 // ---------- старт ----------
 for (let i = 0; i < STAGES.length; i++) $("steps").appendChild(document.createElement("i"));

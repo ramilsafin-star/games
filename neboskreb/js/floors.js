@@ -1,7 +1,7 @@
 // Этажи и крыши небоскрёба: у каждого вида своя объёмная модель. Все этажи всех домов
 // рисуются общими наборами копий, поэтому даже стоэтажный дом занимает пару десятков отрисовок
-import * as T from "../vendor/three/three.module.min.js";
-import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js";
+import * as T from "../vendor/three/three.module.min.js?v=4b295c04";
+import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js?v=4b295c04";
 
 export const FLOOR_W = 14;
 export const FLOOR_H = 4;

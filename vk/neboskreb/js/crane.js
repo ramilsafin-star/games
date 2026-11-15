@@ -1,7 +1,7 @@
 // Башенный кран: решётчатая мачта растёт вместе с домом, стрела поворачивается, тележка едет
 // по стреле, груз качается на тросе. Всё движется от точки, куда ведёт палец
-import * as T from "../vendor/three/three.module.min.js?v=8eaa7c2c";
-import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js?v=8eaa7c2c";
+import * as T from "../vendor/three/three.module.min.js?v=62c3fecd";
+import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js?v=62c3fecd";
 
 const YELLOW = "#ffc21a";
 const SECTION = 4;

@@ -11,18 +11,27 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Домик" />
     <meta name="theme-color" content="#8fdcff" />
-    <script src="./vendor/vk/vk-bridge.min.js?v=61ed2cc9"></script>
-    <script src="./js/vk-host.js?v=61ed2cc9" data-keys="domik_save" data-ad-gap="120"></script>
-    <link rel="stylesheet" href="./style.css?v=61ed2cc9" />
+    <script src="./vendor/vk/vk-bridge.min.js?v=fd699af6"></script>
+    <script src="./js/vk-host.js?v=fd699af6" data-keys="domik_save" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=fd699af6" />
   </head>
   <body>
     <canvas id="game" aria-label="Большое дерево на поляне"></canvas>
     <div id="steps" aria-hidden="true"></div>
     <button id="btn-sound" class="round" type="button" aria-label="Выключить звук">🔊</button>
+    <button id="btn-photo" class="round" type="button" aria-label="Сделать фото домика" hidden>📷</button>
     <div id="tray"></div>
     <button id="btn-ok" type="button" aria-label="Готово" hidden>✓</button>
     <div id="bin" aria-hidden="true">🗑️</div>
     <div id="hand" aria-hidden="true">👆</div>
+    <div id="photo-flash" aria-hidden="true"></div>
+    <dialog id="photo" aria-label="Открытка с домиком">
+      <img id="photo-preview" alt="Фотография домика" />
+      <div class="photo-actions">
+        <button id="photo-close" type="button">Закрыть</button>
+        <a id="photo-download" download="domik-na-dereve.png">Скачать фото</a>
+      </div>
+    </dialog>
     <p id="load" role="status">🌳</p>
     <script>
       // Простой синтаксис намеренно: сообщение покажется и там, где браузер не прочитает игру
@@ -40,8 +49,8 @@
         if (!window.Domik || !window.Domik.ready) window.domikFail();
       }, 30000);
     </script>
-    <script src="./js/audio.js?v=61ed2cc9"></script>
-    <script type="module" src="./js/game.js?v=61ed2cc9" onerror="window.domikFail()"></script>
-    <script src="./js/juice.js?v=61ed2cc9"></script>
+    <script src="./js/audio.js?v=fd699af6"></script>
+    <script type="module" src="./js/game.js?v=fd699af6" onerror="window.domikFail()"></script>
+    <script src="./js/juice.js?v=fd699af6"></script>
   </body>
 </html>

@@ -8,14 +8,13 @@
     <meta name="description" content="Лесной магазин: будь кассиром — пробей покупки, сложи в пакет, прими оплату и отдай чек." />
     <link rel="icon" href="./icon-192.png" />
     <link rel="apple-touch-icon" href="./icon-180.png" />
-    <script src="./vendor/vk/vk-bridge.min.js?v=4bdcc34a"></script>
-    <script src="./js/vk-host.js?v=4bdcc34a" data-keys="listik-v2" data-ad-gap="120"></script>
-    <link rel="stylesheet" href="./style.css?v=4bdcc34a" />
+    <script src="./vendor/vk/vk-bridge.min.js?v=b1be4298"></script>
+    <script src="./js/vk-host.js?v=b1be4298" data-keys="listik-v2" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=b1be4298" />
   </head>
   <body>
     <main class="app">
       <header class="top">
-        
         <div class="brand"><i data-icon="leaf"></i><span>Лавка Листик</span></div>
         <div class="tools">
           <button id="album" class="pill" aria-label="Альбом наклеек">
@@ -38,7 +37,12 @@
         <div id="change" class="change" hidden></div>
         <div id="hand" class="hand" hidden aria-hidden="true">👆</div>
         <div id="toast" class="toast" hidden><img alt="" /><span></span></div>
-        <div id="party" class="party" hidden><b>Смена закончена!</b><span>🎉</span></div>
+        <div id="scan-price" class="scan-price" aria-hidden="true"></div>
+        <div id="party" class="party" hidden>
+          <b id="party-title">Смена закончена!</b>
+          <span aria-hidden="true">🎉</span>
+          <small id="party-stats"></small>
+        </div>
         <div id="nogl" class="nogl" hidden>Для этой игры нужен браузер с 3D-графикой</div>
       </section>
     </main>
@@ -46,10 +50,11 @@
       <button id="book-close" class="round close" aria-label="Закрыть альбом"><span data-icon="close"></span></button>
       <small>МОИ НАКЛЕЙКИ · <span id="book-count"></span></small>
       <h2 id="book-title">Лесной альбом</h2>
+      <p id="book-award" class="book-award" hidden>🏅 Золотой кассир</p>
       <div id="book-grid" class="grid"></div>
     </dialog>
-    <script src="./js/audio.js?v=4bdcc34a"></script>
-    <script type="module" src="./js/game.js?v=4bdcc34a"></script>
-    <script src="./js/juice.js?v=4bdcc34a"></script>
+    <script src="./js/audio.js?v=b1be4298"></script>
+    <script type="module" src="./js/game.js?v=b1be4298"></script>
+    <script src="./js/juice.js?v=b1be4298"></script>
   </body>
 </html>

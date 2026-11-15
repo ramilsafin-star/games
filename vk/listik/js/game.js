@@ -1,8 +1,8 @@
 await window.vkGameHost?.ready;
 // «Лавка Листик»: ход покупки, касания, голоса, наклейки. Всё, что видно в 3D, — в store.js.
-import { Store } from "./store.js?v=4bdcc34a";
-import { goods } from "./models.js?v=4bdcc34a";
-import { icon } from "./icons.js?v=4bdcc34a";
+import { Store } from "./store.js?v=b1be4298";
+import { goods } from "./models.js?v=b1be4298";
+import { icon } from "./icons.js?v=b1be4298";
 
 const el = (id) => document.getElementById(id);
 // pal — номер модели зверька в models.js. Первые трое — покупатели из первой версии лавки.
@@ -31,7 +31,8 @@ try {
   saved = JSON.parse(localStorage.getItem(KEY)) || {};
 } catch {}
 let served = Number.isSafeInteger(saved.served) && saved.served >= 0 ? saved.served : 0;
-let got = new Set(Array.isArray(saved.got) ? saved.got : []);
+const savedStickers = new Set(Array.isArray(saved.got) ? saved.got : []);
+let got = new Set(album.map((sticker) => sticker.key).filter((key) => savedStickers.has(key)));
 let sound = saved.sound !== false,
   music = saved.music !== false;
 function save() {
@@ -209,23 +210,43 @@ async function nextCustomer() {
   setStep(0);
   busy = false;
 }
-function onScanned(it) {
+async function onScanned(it) {
+  if (it.scanned) return;
   it.scanned = true;
   scanned++;
   Sound.beep();
+  showPrice(goods[it.id].price);
+  if (guest.likes.includes(it.id)) store.cheer();
   talk(["register/n" + Math.min(scanned, 5)]);
   idleAt = performance.now();
   screen();
   if (scanned === order.items.length) {
     busy = true;
     // Всё пробито: касса звенит и называет сумму
-    setTimeout(() => {
-      Sound.ching();
-      talk(["register/total-" + order.total], 0.35);
-      setStep(1);
-      busy = false;
-    }, 700);
+    await Promise.all([store.wait(0.7), ...store.items.map((item) => item.transit)]);
+    Sound.ching();
+    talk(["register/total-" + order.total], 0.35);
+    setStep(1);
+    busy = false;
   }
+}
+function showPrice(price) {
+  const priceChip = el("scan-price");
+  const point = store.scannerPoint();
+  const bounds = el("theatre").getBoundingClientRect();
+  priceChip.style.left = Math.max(28, Math.min(bounds.width - 28, point.x - bounds.left)) + "px";
+  priceChip.style.top = point.y - bounds.top + "px";
+  priceChip.textContent = "+" + price + " ₽";
+  priceChip.getAnimations().forEach((animation) => animation.cancel());
+  priceChip.animate(
+    [
+      { opacity: 0, transform: "translate(-50%, 2px)" },
+      { opacity: 1, transform: "translate(-50%, -14px)", offset: 0.2 },
+      { opacity: 1, transform: "translate(-50%, -30px)", offset: 0.65 },
+      { opacity: 0, transform: "translate(-50%, -42px)" },
+    ],
+    { duration: 1050, easing: "ease-out" },
+  );
 }
 async function packOne(it) {
   if (!it || it.state !== "tray") return;
@@ -302,7 +323,12 @@ async function giveReceipt() {
   const prize = reward();
   save();
   if (prize) await showPrize(prize);
-  if (shiftEnd) await party();
+  const complete = Boolean(prize) && got.size === album.length;
+  if (complete) {
+    store.cheer(true);
+    Sound.fanfare();
+  }
+  if (shiftEnd || complete) await party(complete, shiftEnd);
   nextCustomer();
 }
 // Наклейка: сначала сам покупатель, потом товар из его покупки, которого ещё нет в альбоме
@@ -345,8 +371,11 @@ function showPrize(s) {
     }, 1900);
   });
 }
-function party() {
+function party(complete, shiftEnd) {
   return new Promise((done) => {
+    el("party-title").textContent = complete ? "Золотой кассир!" : "Смена закончена!";
+    const stickers = "Наклеек: " + got.size + " из " + album.length;
+    el("party-stats").textContent = shiftEnd ? "Покупателей за смену: 3 · " + stickers : stickers;
     el("party").hidden = false;
     setTimeout(() => {
       el("party").hidden = true;
@@ -362,7 +391,12 @@ function onDown(e) {
   unlock();
   const x = e.clientX,
     y = e.clientY;
-  if (busy) return;
+  if (store.tapButterfly(x, y)) return Sound.blip();
+  if (busy) {
+    if (store.hit("register", x, y)) Sound.ching();
+    else if (store.hit("customer", x, y)) store.cheer();
+    return;
+  }
   if (step === 0) {
     const it = store.itemOnBelt(x, y);
     if (it) {
@@ -379,7 +413,7 @@ function onDown(e) {
   } else if (step === 2 && !order.cash) {
     if (store.hit("card", x, y) || store.hit("terminal", x, y) || store.hit("customer", x, y)) return payCard();
   } else if (step === 2) {
-    if (store.hit("drawer", x, y) || store.hit("dish", x, y) || store.hit("register", x, y)) return giveCoin();
+    if (store.hit("notes", x, y) || store.hit("drawer", x, y) || store.hit("dish", x, y) || store.hit("register", x, y)) return giveCoin();
   } else if (step === 3) {
     if (store.hit("receipt", x, y) || store.hit("register", x, y) || store.hit("customer", x, y)) return giveReceipt();
   }
@@ -392,20 +426,29 @@ function onMove(e) {
     press.moved = true;
     store.grab(press.it);
   }
-  if (store.move(e.clientX, e.clientY)) onScanned(press.it);
+  if (store.move(e.clientX, e.clientY)) {
+    const { it, pointer } = press;
+    press = null;
+    it.transit = store.release();
+    if (el("store").hasPointerCapture(pointer)) el("store").releasePointerCapture(pointer);
+    onScanned(it);
+  }
 }
 function onUp(e) {
   if (!press || press.pointer !== e.pointerId) return;
   const p = press;
   press = null;
   if (p.moved) store.release();
-  else if (p.it.state === "belt") store.scan(p.it, () => onScanned(p.it));
+  else if (e.type === "pointerup" && p.it.state === "belt") {
+    p.it.transit = store.scan(p.it, () => onScanned(p.it));
+  }
 }
 
 // ---------- Подсказка-рука ----------
 // Если ребёнок долго ничего не делает, кольцо и рука показывают, куда нажать
 function hintLoop() {
-  const wait = performance.now() - idleAt > 4000;
+  requestAnimationFrame(hintLoop);
+  const wait = !document.hidden && performance.now() - idleAt > 4000;
   const name = busy || step < 0 || step > 3 ? null : wait ? ["item", "tray", order?.cash ? "drawer" : "card", "receipt"][step] : null;
   store?.hint(name);
   const spot = store?.hintSpot(),
@@ -417,7 +460,6 @@ function hintLoop() {
     hand.style.left = p.x - r.left + "px";
     hand.style.top = p.y - r.top + "px";
   }
-  requestAnimationFrame(hintLoop);
 }
 
 // ---------- Альбом и кнопки ----------
@@ -431,6 +473,7 @@ function openAlbum() {
     )
     .join("");
   el("book-count").textContent = got.size + " из " + album.length;
+  el("book-award").hidden = got.size !== album.length;
   el("book").showModal();
 }
 function buttons() {
@@ -467,7 +510,10 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     stopVoice();
     Music.stop();
-  } else if (sound && music && Sound.ctx) Music.start();
+    Sound.ctx?.suspend().catch(() => {});
+  } else if (sound && Sound.ctx) {
+    unlock();
+  }
 });
 window.addEventListener("pagehide", () => {
   stopVoice();

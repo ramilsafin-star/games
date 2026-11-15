@@ -1,5 +1,5 @@
 // Финальная обработка кадра: свечение ярких мест, киношная тональная кривая и лёгкая виньетка.
-import * as T from '../vendor/three/three.module.min.js';
+import * as T from '../vendor/three/three.module.min.js?v=4b295c04';
 
 const VERT = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }';
 

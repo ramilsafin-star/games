@@ -1,7 +1,7 @@
 // Город вокруг стройки: небо со сменой времени суток, кварталы, деревья, машины, облака,
 // а наверху то, что можно увидеть только с высоты: птицы, шары, самолёт, НЛО и звёзды
-import * as T from "../vendor/three/three.module.min.js?v=8eaa7c2c";
-import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js?v=8eaa7c2c";
+import * as T from "../vendor/three/three.module.min.js?v=62c3fecd";
+import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js?v=62c3fecd";
 
 export const PLOT_STEP = 50;
 export const PLOTS = 8;
@@ -18,6 +18,11 @@ const CITY_R = 3100;
 const HOUSE_CAP = 11500;
 const TREE_CAP = 640;
 const STRIP_CAP = 14;
+const trafficMatrix = new T.Matrix4();
+const trafficRotation = new T.Quaternion();
+const trafficPosition = new T.Vector3();
+const trafficScale = new T.Vector3();
+const vertical = new T.Vector3(0, 1, 0);
 const HOUSE_COLORS = ["#b5a58f", "#a68a70", "#8e9ba6", "#c7b9a3", "#7f8c99", "#b0795c", "#67737f", "#a35f4a"].map((c) => new T.Color(c));
 
 function seeded(seed) {
@@ -652,37 +657,33 @@ export class City {
   update(dt, focus, camera) {
     this.time += dt;
     const t = this.time;
-    const m = new T.Matrix4();
-    const q = new T.Quaternion();
-    const up = new T.Vector3(0, 1, 0);
-    const scale = new T.Vector3(1, 1, 1);
+    trafficScale.set(1, 1, 1);
     this.cars.forEach((car, i) => {
       car.x += car.dir * car.v * dt;
       if (car.x > focus.x + 700) car.x -= 1400;
       if (car.x < focus.x - 700) car.x += 1400;
-      q.setFromAxisAngle(up, car.dir > 0 ? 0 : Math.PI);
-      m.compose(new T.Vector3(car.x, 0.1, car.road), q, scale);
-      this.carMesh.setMatrixAt(i, m);
+      trafficRotation.setFromAxisAngle(vertical, car.dir > 0 ? 0 : Math.PI);
+      trafficMatrix.compose(trafficPosition.set(car.x, 0.1, car.road), trafficRotation, trafficScale);
+      this.carMesh.setMatrixAt(i, trafficMatrix);
     });
     this.carMesh.instanceMatrix.needsUpdate = true;
     this.clouds.forEach((c) => {
       c.x += c.v * dt;
       if (c.x > focus.x + 640) c.x -= 1280;
       if (c.x < focus.x - 640) c.x += 1280;
-      m.compose(new T.Vector3(c.x, c.y, c.z), q.identity(), scale.set(c.s, c.s * 0.8, c.s));
-      c.mesh.setMatrixAt(c.i, m);
+      trafficMatrix.compose(trafficPosition.set(c.x, c.y, c.z), trafficRotation.identity(), trafficScale.set(c.s, c.s * 0.8, c.s));
+      c.mesh.setMatrixAt(c.i, trafficMatrix);
       c.mesh.instanceMatrix.needsUpdate = true;
     });
-    scale.set(1, 1, 1);
     for (let i = 0; i < 16; i++) {
       const a = t * 0.26 + i * 0.32;
       const r = 62 + (i % 4) * 4;
       const x = focus.x + Math.cos(a) * r;
       const z = focus.z + Math.sin(a) * r;
       const flap = 0.45 + Math.abs(Math.sin(t * 7 + i)) * 0.9;
-      q.setFromAxisAngle(up, -a);
-      m.compose(new T.Vector3(x, 50 + (i % 5) * 1.6 + Math.sin(t + i) * 0.8, z), q, scale.set(1, flap, 1));
-      this.birds.setMatrixAt(i, m);
+      trafficRotation.setFromAxisAngle(vertical, -a);
+      trafficMatrix.compose(trafficPosition.set(x, 50 + (i % 5) * 1.6 + Math.sin(t + i) * 0.8, z), trafficRotation, trafficScale.set(1, flap, 1));
+      this.birds.setMatrixAt(i, trafficMatrix);
     }
     this.birds.instanceMatrix.needsUpdate = true;
     this.balloons.forEach((b) => {

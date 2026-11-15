@@ -1,6 +1,6 @@
-import * as T from "../vendor/three/three.module.min.js?v=d6a10efd";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=d6a10efd";
-import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js?v=d6a10efd";
+import * as T from "../vendor/three/three.module.min.js?v=2bf19ea2";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=2bf19ea2";
+import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js?v=2bf19ea2";
 
 const materials = new Map(),
   boxes = new Map();
@@ -742,12 +742,11 @@ export function coin(p) {
   return c;
 }
 // Купюра с номиналом
+const noteMaterials = new Map();
 export function banknote(p, value) {
-  const color = { 5: "#7fc8ff", 10: "#7fdc8f", 20: "#ffb36b" }[value];
-  const note = mesh(
-    p,
-    new T.BoxGeometry(0.5, 0.012, 0.26),
-    new T.MeshStandardMaterial({
+  if (!noteMaterials.has(value)) {
+    const color = { 5: "#7fc8ff", 10: "#7fdc8f", 20: "#ffb36b" }[value];
+    noteMaterials.set(value, new T.MeshStandardMaterial({
       roughness: 0.6,
       map: texture(256, 132, (ctx) => {
         ctx.fillStyle = color;
@@ -761,12 +760,9 @@ export function banknote(p, value) {
         ctx.textBaseline = "middle";
         ctx.fillText(value + " ₽", 128, 70);
       }),
-    }),
-    0,
-    0,
-    0,
-  );
-  return note;
+    }));
+  }
+  return mesh(p, new T.BoxGeometry(0.5, 0.012, 0.26), noteMaterials.get(value), 0, 0, 0);
 }
 // Терминал для карты: экран рисует park.js
 export function terminal(p) {
@@ -789,35 +785,29 @@ export function terminal(p) {
   return { group: g, canvas, tex };
 }
 // Карта покупателя
+let cardMaterial;
 export function card(p) {
-  const c = mesh(
-    p,
-    new T.BoxGeometry(0.34, 0.012, 0.22),
-    new T.MeshPhysicalMaterial({
-      roughness: 0.3,
-      clearcoat: 1,
-      map: texture(256, 166, (ctx) => {
-        const grad = ctx.createLinearGradient(0, 0, 256, 166);
-        grad.addColorStop(0, "#3fbf7f");
-        grad.addColorStop(1, "#2a7fd4");
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, 256, 166);
-        ctx.fillStyle = "#ffd84d";
-        ctx.fillRect(26, 60, 46, 36);
-        ctx.fillStyle = "rgba(255,255,255,.85)";
-        ctx.font = '800 26px "Avenir Next", system-ui';
-        ctx.fillText("ЛЕСБАНК", 26, 40);
-        ctx.beginPath();
-        ctx.ellipse(205, 120, 30, 14, -0.7, 0, pie * 2);
-        ctx.fillStyle = "#9be06a";
-        ctx.fill();
-      }),
+  cardMaterial ??= new T.MeshPhysicalMaterial({
+    roughness: 0.3,
+    clearcoat: 1,
+    map: texture(256, 166, (ctx) => {
+      const grad = ctx.createLinearGradient(0, 0, 256, 166);
+      grad.addColorStop(0, "#3fbf7f");
+      grad.addColorStop(1, "#2a7fd4");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 256, 166);
+      ctx.fillStyle = "#ffd84d";
+      ctx.fillRect(26, 60, 46, 36);
+      ctx.fillStyle = "rgba(255,255,255,.85)";
+      ctx.font = '800 26px "Avenir Next", system-ui';
+      ctx.fillText("ЛЕСБАНК", 26, 40);
+      ctx.beginPath();
+      ctx.ellipse(205, 120, 30, 14, -0.7, 0, pie * 2);
+      ctx.fillStyle = "#9be06a";
+      ctx.fill();
     }),
-    0,
-    0,
-    0,
-  );
-  return c;
+  });
+  return mesh(p, new T.BoxGeometry(0.34, 0.012, 0.22), cardMaterial, 0, 0, 0);
 }
 // Бумажный пакет с листиком; покупки складываются внутрь
 export function bag(p) {

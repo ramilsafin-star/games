@@ -1,14 +1,15 @@
 // Домик на дереве: каждая часть появляется по мере того, как её строит ребёнок.
-import * as T from "../vendor/three/three.module.min.js?v=e6637b83";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=e6637b83";
-import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js?v=e6637b83";
-import { mat, easeBack, easeOut, TRUNK_Z } from "./world.js?v=e6637b83";
+import * as T from "../vendor/three/three.module.min.js?v=855b832a";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=855b832a";
+import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js?v=855b832a";
+import { mat, keepAsset, clearParts, easeBack, easeOut, TRUNK_Z } from "./world.js?v=855b832a";
 
 export const DECK_Y = 5.6;
 export const WALL_H = 3.1,
   HOUSE_W = 5,
   HOUSE_FRONT = 3.7,
   HOUSE_BACK = 0.7;
+export const BOARD_Y = DECK_Y + 0.03 + WALL_H / 2;
 const DECK_W = 8.8,
   DECK_FRONT = 5.1,
   DECK_BACK = 0,
@@ -27,7 +28,7 @@ const boxes = new Map();
 function rounded(w, h, d, r = 0.04) {
   const key = [w, h, d, r].join("/");
   if (!boxes.has(key))
-    boxes.set(key, new RoundedBoxGeometry(w, h, d, 2, Math.min(r, w / 2.1, h / 2.1, d / 2.1)));
+    boxes.set(key, keepAsset(new RoundedBoxGeometry(w, h, d, 2, Math.min(r, w / 2.1, h / 2.1, d / 2.1))));
   return boxes.get(key);
 }
 export function plank(parent, w, h, d, color, x, y, z, r) {
@@ -68,20 +69,20 @@ export function shapeOf(kind, s) {
   }
   return p;
 }
-export const glassMat = new T.MeshStandardMaterial({
+export const glassMat = keepAsset(new T.MeshStandardMaterial({
   color: "#7fd2ee",
   roughness: 0.12,
   metalness: 0.25,
   emissive: "#ffb648",
   emissiveIntensity: 0,
-});
-const spotMat = new T.MeshStandardMaterial({ color: "#ffffff", roughness: 0.75, emissive: "#ffffff", emissiveIntensity: 0.14 });
-const lampMat = new T.MeshStandardMaterial({
+}));
+const spotMat = keepAsset(new T.MeshStandardMaterial({ color: "#ffffff", roughness: 0.75, emissive: "#ffffff", emissiveIntensity: 0.14 }));
+const lampMat = keepAsset(new T.MeshStandardMaterial({
   color: "#ffd98a",
   emissive: "#ffb040",
   emissiveIntensity: 0.25,
   roughness: 0.5,
-});
+}));
 
 export class TreeHouse {
   constructor(world) {
@@ -91,7 +92,10 @@ export class TreeHouse {
     this.reset();
   }
   reset() {
-    this.root.clear();
+    clearParts(this.root);
+    this.motions = {};
+    this.rabbitEars = null;
+    this.rabbitOnDeck = false;
     this.config = {
       colors: [],
       roof: null,
@@ -359,7 +363,9 @@ export class TreeHouse {
     this.config.roof = kind;
     this.config.roofColor = color;
     const g = this.roofGroup;
-    g.clear();
+    const version = {};
+    g.userData.version = version;
+    clearParts(g);
     g.userData.baked = false;
     const paint = new T.MeshStandardMaterial({ color, roughness: 0.5 }),
       base = DECK_Y + WALL_H + 0.05,
@@ -435,16 +441,18 @@ export class TreeHouse {
       ball(g, 0, base + 3.3, cz, 0.56, color, 0.95);
       g.userData.top = base + 3.7;
     }
+    g.position.y = 0;
     if (instant) return;
-    g.position.y = 6;
-    this.world.tween(0.55, (t) => (g.position.y = 6 * (1 - t)), null, easeBack);
+    this.world.tween(0.55, (t) => {
+      if (g.userData.version === version) g.position.y = 6 * (1 - t);
+    }, null, easeBack);
   }
   // ---------- окна ----------
   setWindow(kind, trim, instant = false) {
     this.config.window = kind;
     this.config.trim = trim;
     const g = this.windowGroup;
-    g.clear();
+    clearParts(g);
     const frame = new T.MeshStandardMaterial({ color: trim, roughness: 0.5 }),
       y = DECK_Y + 1.85,
       spots = [
@@ -498,12 +506,18 @@ export class TreeHouse {
       const merged = [];
       for (const [material, list] of byMaterial) {
         const geo = mergeGeometries(list);
-        if (!geo) return;
+        for (const part of list) part.dispose();
+        if (!geo) continue;
         const m = new T.Mesh(geo, material);
         m.castShadow = m.receiveShadow = true;
         merged.push(m);
       }
-      g.clear();
+      if (merged.length !== byMaterial.size) {
+        for (const mesh of merged) mesh.geometry.dispose();
+        g.userData.baked = false;
+        continue;
+      }
+      clearParts(g, new Set(byMaterial.keys()));
       g.add(...merged);
     }
   }
@@ -511,7 +525,7 @@ export class TreeHouse {
   setWay(kind, instant = false) {
     this.config.way = kind;
     const g = this.wayGroup;
-    g.clear();
+    clearParts(g);
     g.userData.baked = false;
     this.swingers = this.swingers.filter((s) => s.tag !== "way");
     const wood = "#b67e46",
@@ -567,10 +581,14 @@ export class TreeHouse {
       const item = this.decorItems[id];
       if (item) {
         this.decorGroup.remove(item);
+        clearParts(item);
         this.spinners = this.spinners.filter((s) => s.tag !== id);
         this.swingers = this.swingers.filter((s) => s.tag !== id);
         delete this.decorItems[id];
-        if (id === "slide") this.slidePath = null;
+        if (id === "slide") {
+          this.sliding = false;
+          this.slidePath = null;
+        }
         if (id === "bucket") this.bucket = null;
         if (id === "swing") this.swingItem = null;
         if (id === "birdhouse") {
@@ -854,41 +872,70 @@ export class TreeHouse {
   jump(who, power = 1) {
     this.hop[who] = Math.max(this.hop[who], power);
   }
+  settleHop(who) {
+    const friend = this[who];
+    friend.position.y -= friend.userData.lastLift || 0;
+    friend.userData.lastLift = this.hop[who] = 0;
+  }
+  moveFriend(who, x, y, z, face, done) {
+    this.settleHop(who);
+    const friend = this[who];
+    const from = friend.position.clone();
+    const to = new T.Vector3(x, y, z);
+    const rotation = friend.rotation.y;
+    const height = Math.min(4, 0.8 + from.distanceTo(to) * 0.28);
+    const motion = {};
+    this.motions[who] = motion;
+    this.world.tween(0.8, (t) => {
+      if (this.motions[who] !== motion) return;
+      friend.position.lerpVectors(from, to, t);
+      friend.position.y += Math.sin(t * Math.PI) * height;
+      friend.rotation.y = rotation + (face - rotation) * t;
+    }, () => {
+      if (this.motions[who] !== motion) return;
+      delete this.motions[who];
+      done?.();
+    });
+  }
   moveSquirrel(x, y, z, face = 0, done) {
-    const s = this.squirrel,
-      from = s.position.clone(),
-      to = new T.Vector3(x, y, z),
-      rot = s.rotation.y,
-      height = Math.min(4, 0.8 + from.distanceTo(to) * 0.28);
-    this.world.tween(
-      0.8,
-      (t) => {
-        s.position.lerpVectors(from, to, t);
-        s.position.y += Math.sin(t * Math.PI) * height;
-        s.rotation.y = rot + (face - rot) * t;
-      },
-      done,
-    );
+    this.sliding = false;
+    this.moveFriend("squirrel", x, y, z, face, done);
+  }
+  playRabbit() {
+    if (this.motions.rabbit) return false;
+    this.rabbitOnDeck = !this.rabbitOnDeck;
+    const destination = this.rabbitOnDeck ? [3.4, DECK_Y + 0.08, 4.35, -0.4] : [4.6, 0.02, 9, -0.5];
+    this.moveFriend("rabbit", ...destination, () => this.jump("rabbit", 0.8));
+    return true;
   }
   slideSquirrel(done) {
-    if (!this.slidePath || this.sliding) return;
-    this.sliding = true;
-    const s = this.squirrel,
-      from = s.position.clone(),
-      start = new T.Vector3(-3.4, DECK_Y + 0.25, DECK_FRONT - 0.7);
+    const path = this.slidePath;
+    if (!path || this.sliding) return false;
+    this.settleHop("squirrel");
+    delete this.motions.squirrel;
+    const ride = {};
+    this.sliding = ride;
+    const s = this.squirrel;
+    const from = s.position.clone();
+    const start = path.getPointAt(0).add(new T.Vector3(0, 0.28, 0));
     this.world.tween(0.5, (t) => {
+      if (this.sliding !== ride) return;
       s.position.lerpVectors(from, start, t);
       s.position.y += Math.sin(t * Math.PI) * 2.5;
     }, () => {
+      if (this.sliding !== ride) return;
       this.world.tween(1.25, (t) => {
-        const p = this.slidePath.getPointAt(t);
+        if (this.sliding !== ride) return;
+        const p = path.getPointAt(t);
         s.position.set(p.x, p.y + 0.28, p.z);
         s.rotation.y = -0.55;
       }, () => {
+        if (this.sliding !== ride) return;
         this.sliding = false;
         done?.();
       }, (t) => t * t);
     });
+    return true;
   }
   // ---------- кадр ----------
   frame(dt, time, night) {
@@ -906,7 +953,8 @@ export class TreeHouse {
     // Прыжки жителей и взмахи хвоста
     for (const who of ["squirrel", "rabbit"]) {
       const o = this[who];
-      if (this.hop[who] > 0) {
+      const moving = this.motions[who] || (who === "squirrel" && this.sliding);
+      if (!moving && this.hop[who] > 0) {
         this.hop[who] = Math.max(0, this.hop[who] - dt * 1.1);
         o.userData.lift = Math.abs(Math.sin(time * 9)) * this.hop[who] * 0.9;
       } else o.userData.lift = 0;
@@ -915,7 +963,7 @@ export class TreeHouse {
         size = u.size || 1.4,
         ph = who === "rabbit" ? 2 : 0;
       u.nextHop ??= time + 4 + Math.random() * 5;
-      if (o.visible && time > u.nextHop) {
+      if (!moving && o.visible && time > u.nextHop) {
         if (this.hop[who] <= 0) this.hop[who] = 0.45;
         u.nextHop = time + 5 + Math.random() * 7;
       }

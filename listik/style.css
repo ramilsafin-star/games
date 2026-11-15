@@ -344,6 +344,25 @@ svg {
 .party span {
   font-size: 60px;
 }
+.party small, .book-award, .scan-price {
+  color: #173e2c;
+  background: #fff9de;
+  border: 2px solid #c59133;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-weight: 800;
+}
+.book-award {
+  width: fit-content;
+  margin: 0 0 12px;
+}
+.scan-price {
+  position: absolute;
+  z-index: 4;
+  opacity: 0;
+  pointer-events: none;
+  white-space: nowrap;
+}
 .nogl {
   position: absolute;
   inset: 0;

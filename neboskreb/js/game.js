@@ -1,14 +1,14 @@
 // Ход стройки: палец ведёт груз, кран следует за ним, отпустил — этаж опускается на дом.
 // Проиграть нельзя и читать ничего не нужно: сорвавшийся этаж просто падает, кран несёт следующий.
 // Готовые дома остаются навсегда: город растёт кварталами, и на него можно посмотреть с высоты
-import * as T from "../vendor/three/three.module.min.js";
-import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js";
-import { Post } from "./post.js";
-import { Floors, MODULES, FLOOR_IDS, ROOF_IDS, FLOOR_W, FLOOR_H } from "./floors.js";
-import { Crane } from "./crane.js";
-import { City, PLOTS, DISTRICT, plotX as plotAt } from "./city.js";
-import { Fx } from "./fx.js";
-import { Life } from "./life.js";
+import * as T from "../vendor/three/three.module.min.js?v=4b295c04";
+import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js?v=4b295c04";
+import { Post } from "./post.js?v=4b295c04";
+import { Floors, MODULES, FLOOR_IDS, ROOF_IDS, FLOOR_W, FLOOR_H } from "./floors.js?v=4b295c04";
+import { Crane } from "./crane.js?v=4b295c04";
+import { City, PLOTS, PLOT_STEP, DISTRICT, plotX as plotAt } from "./city.js?v=4b295c04";
+import { Fx } from "./fx.js?v=4b295c04";
+import { Life } from "./life.js?v=4b295c04";
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("game");
@@ -211,6 +211,8 @@ const S = {
   camY: 12,
   camD: 50,
   camYaw: 0.52,
+  buildYaw: 0.52,
+  cityMood: 0,
   camPitch: 0.24,
   finale: null,
   milestones: new Set(),
@@ -485,9 +487,23 @@ function syncHud() {
   const can = S.kind === "floor" && count >= 5 && building();
   $("btn-roof").hidden = !can;
   $("btn-roof").classList.toggle("call", count >= 12 + Math.min(S.plot, 8) * 3);
+  syncStreak();
   syncOrderCard();
   syncButtons();
 }
+
+function syncStreak() {
+  const streak = $("streak");
+  streak.hidden = !building() || S.streak < 2;
+  streak.textContent = "🔥 ×" + S.streak;
+}
+
+const MOODS = [
+  { icon: "☀️", label: "День" },
+  { icon: "🌅", label: "Закат" },
+  { icon: "🌙", label: "Ночь" },
+];
+const ORDER_REWARD = 18;
 
 // Вместо флага на кнопке картинка крыши: та, которую просит заказ, или последняя выбранная
 function paintRoofButton() {
@@ -500,7 +516,17 @@ function paintRoofButton() {
 // Кнопки меняются вместе с тем, что происходит на экране
 function syncButtons() {
   const scene = (S.finale && S.finale.nextShown) || S.mode === "view";
-  $("btn-next").hidden = !(scene || (S.mode === "map" && !S.opening));
+  const next = $("btn-next");
+  const resume = S.tower && !S.tower.roof;
+  next.hidden = !(scene || (S.mode === "map" && !S.opening));
+  next.classList.toggle("resume", Boolean(resume));
+  next.textContent = resume ? "🏗️ Строить" : "▶";
+  next.setAttribute("aria-label", resume ? "Вернуться к стройке" : "Построить следующий дом");
+  $("btn-orbit").hidden = !building();
+  const mood = $("btn-mood");
+  mood.hidden = !inCity();
+  mood.textContent = MOODS[S.cityMood].icon;
+  mood.setAttribute("aria-label", "Время суток: " + MOODS[S.cityMood].label + ". Сменить");
   $("btn-city").hidden = !(scene || (building() && finishedCount() > 0));
   document.body.classList.toggle("scene", !!scene);
 }
@@ -521,7 +547,10 @@ function fillCard(el, order) {
     pic.appendChild(art);
     row.appendChild(pic);
   }
-  el.replaceChildren(name, row);
+  const reward = document.createElement("span");
+  reward.className = "order-reward";
+  reward.textContent = "⭐ +" + ORDER_REWARD;
+  el.replaceChildren(name, row, reward);
 }
 
 function syncOrderCard() {
@@ -743,6 +772,7 @@ function landed() {
 function missed(dx, dz, off) {
   const L = S.load;
   S.streak = 0;
+  syncStreak();
   const away = Math.abs(dx) > Math.abs(dz) ? [Math.sign(dx), 0] : [0, Math.sign(dz)];
   const tips = off < FLOOR_W * 1.02;
   S.fallers.push({
@@ -822,7 +852,7 @@ function startFinale() {
     if (!save.done.includes(o.id)) save.done.push(o.id);
   }
   storeTower(t);
-  award(done ? 18 : 8, c);
+  award(done ? ORDER_REWARD : 8, c);
   floors.shared.uSweep.value = 0;
   // Кран отворачивается, чтобы не загораживать дом
   crane.aim(plotX() - 44, -48);
@@ -918,6 +948,7 @@ function buildNext() {
 }
 
 function startPlot(plot) {
+  if (life.trip) life.endTrip();
   if (S.finale) life.park(S.tower);
   const old = S.tower;
   // Участок, на который так и не поставили этажа, снова свободен
@@ -961,7 +992,7 @@ function startPlot(plot) {
   crane.hookY = t.top + 10;
   S.sway = { x: 0, z: 0, vx: 0, vz: 0 };
   S.windK = 1;
-  S.camYaw = 0.52;
+  S.camYaw = S.buildYaw = 0.52;
   fx.clear();
   clearPins();
   marks.visible = false;
@@ -1058,10 +1089,8 @@ function mapWidth() {
 function openMap(plot) {
   if (S.mode === "map") return;
   const from = plot !== undefined ? plot : S.mode === "view" ? S.viewPlot : S.plot;
-  if (S.finale) {
-    life.park(S.tower);
-    if (S.finale.visited && life.trip) life.endTrip();
-  }
+  if (life.trip) life.endTrip();
+  if (S.finale) life.park(S.tower);
   if (S.load) floors.remove(S.load.item);
   S.load = null;
   S.finale = null;
@@ -1137,8 +1166,8 @@ function mapTap(px, py) {
     }
   }
   // Участок шириной в половину шага между домами: ошибиться соседом трудно
-  a.set(plotX(0), 0, 0).project(camera);
-  b.set(plotX(1), 0, 0).project(camera);
+  a.set(S.mapX, 0, 0).project(camera);
+  b.set(S.mapX + PLOT_STEP, 0, 0).project(camera);
   const reach = Math.max(30, (Math.abs(b.x - a.x) * innerWidth) / 4);
   if (best < 0 || bestD > reach) return;
   if (save.towers[best] && save.towers[best].roof && towers[best]) {
@@ -1183,7 +1212,8 @@ function stepOpening(dt) {
 }
 
 function stepCity(dt) {
-  if (city.mood > 0) city.setMood(Math.max(0, city.mood - dt * 0.7));
+  const moodGap = S.cityMood - city.mood;
+  if (Math.abs(moodGap) > 0.001) city.setMood(city.mood + Math.sign(moodGap) * Math.min(Math.abs(moodGap), dt * 1.7));
   if (S.mode !== "map") return;
   if (S.mapV && !drag) {
     S.mapX += S.mapV * dt;
@@ -1341,7 +1371,7 @@ function cameraWanted() {
   // В кадре верх дома, груз над ним и стрела крана
   const D = Math.max(46 / (2 * TAN), 62 / (2 * TAN * aspect));
   const pitch = 0.24 + Math.min(0.16, t.top * 0.0022);
-  return { fx: plotX() + 3, fy: t.top + (innerHeight < 500 ? 3.5 : 6.5), fz: 0, D, pitch, rate: 2.2 };
+  return { fx: plotX() + 3, fy: t.top + (innerHeight < 500 ? 3.5 : 6.5), fz: 0, D, pitch, yaw: S.buildYaw, rate: 2.2 };
 }
 
 // Вид на вход и улицу: сюда приезжают гости
@@ -1561,7 +1591,11 @@ window.addEventListener("keydown", (e) => {
     Sound.unlock();
     if (S.mode === "aim") moveAim(...arrows[e.code]);
     if (S.mode === "map") S.mapX += arrows[e.code][0] * 3;
-  } else if (e.code === "Space" || e.code === "Enter") {
+  } else if (building() && (e.code === "KeyQ" || e.code === "KeyE")) {
+    if (e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
+    e.preventDefault();
+    turnCamera(e.code === "KeyQ" ? -1 : 1);
+  } else if ((e.code === "Space" || e.code === "Enter") && !e.target.closest?.("button, a")) {
     e.preventDefault();
     Sound.unlock();
     if (S.mode === "aim") beginDrop();
@@ -1573,6 +1607,24 @@ $("btn-roof").addEventListener("click", () => {
   Sound.unlock();
   Sound.tap();
   askRoof();
+});
+function turnCamera(direction) {
+  if (!building() || drag || S.fading) return;
+  Sound.unlock();
+  Sound.tap();
+  S.buildYaw = (S.buildYaw + direction * Math.PI / 2) % (2 * Math.PI);
+}
+$("btn-orbit").addEventListener("click", () => turnCamera(1));
+$("btn-mood").addEventListener("click", () => {
+  if (!inCity()) return;
+  Sound.unlock();
+  Sound.tap();
+  S.cityMood = (S.cityMood + 1) % MOODS.length;
+  syncButtons();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) Sound.ctx?.suspend().catch(() => {});
+  else if (save.sound) Sound.ctx?.resume().catch(() => {});
 });
 $("btn-next").addEventListener("click", buildNext);
 $("btn-city").addEventListener("click", () => {

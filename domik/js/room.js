@@ -1,8 +1,8 @@
 // Обустройство внутри: домик раскрывается, как кукольный, а в комнату можно ставить вещи и двигать их пальцем.
-import * as T from "../vendor/three/three.module.min.js?v=e6637b83";
-import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js?v=e6637b83";
-import { mat, easeBack, easeOut } from "./world.js?v=e6637b83";
-import { part, plank, ball, shapeOf, DECK_Y, HOUSE_W, HOUSE_FRONT, HOUSE_BACK, WALL_H } from "./house.js?v=e6637b83";
+import * as T from "../vendor/three/three.module.min.js?v=855b832a";
+import { mergeGeometries } from "../vendor/three/BufferGeometryUtils.js?v=855b832a";
+import { mat, keepAsset, clearParts, disposeGeometry, easeBack, easeOut } from "./world.js?v=855b832a";
+import { part, plank, ball, shapeOf, DECK_Y, BOARD_Y, HOUSE_W, HOUSE_FRONT, HOUSE_BACK, WALL_H } from "./house.js?v=855b832a";
 
 const FLOOR = DECK_Y + 0.13,
   IN_W = HOUSE_W / 2 - 0.13,
@@ -13,6 +13,14 @@ const FLOOR = DECK_Y + 0.13,
   DARK = "#8f5f35",
   TINTS = ["#c98f55", "#ff5d5d", "#ffb02e", "#ffe14d", "#6fd36a", "#39c3f0", "#b07cff", "#ff8cc6", "#ffffff"];
 
+const UP = new T.Vector3(0, 1, 0);
+const ROOM_LIGHTS = { lamp: 18, nightlight: 8, stove: 24, garland: 12 };
+const footprint = (it) => {
+  const angle = it.group.rotation.y;
+  const c = Math.abs(Math.cos(angle));
+  const s = Math.abs(Math.sin(angle));
+  return { w: it.def.w * c + it.def.d * s, d: it.def.w * s + it.def.d * c };
+};
 const col = (c) => (typeof c === "string" ? mat(c, 0.7) : c);
 const box = (g, w, h, d, c, x = 0, y = 0, z = 0, r = 0.03) => plank(g, w, h, d, col(c), x, y, z, r);
 const cyl = (g, rt, rb, h, c, x = 0, y = 0, z = 0, seg = 18) => part(g, new T.CylinderGeometry(rt, rb, h, seg), col(c), x, y, z);
@@ -230,7 +238,7 @@ function picture(i) {
   if (!pictureTextures[i]) {
     const c = canvas(256, 192);
     PICTURES[i](c.getContext("2d"));
-    pictureTextures[i] = texture(c);
+    pictureTextures[i] = keepAsset(texture(c));
   }
   return pictureTextures[i];
 }
@@ -244,8 +252,8 @@ function softDisc(inner, outer) {
   x.fillRect(0, 0, 64, 64);
   return new T.CanvasTexture(c);
 }
-const shadowMat = new T.MeshBasicMaterial({ map: softDisc("rgba(60,35,20,.42)", "rgba(60,35,20,0)"), transparent: true, depthWrite: false, toneMapped: false }),
-  glowMap = softDisc("rgba(255,225,160,.5)", "rgba(255,200,110,0)"),
+const shadowMat = keepAsset(new T.MeshBasicMaterial({ map: softDisc("rgba(60,35,20,.42)", "rgba(60,35,20,0)"), transparent: true, depthWrite: false, toneMapped: false })),
+  glowMap = keepAsset(softDisc("rgba(255,225,160,.5)", "rgba(255,200,110,0)")),
   noPick = () => {};
 function glow(g, x, y, z, size) {
   const s = new T.Sprite(new T.SpriteMaterial({ map: glowMap, blending: T.AdditiveBlending, depthWrite: false, transparent: true, toneMapped: false }));
@@ -275,16 +283,23 @@ function flatten(g) {
     e.geos.push(geo);
     e.nodes.push(n);
   }
-  for (const [material, e] of byMaterial) {
-    if (e.nodes.length < 2) continue;
-    const merged = mergeGeometries(e.geos);
+  const replaced = new Set();
+  for (const [material, entry] of byMaterial) {
+    const merged = entry.nodes.length > 1 ? mergeGeometries(entry.geos) : null;
+    for (const geometry of entry.geos) geometry.dispose();
     if (!merged) continue;
-    for (const n of e.nodes) g.remove(n);
+    for (const node of entry.nodes) {
+      replaced.add(node.geometry);
+      g.remove(node);
+    }
     g.add(new T.Mesh(merged, material));
   }
-  g.traverse((n) => {
-    if (n.isMesh) n.castShadow = n.receiveShadow = false;
+  g.traverse((node) => {
+    if (!node.isMesh) return;
+    replaced.delete(node.geometry);
+    node.castShadow = node.receiveShadow = false;
   });
+  for (const geometry of replaced) disposeGeometry(geometry);
 }
 
 // ---------- список вещей ----------
@@ -943,8 +958,19 @@ export class Room {
     this.reset();
   }
   reset() {
-    for (const it of this.items) this.stuff.remove(it.group);
+    clearParts(this.stuff);
+    clearParts(this.windowGroup);
     this.items = [];
+    this.selected = null;
+    this.resident = null;
+    this.shellMotion = null;
+    if (this.isOpen) {
+      this.world.cosy.position.copy(this.cosyHome);
+      this.world.leafFall.visible = true;
+    }
+    this.isOpen = false;
+    this.group.visible = false;
+    this.world.cosyMin = this.world.roomGlow = 0;
     this.setWall(0);
     this.setFloor(0);
     this.curtainsOpen = true;
@@ -982,7 +1008,7 @@ export class Room {
   buildWindow() {
     const g = this.windowGroup,
       { window: kind, trim } = this.house.config;
-    g.clear();
+    clearParts(g);
     this.sky = new T.MeshBasicMaterial({ color: "#a8e4ff", toneMapped: false });
     const s = 0.56,
       y = 1.95,
@@ -1042,19 +1068,8 @@ export class Room {
     for (const g of [h.railGroup, h.windowGroup, h.decorGroup, h.wayGroup]) g.visible = false;
     h.bird.visible = false;
     for (const p of h.frontParts) p.visible = false;
-    const front = h.boards.slice(0, 10);
-    front.forEach((b, i) => {
-      const y = b.position.y;
-      w.tween(0.32 + i * 0.022, (t) => {
-        b.scale.y = Math.max(0.001, 1 - t);
-        b.position.y = y - (WALL_H / 2) * t;
-      }, () => {
-        b.visible = false;
-        b.scale.y = 1;
-        b.position.y = y;
-      }, easeOut);
-    });
-    w.tween(0.65, (t) => (h.roofGroup.position.y = t * 7), () => (h.roofGroup.visible = false), easeOut);
+    this.animateShell(true);
+    this.selected = null;
     const s = h.squirrel;
     s.userData.size = 1;
     s.scale.setScalar(1);
@@ -1068,30 +1083,52 @@ export class Room {
     const h = this.house,
       w = this.world;
     w.cosy.position.copy(this.cosyHome);
-    w.cosyMin = 0;
+    w.cosyMin = w.roomGlow = 0;
+    this.selected = null;
     w.leafFall.visible = true;
     for (const g of [h.railGroup, h.windowGroup, h.decorGroup, h.wayGroup]) g.visible = true;
     h.bird.visible = !!h.birdSpot;
-    h.door.rotation.y = 0;
+    if (h.door) h.door.rotation.y = 0;
     h.doorOpen = false;
-    h.boards.slice(0, 10).forEach((b, i) => {
-      const y = b.position.y;
-      b.visible = true;
-      w.tween(0.32 + i * 0.022, (t) => {
-        b.scale.y = Math.max(0.001, t);
-        b.position.y = y - (WALL_H / 2) * (1 - t);
-      }, null, easeOut);
-    });
-    h.roofGroup.visible = true;
-    w.tween(0.55, (t) => (h.roofGroup.position.y = (1 - t) * 7), () => Sound.land(), (t) => t * t);
-    w.tween(0.56, () => {}, () => {
-      if (this.isOpen) return;
-      this.group.visible = false;
-      for (const p of h.frontParts) p.visible = true;
-    });
+    this.animateShell(false);
     h.squirrel.userData.size = 1.5;
     h.squirrel.scale.setScalar(1.5);
     h.squirrel.userData.item = null;
+  }
+  animateShell(open) {
+    const motion = {};
+    this.shellMotion = motion;
+    const house = this.house;
+    const front = house.boards.slice(0, 10);
+    front.forEach((board, i) => {
+      const from = board.visible ? board.scale.y : 0;
+      board.visible = true;
+      this.world.tween(0.32 + i * 0.022, (t) => {
+        if (this.shellMotion !== motion) return;
+        const scale = T.MathUtils.lerp(from, open ? 0 : 1, t);
+        board.scale.y = Math.max(0.001, scale);
+        board.position.y = BOARD_Y - (WALL_H / 2) * (1 - scale);
+      }, () => {
+        if (this.shellMotion !== motion) return;
+        board.visible = !open;
+        board.scale.y = 1;
+        board.position.y = BOARD_Y;
+      }, easeOut);
+    });
+    const roof = house.roofGroup;
+    const lift = roof.position.y;
+    roof.visible = true;
+    this.world.tween(open ? 0.65 : 0.56, (t) => {
+      if (this.shellMotion === motion) roof.position.y = T.MathUtils.lerp(lift, open ? 7 : 0, t);
+    }, () => {
+      if (this.shellMotion !== motion) return;
+      roof.visible = !open;
+      if (!open) {
+        Sound.land();
+        this.group.visible = false;
+        for (const part of house.frontParts) part.visible = true;
+      }
+    }, easeOut);
   }
   // Камера ставит комнату в свободную часть экрана: над лотком и под кнопками
   fit(trayPx) {
@@ -1148,7 +1185,9 @@ export class Room {
     return it;
   }
   remove(it) {
+    if (!this.items.includes(it)) return;
     this.items = this.items.filter((o) => o !== it);
+    if (this.selected === it) this.selected = null;
     for (const o of this.items)
       if (o.on === it) {
         o.on = null;
@@ -1159,7 +1198,11 @@ export class Room {
     this.burst(it, ["#ffffff", "#e8e8e8"], 12, 1.5);
     const g = it.group,
       size = it.size;
-    this.world.tween(0.2, (t) => g.scale.setScalar(Math.max(0.001, (1 - t) * size)), () => this.stuff.remove(g), (t) => t);
+    this.world.tween(0.2, (t) => g.scale.setScalar(Math.max(0.001, (1 - t) * size)), () => {
+      if (g.parent !== this.stuff) return;
+      this.stuff.remove(g);
+      clearParts(g);
+    }, (t) => t);
   }
   settle(it) {
     const g = it.group,
@@ -1181,6 +1224,31 @@ export class Room {
       g.position.y += y - last;
       last = y;
     }, null, (t) => t);
+  }
+  canTurn(it) {
+    return Boolean(it && !it.resident && it.def.kind !== "wall");
+  }
+  turnSelected() {
+    const item = this.selected;
+    if (!this.canTurn(item)) return false;
+    const step = Math.PI / 4;
+    const group = item.group;
+    const from = group.position.clone();
+    group.rotation.y = (group.rotation.y + step) % (Math.PI * 2);
+    const { w, d } = footprint(item);
+    if (!item.on) {
+      group.position.x = T.MathUtils.clamp(from.x, -IN_W + w, IN_W - w);
+      group.position.z = T.MathUtils.clamp(from.z, BACK + d, FRONT - d * 0.6);
+    }
+    if (item.def.turns) item.state.turned = true;
+    for (const child of this.items) {
+      if (child.on !== item) continue;
+      child.group.position.sub(from).applyAxisAngle(UP, step).add(group.position);
+      child.group.rotation.y += step;
+    }
+    this.jiggle(item, 0.12);
+    Sound.tap();
+    return true;
   }
   jiggle(it, power = 0.14) {
     const g = it.group,
@@ -1286,23 +1354,27 @@ export class Room {
         const p = this.atHeight(ray, top.y);
         if (!p) continue;
         // Для стола важно, куда смотрит палец: поправка для пола здесь только мешает
-        const px = p.x,
-          pz = p.z,
-          sp = s.group.position,
-          margin = 0.1;
-        if (Math.abs(px - sp.x) <= top.w + margin && Math.abs(pz - sp.z) <= top.d + margin) {
+        const surface = s.group.position;
+        const angle = s.group.rotation.y;
+        const local = p.sub(surface).applyAxisAngle(UP, -angle);
+        const margin = 0.1;
+        if (Math.abs(local.x) <= top.w + margin && Math.abs(local.z) <= top.d + margin) {
           bestY = top.y;
-          spot = { on: s, x: T.MathUtils.clamp(px, sp.x - top.w, sp.x + top.w), z: T.MathUtils.clamp(pz, sp.z - top.d, sp.z + top.d), y: top.y };
+          local.x = T.MathUtils.clamp(local.x, -top.w, top.w);
+          local.z = T.MathUtils.clamp(local.z, -top.d, top.d);
+          const world = local.applyAxisAngle(UP, angle).add(surface);
+          spot = { on: s, x: world.x, z: world.z, y: top.y };
         }
       }
     }
     if (!spot) {
       const p = this.atHeight(ray, 0);
       if (!p) return;
+      const { w, d } = footprint(it);
       spot = {
         on: null,
-        x: T.MathUtils.clamp(p.x + it.grabbed.x, -IN_W + def.w, IN_W - def.w),
-        z: T.MathUtils.clamp(p.z + it.grabbed.y, BACK + def.d, FRONT - def.d * 0.6),
+        x: T.MathUtils.clamp(p.x + it.grabbed.x, -IN_W + w, IN_W - w),
+        z: T.MathUtils.clamp(p.z + it.grabbed.y, BACK + d, FRONT - d * 0.6),
         y: 0,
       };
     }
@@ -1313,7 +1385,7 @@ export class Room {
       g.position.y = spot.y;
       it.on = spot.on;
     }
-    if (def.turns) this.faceTable(it);
+    if (def.turns && !it.state.turned) this.faceTable(it);
     // Что стоит на вещи, едет вместе с ней
     if (def.top)
       for (const o of this.items)
@@ -1404,7 +1476,7 @@ export class Room {
         }
       }
     it.group.position.set(best[0], 0, best[1]);
-    if (def.turns) this.faceTable(it);
+    if (def.turns && !it.state.turned) this.faceTable(it);
   }
   placeOnTop(it) {
     const count = (s) => this.items.filter((o) => o.on === s).length,
@@ -1413,16 +1485,17 @@ export class Room {
     const top = s.def.top,
       sp = s.group.position,
       neighbours = this.items.filter((o) => o.on === s);
-    let spot = [0, 0],
-      bestScore = -1;
-    for (const q of [[0, 0], [-0.8, 0.3], [0.8, 0.3], [0, -0.6]]) {
-      const free = neighbours.reduce((m, o) => Math.min(m, Math.hypot(o.group.position.x - (sp.x + q[0] * top.w), o.group.position.z - (sp.z + q[1] * top.d))), 9);
+    let spot;
+    let bestScore = -1;
+    for (const [x, z] of [[0, 0], [-0.8, 0.3], [0.8, 0.3], [0, -0.6]]) {
+      const candidate = new T.Vector3(x * top.w, top.y, z * top.d).applyAxisAngle(UP, s.group.rotation.y).add(sp);
+      const free = neighbours.reduce((m, o) => Math.min(m, Math.hypot(o.group.position.x - candidate.x, o.group.position.z - candidate.z)), 9);
       if (free > bestScore) {
         bestScore = free;
-        spot = q;
+        spot = candidate;
       }
     }
-    it.group.position.set(sp.x + spot[0] * top.w, top.y, sp.z + spot[1] * top.d);
+    it.group.position.copy(spot);
     it.on = s;
     return true;
   }
@@ -1455,7 +1528,12 @@ export class Room {
   }
   frame(dt, time, night) {
     if (!this.isOpen && !this.group.visible) return;
-    for (const it of this.items) it.def.frame?.(it, dt, time, night);
+    let glow = 0;
+    for (const it of this.items) {
+      it.def.frame?.(it, dt, time, night);
+      if (it.state.on) glow += ROOM_LIGHTS[it.id] || 0;
+    }
+    this.world.roomGlow = this.isOpen ? Math.min(55, glow) : 0;
     this.sky?.color.set("#a8e4ff").lerp(nightSky, night);
   }
   // ---------- сохранение ----------
@@ -1484,7 +1562,8 @@ export class Room {
     this.setWall(data.wall);
     this.setFloor(data.floor);
     this.curtainsOpen = data.curtains !== false;
-    const made = (Array.isArray(data.items) ? data.items : []).slice(0, MAX_ITEMS).map((s) => {
+    const entries = Array.isArray(data.items) ? data.items.slice(0, MAX_ITEMS) : [];
+    const made = entries.map((s) => {
       if (!ITEMS[s?.id]) return null;
       const it = this.make(s.id, s);
       it.group.position.set(+s.x || 0, +s.y || 0, +s.z || 0);
@@ -1492,7 +1571,7 @@ export class Room {
       it.group.scale.setScalar(it.size);
       return it;
     });
-    (data.items || []).slice(0, MAX_ITEMS).forEach((s, i) => {
+    entries.forEach((s, i) => {
       if (made[i] && made[s.on]) made[i].on = made[s.on];
     });
   }

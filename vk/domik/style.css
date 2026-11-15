@@ -85,6 +85,69 @@ button:active {
   font-size: 26px;
   line-height: 1;
 }
+#btn-photo {
+  top: calc(76px + var(--safe-top));
+}
+.room-tools {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 100%;
+  min-width: 0;
+}
+.room-tools .row {
+  min-width: 0;
+}
+#btn-turn {
+  margin-top: 8px;
+  pointer-events: auto;
+  background: #fff3b8;
+}
+#btn-turn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+#photo-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+}
+#photo {
+  width: min(760px, 90vw);
+  max-height: 88vh;
+  margin: auto;
+  padding: 12px;
+  border: 3px solid var(--ink);
+  border-radius: 22px;
+  background: #fff9eb;
+}
+#photo::backdrop { background: #21364dba; }
+#photo-preview {
+  width: 100%;
+  display: block;
+  max-height: 64vh;
+  object-fit: contain;
+  border-radius: 12px;
+}
+.photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.photo-actions > * {
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: #e1efcf;
+  color: var(--ink);
+  font: 800 17px system-ui, sans-serif;
+  text-decoration: none;
+}
+#photo-download { background: #ffda72; }
 /* Лоток с выбором внизу: крупные кнопки для маленьких пальцев */
 #tray {
   position: fixed;
