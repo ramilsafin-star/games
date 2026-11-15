@@ -240,6 +240,7 @@ button:focus-visible {
   display: none;
 }
 .title {
+  pointer-events: none;
   align-content: center;
   gap: 28px;
   background: radial-gradient(ellipse at 50% 40%, #ffffff00, #23305a55 80%);
@@ -320,6 +321,7 @@ button:focus-visible {
   font-size: 28px;
 }
 .sheet h2 small {
+  display: block;
   font-size: 18px;
   color: #ff8f3f;
 }
@@ -539,6 +541,7 @@ button:focus-visible {
   background: radial-gradient(ellipse at 50% 40%, #0000, #0a0f3088 80%);
 }
 .title .big {
+  pointer-events: auto;
   background: linear-gradient(#ffd25f, #ff9f1f);
   box-shadow: 0 7px 0 #c86a10, 0 12px 24px #ff9f1f55;
 }

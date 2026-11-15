@@ -1,15 +1,15 @@
 // 3D «Колеса огоньков»: ночной парк аттракционов, колесо обозрения с кабинками,
 // огоньки с мордочками на ободе, шарики, енотик Фоня с корзинкой, стрелка перед поворотом, салют.
 // Логика (wheel.js) задаёт угол колеса θ(t) и места огоньков; здесь всё рисуется по тем же числам.
-import * as T from "../vendor/three/three.module.min.js?v=a8822816";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=a8822816";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=a8822816";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=a8822816";
-import { polish } from "./gfx.js?v=a8822816";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=a8822816";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=a8822816";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=a8822816";
-import { RADIUS, CONTACT, FLIGHT } from "./wheel.js?v=a8822816";
+import * as T from "../vendor/three/three.module.min.js?v=512c1717";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=512c1717";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=512c1717";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=512c1717";
+import { polish } from "./gfx.js?v=512c1717";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=512c1717";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=512c1717";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=512c1717";
+import { RADIUS, CONTACT, FLIGHT } from "./wheel.js?v=512c1717";
 
 const pie = Math.PI;
 const D2R = pie / 180;
@@ -28,6 +28,9 @@ const LOOKS = [
   { rim: "#8dff8a", spoke: "#ffffff", cab: ["#ff6fa8", "#ffd84a", "#7fe8ff", "#ffa04a"], sky: ["#10285a", "#2a6a7a"] },
   { rim: "#c79bff", spoke: "#fff0ff", cab: ["#ffd84a", "#8dff8a", "#ff6fa8", "#7fe8ff"], sky: ["#1a1850", "#4a2a7a"] },
   { rim: "#ff5f6d", spoke: "#ffe8b0", cab: ["#ffd84a", "#7fe8ff", "#8dff8a", "#c79bff"], sky: ["#160f40", "#6a2a6a"] },
+  { rim: "#83c2ff", spoke: "#ebf7ff", cab: ["#c79bff", "#7fe8ff", "#ffd84a", "#ffffff"], sky: ["#121d53", "#3e4687"] },
+  { rim: "#65efe0", spoke: "#eafdfa", cab: ["#ff6fa8", "#a8ffa8", "#ffd84a", "#7fe8ff"], sky: ["#0d2851", "#375875"] },
+  { rim: "#ffc350", spoke: "#fff7e0", cab: ["#ff6fa8", "#ffd84a", "#8dff8a", "#7fe8ff"], sky: ["#21134c", "#763c76"] },
 ];
 
 function canvasTexture(w, h, draw) {
@@ -69,6 +72,10 @@ const BULB = new T.SphereGeometry(0.22, 22, 16);
 const EYE = new T.SphereGeometry(0.035, 10, 8);
 const EYE_MAT = new T.MeshBasicMaterial({ color: "#2a1a30" });
 const SMILE = new T.TorusGeometry(0.06, 0.014, 6, 14, pie);
+const SHINE = new T.SphereGeometry(0.012, 6, 4);
+const SHINE_MAT = new T.MeshBasicMaterial({ color: "#ffffff" });
+const SHARED_GEOMETRIES = new Set([BULB, EYE, SMILE, SHINE]);
+const SHARED_MATERIALS = new Set([EYE_MAT, SHINE_MAT]);
 function ogonek(color) {
   const g = new T.Group();
   const bulb = new T.Mesh(BULB, new T.MeshStandardMaterial({ color, emissive: glowColor(color, 1.25), roughness: 0.3, toneMapped: false }));
@@ -77,7 +84,7 @@ function ogonek(color) {
     const e = new T.Mesh(EYE, EYE_MAT);
     e.position.set(s * 0.075, 0.04, 0.2);
     g.add(e);
-    const shine = new T.Mesh(new T.SphereGeometry(0.012, 6, 4), new T.MeshBasicMaterial({ color: "#ffffff" }));
+    const shine = new T.Mesh(SHINE, SHINE_MAT);
     shine.position.set(s * 0.075 + 0.012, 0.055, 0.225);
     g.add(shine);
   }
@@ -131,7 +138,7 @@ function raccoon() {
     const pupil = new T.Mesh(new T.SphereGeometry(0.038, 12, 8), glossy("#15101a"));
     pupil.position.set(s * 0.13, 0.05, 0.38);
     head.add(pupil);
-    const shine = new T.Mesh(new T.SphereGeometry(0.012, 6, 4), new T.MeshBasicMaterial({ color: "#ffffff" }));
+    const shine = new T.Mesh(SHINE, SHINE_MAT);
     shine.position.set(s * 0.13 + 0.014, 0.068, 0.415);
     head.add(shine);
     (head.userData.eyes ||= []).push(eye, pupil, shine);
@@ -512,10 +519,21 @@ export class World {
   // ---------- Колесо уровня ----------
   setLevel(level, wheel, index) {
     const G = this.levelGroup;
+    const geometries = new Set();
+    const materials = new Set();
+    const textures = new Set();
     G.traverse((o) => {
-      if (o.geometry && o.geometry !== BULB && o.geometry !== EYE && o.geometry !== SMILE) o.geometry.dispose();
+      if (o.geometry && !SHARED_GEOMETRIES.has(o.geometry)) geometries.add(o.geometry);
+      if (o.material && !SHARED_MATERIALS.has(o.material)) {
+        materials.add(o.material);
+        if (o.material.map && o.material.map !== glowTex) textures.add(o.material.map);
+      }
     });
+    for (const geometry of geometries) geometry.dispose();
+    for (const material of materials) material.dispose();
+    for (const texture of textures) texture.dispose();
     G.clear();
+    for (const tween of this.tweens.splice(0)) tween.done();
     const look = LOOKS[index % LOOKS.length];
     this.look = look;
     this.sky.material.uniforms.top.value.set(look.sky[0]);
@@ -693,10 +711,19 @@ export class World {
     this.bumpMark.add(glowSprite("#ff3060", 1.6, 0.8));
     this.bumpMark.visible = false;
     rot.add(this.bumpMark);
+    // Метка упреждения на вращающемся ободе.
+    this.landingMark = new T.Mesh(
+      new T.TorusGeometry(0.19, 0.035, 8, 28),
+      new T.MeshBasicMaterial({ color: "#9cf5ff", transparent: true, opacity: 0.78, depthWrite: false, toneMapped: false }),
+    );
+    this.landingMark.visible = false;
+    rot.add(this.landingMark);
     this.flyer.g.visible = false;
     this.flying = null;
     this.bounce = null;
+    this.bumpLamp = null;
     this.doneT = null;
+    this.wheelLight.intensity = 0;
     this.wheelLight.position.set(0, H, 3);
     this.setParkLit(0.25);
     this.fitCamera();
@@ -740,6 +767,10 @@ export class World {
       this.flyer.g.visible = false;
       this.flying = null;
       this.addLamp(e.lamp, true);
+      const lit = Math.ceil(((wheel.level.supply - e.left) / wheel.level.supply) * this.cabins.length);
+      for (let i = 0; i < lit; i++) {
+        this.cabins[i].window_.material.color.set("#fff0b0").multiplyScalar(1.6);
+      }
       this.foxJoy = this.time;
       this.burst(new T.Vector3(0, cy, 0.4), 16, [LIGHTS[e.lamp.n % LIGHTS.length], "#ffffff"], 3);
       this.wheelLight.intensity = 6 * (1 - wheel.left / (wheel.lamps.length + wheel.left));
@@ -775,11 +806,16 @@ export class World {
     }
   }
   // ---------- Кадр ----------
-  sync(wheel, dt, assist) {
+  sync(wheel, dt, assist, showLanding) {
     const t = this.time,
       calm = this.motion.matches;
     const th = wheel.theta();
     this.rot.rotation.z = th * D2R;
+    this.landingMark.visible = showLanding && wheel.state === "play";
+    if (this.landingMark.visible) {
+      const a = wheel.predict(wheel.flying?.t0 ?? wheel.t) * D2R;
+      this.landingMark.position.set(Math.cos(a) * this.R, Math.sin(a) * this.R, 0.5);
+    }
     // Кабинки и мордочки огоньков — всегда «головой вверх»
     for (const c of this.cabins) c.hang.rotation.z = -th * D2R + (calm ? 0 : Math.sin(t * 2 + c.hang.id) * 0.04);
     for (const o of this.lampMeshes.values()) o.g.rotation.z = -th * D2R;

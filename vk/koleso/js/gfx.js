@@ -1,6 +1,6 @@
 // Общая «полировка» картинки: лёгкая резкость,
 // сочность бледных цветов, мягкий контраст и виньетка. Один проход после OutputPass.
-import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=c0baf5a6";
+import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=6af566ab";
 
 export function polish(composer, opt = {}) {
   const o = { vibrance: 0.4, contrast: 0.12, vignette: 0.22, sharpen: 0.3, ...opt };

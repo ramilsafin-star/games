@@ -8,14 +8,13 @@
     <meta name="description" content="Ночной парк: енотик Фоня бросает огоньки на колесо обозрения. Бросай, когда внизу свободное место, — и колесо засияет." />
     <link rel="icon" href="./icon-192.png" />
     <link rel="apple-touch-icon" href="./icon-180.png" />
-    <script src="./vendor/vk/vk-bridge.min.js?v=c0baf5a6"></script>
-    <script src="./js/vk-host.js?v=c0baf5a6" data-keys="koleso-v1" data-ad-gap="120"></script>
-    <link rel="stylesheet" href="./style.css?v=c0baf5a6" />
+    <script src="./vendor/vk/vk-bridge.min.js?v=6af566ab"></script>
+    <script src="./js/vk-host.js?v=6af566ab" data-keys="koleso-v1" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=6af566ab" />
   </head>
   <body>
     <canvas id="stage" aria-label="Колесо обозрения: нажми, чтобы бросить огонёк"></canvas>
     <header class="top">
-      
       <button id="map-open" class="round" aria-label="Ночной парк и колёса"></button>
       <div class="hud">
         <div class="track-name" id="level-name"></div>
@@ -53,7 +52,7 @@
     <section id="map" class="screen dim" hidden>
       <div class="sheet">
         <button id="map-close" class="round close" aria-label="Закрыть"></button>
-        <h2>Ночной парк</h2>
+        <h2>Ночной парк <small id="park-stars"></small></h2>
         <div id="levels" class="tracks levels"></div>
       </div>
     </section>
@@ -75,8 +74,8 @@
     <div id="nogl" class="screen nogl" hidden>
       <p>Тут нужна 3D-графика (WebGL), а браузер её не включил. Попробуйте другой браузер.</p>
     </div>
-    <script src="./js/audio.js?v=c0baf5a6"></script>
-    <script type="module" src="./js/game.js?v=c0baf5a6"></script>
-    <script src="./js/juice.js?v=c0baf5a6"></script>
+    <script src="./js/audio.js?v=6af566ab"></script>
+    <script type="module" src="./js/game.js?v=6af566ab"></script>
+    <script src="./js/juice.js?v=6af566ab"></script>
   </body>
 </html>

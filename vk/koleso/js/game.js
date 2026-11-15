@@ -2,9 +2,9 @@ await window.vkGameHost?.ready;
 // «Колесо огоньков»: колесо обозрения крутится, енотик Фоня бросает огоньки снизу.
 // Нажатие — огонёк летит 0,18 с и садится на обод внизу. Занято рядом — отскок, место встречи видно.
 // Все огоньки на колесе — колесо и парк загораются. Логика — wheel.js (tests/wheel.mjs), уровни — levels.js.
-import { World, LIGHTS } from "./world.js?v=c0baf5a6";
-import { LEVELS } from "./levels.js?v=c0baf5a6";
-import { Wheel } from "./wheel.js?v=c0baf5a6";
+import { World, LIGHTS } from "./world.js?v=6af566ab";
+import { LEVELS } from "./levels.js?v=6af566ab";
+import { Wheel } from "./wheel.js?v=6af566ab";
 
 const el = (id) => document.getElementById(id);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -15,7 +15,12 @@ function load() {
   const empty = { v: 1, open: 1, stars: {}, lit: {}, sound: true, music: true, heard: {}, last: 0 };
   try {
     const s = JSON.parse(localStorage.getItem(KEY));
-    if (s && s.v === 1) return { ...empty, ...s };
+    if (s && s.v === 1) {
+      const restored = { ...empty, ...s };
+      // Игроки, завершившие прежний финал, сразу получают следующее колесо.
+      if (restored.open === 6 && restored.lit?.festival) restored.open = 7;
+      return restored;
+    }
   } catch {}
   return empty;
 }
@@ -43,6 +48,7 @@ el("pause").innerHTML = ICON.pause;
 
 // ---------- Звук и голос ----------
 function unlock() {
+  if (document.hidden) return;
   Sound.unlock();
   if (save.music && !paused) Music.start();
 }
@@ -58,6 +64,10 @@ paintToggles();
 el("sound").onclick = () => {
   save.sound = !save.sound;
   Sound.setOn(save.sound);
+  if (!save.sound) {
+    stopSpeech();
+    Music.stop();
+  }
   unlock();
   store();
   paintToggles();
@@ -74,15 +84,22 @@ const recordings = new Map();
 let voice = null,
   speakToken = 0,
   busyUntil = 0;
+function stopVoice() {
+  if (!voice) return;
+  voice.stop();
+  voice = null;
+  busyUntil = 0;
+}
+function stopSpeech() {
+  speakToken++;
+  stopVoice();
+}
 async function say(id, chain = false, force = true) {
-  if (!chain) speakToken++;
-  if (!save.sound || !Sound.ctx) return;
+  if (!save.sound || !Sound.ctx || document.hidden) return;
   if (!force && performance.now() < busyUntil) return;
-  if (voice) {
-    try {
-      voice.stop();
-    } catch {}
-  }
+  if (!chain) speakToken++;
+  const token = speakToken;
+  stopVoice();
   const ctx = Sound.ctx;
   try {
     if (!recordings.has(id)) {
@@ -92,10 +109,11 @@ async function say(id, chain = false, force = true) {
           return r.arrayBuffer();
         })
         .then((d) => ctx.decodeAudioData(d));
-      p.catch(() => {});
+      p.catch(() => recordings.delete(id));
       recordings.set(id, p);
     }
     const buf = await recordings.get(id);
+    if (token !== speakToken || document.hidden || !save.sound) return;
     const src = ctx.createBufferSource();
     src.buffer = buf;
     src.connect(Sound.master);
@@ -103,7 +121,16 @@ async function say(id, chain = false, force = true) {
     voice = src;
     busyUntil = performance.now() + buf.duration * 1000;
     Music.duck(buf.duration + 0.2, 0.35);
-    await new Promise((r) => (src.onended = r));
+    await new Promise((resolve) => {
+      src.onended = () => {
+        src.disconnect();
+        if (voice === src) {
+          voice = null;
+          busyUntil = 0;
+        }
+        resolve();
+      };
+    });
   } catch {}
 }
 async function speak(...ids) {
@@ -135,6 +162,7 @@ world.onFirework = () => Sound.firework();
 let li = 0,
   level = null,
   wheel = null,
+  levelRun = 0,
   mode = "title",
   paused = false,
   assist = false,
@@ -143,6 +171,8 @@ let li = 0,
   lastSaid = false;
 
 function startLevel(i, quiet = false) {
+  levelRun++;
+  stopSpeech();
   li = Math.max(0, Math.min(LEVELS.length - 1, i));
   level = LEVELS[li];
   save.last = li;
@@ -190,16 +220,37 @@ function press() {
   }
 }
 canvas.addEventListener("pointerdown", (e) => {
+  if (!e.isPrimary || e.button !== 0) return;
   e.preventDefault();
+  if (mode === "title" && el("map").hidden) {
+    unlock();
+    world.foxJoy = world.time;
+    Sound.light(1);
+    return;
+  }
   press();
 });
 addEventListener("keydown", (e) => {
-  if (mode === "title" && (e.key === "Enter" || e.key === " ")) return el("play").click();
-  if (["Space", "ArrowUp", "KeyW", "Enter"].includes(e.code)) {
-    e.preventDefault();
-    if (!e.repeat && el("map").hidden && el("result").hidden) press();
+  if (!el("map").hidden) {
+    if (e.code === "Escape") el("map-close").click();
+    return;
   }
-  if (e.code === "Escape" && mode === "play") setPaused(!paused);
+  if (e.code === "Escape" && mode === "play") {
+    if (!e.repeat) setPaused(!paused);
+    return;
+  }
+  const activate = e.key === "Enter" || e.key === " ";
+  if (activate && e.target.closest?.("button, a[href]")) return;
+  const action = mode === "title" ? el("play")
+    : mode === "result" ? el("next").hidden ? el("to-map") : el("next")
+    : paused ? el("resume") : null;
+  if ((action && activate) || (mode === "play" && !paused && (activate || ["ArrowUp", "KeyW"].includes(e.code)))) {
+    e.preventDefault();
+    if (!e.repeat) {
+      if (action) action.click();
+      else press();
+    }
+  }
 });
 function setPaused(v) {
   if (mode !== "play") return;
@@ -222,7 +273,9 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     if (mode === "play") setPaused(true);
     Music.stop();
-  } else if (save.music && Sound.ctx && !paused && mode !== "title") Music.start();
+    stopSpeech();
+    Sound.ctx?.suspend().catch(() => {});
+  } else if (Sound.ctx) unlock();
 });
 
 // ---------- События ----------
@@ -253,13 +306,15 @@ function handle(e) {
     Sound.bump();
     bumpsHere++;
     say(bumpsHere % 3 === 2 ? "wait" : "bump");
-    // Три встречи на колесе — включается подсказка-кружок
-    if (bumpsHere >= 3 && !assist) {
+    if (bumpsHere >= (level.assistAfter ?? 3) && !assist) {
       assist = true;
       if (!save.heard.ring) {
         save.heard.ring = 1;
         store();
-        setTimeout(() => say("ring", false, false), 1300);
+        const runId = levelRun;
+        setTimeout(() => {
+          if (runId === levelRun && mode === "play" && !paused) say("ring", false, false);
+        }, 1300);
       }
     }
   } else if (e.type === "done") finished(e);
@@ -267,6 +322,7 @@ function handle(e) {
 async function finished(e) {
   if (mode !== "play") return;
   mode = "done";
+  const runId = levelRun;
   el("tap").hidden = true;
   Sound.fanfare();
   const stars = 1 + (e.popped === wheel.balloons.length ? 1 : 0) + (e.bumps === 0 ? 1 : 0);
@@ -280,6 +336,7 @@ async function finished(e) {
   store();
   speak("done", ...(firstLit ? ["park"] : []), ...(stars === 3 ? ["stars3"] : []), ...(all && firstLit ? ["allDone"] : opened ? ["next"] : []));
   await wait(2600);
+  if (runId !== levelRun || mode !== "done") return;
   showResult({ stars, firstLit, popped: e.popped, bumps: e.bumps, all });
 }
 function showResult({ stars, firstLit, popped, bumps, all }) {
@@ -294,7 +351,7 @@ function showResult({ stars, firstLit, popped, bumps, all }) {
   parts.push(bumps === 0 ? "★ ни одной встречи" : `встреч с огоньками: ${bumps}`);
   el("result-text").textContent = parts.join(" · ");
   el("next").hidden = li >= LEVELS.length - 1;
-  el("result").hidden = false;
+  el("result").hidden = !el("map").hidden;
 }
 el("again").onclick = () => {
   unlock();
@@ -324,6 +381,8 @@ function openMap() {
     paused = true;
     Music.stop();
   }
+  const earned = LEVELS.reduce((total, l) => total + (save.stars[l.id] || 0), 0);
+  el("park-stars").textContent = `★ ${earned}/${LEVELS.length * 3}`;
   const bg = ["linear-gradient(#ff9fc8,#ff5f9f)", "linear-gradient(#7fd0ff,#3f8cff)", "linear-gradient(#ffc87a,#ff8f2e)", "linear-gradient(#a8ffa8,#3fc86a)", "linear-gradient(#d8b8ff,#8f5bff)", "linear-gradient(#ff9f9f,#ff4f6d)"];
   el("levels").innerHTML = LEVELS.map((l, i) => {
     const open = i < save.open,
@@ -385,7 +444,7 @@ world.onFrame = (dt) => {
       }
     } else turnSaid = false;
   }
-  world.sync(wheel, paused ? 0 : dt, assist && mode === "play");
+  world.sync(wheel, paused ? 0 : dt, assist && mode === "play", mode === "play" && !paused && !level.assist);
 };
 
 // ---------- Заставка ----------
