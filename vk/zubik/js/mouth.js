@@ -1,10 +1,10 @@
-import * as T from "../vendor/three/three.module.min.js?v=d76e1677";
-import "./gfx.js?v=d76e1677";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=d76e1677";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=d76e1677";
-import { toothGeometry, enamel, archCurve, layout, gumGeometry, gumMaterial, labial } from "./teeth.js?v=d76e1677";
-import { makeTools, renderIcon } from "./tools.js?v=d76e1677";
-import { patients } from "./patients.js?v=d76e1677";
+import * as T from "../vendor/three/three.module.min.js?v=d94fb73f";
+import "./gfx.js?v=d94fb73f";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=d94fb73f";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=d94fb73f";
+import { toothGeometry, enamel, archCurve, layout, gumGeometry, gumMaterial, labial } from "./teeth.js?v=d94fb73f";
+import { makeTools, renderIcon } from "./tools.js?v=d94fb73f";
+import { patients } from "./patients.js?v=d94fb73f";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;
@@ -289,6 +289,7 @@ export class Clinic {
   }
   // ---------- Пациент ----------
   clear() {
+    if (this.glow) this.glow.visible = false;
     this.braces(false);
     const materials = new Set();
     this.face.traverse((o) => {
@@ -300,6 +301,12 @@ export class Clinic {
     this.fx.clear();
     this.fx.add(this.sparks, this.foamMesh, this.drops);
     this.foam = [];
+    if (this.foamColor && this.foamMesh) this.foamMesh.material.color.set(this.foamColor);
+  }
+  setFoamColor(color) {
+    this.foamColor = color;
+    if (this.foamMesh) this.foamMesh.material.color.set(color);
+    if (this.tools.brush?.setPasteColor) this.tools.brush.setPasteColor(color);
   }
   // index — какой зверёк, level — сколько пациентов уже вылечено (чем больше, тем больше дел)
   build(index, level) {
@@ -345,6 +352,7 @@ export class Clinic {
     grip.position.set(1.79, -2.12, 0.22);
     grip.rotation.z = 0.65;
     frame.add(grip);
+    this.grip = grip;
     orb(frame, 0, center, 0.16, 2.63, 1.61, 0.23, enamel);
     orb(frame, 0, center, 0.44, 2.48, 1.47, 0.19, glossy("#804962", { roughness: 0.85, clearcoat: 0.04 }));
     band([2.25, 1.32], [1.99, 1.0], "#47a79b", 3.05);
@@ -554,6 +562,43 @@ export class Clinic {
     const k = (z - this.camera.position.z) / dir.z;
     return this.camera.position.clone().addScaledVector(dir, k);
   }
+  hitProp(screenX, screenY) {
+    if (!this.tongue && !this.grip) return null;
+    if (!this.raycaster) this.raycaster = new T.Raycaster();
+    const r = this.canvas.getBoundingClientRect();
+    const ndc = new T.Vector2(((screenX - r.left) / r.width) * 2 - 1, -(((screenY - r.top) / r.height) * 2 - 1));
+    this.raycaster.setFromCamera(ndc, this.camera);
+    const targets = [];
+    if (this.tongue) targets.push(this.tongue);
+    if (this.grip) targets.push(this.grip);
+    const hits = this.raycaster.intersectObjects(targets, false);
+    if (hits.length) {
+      return hits[0].object === this.tongue ? "tongue" : "grip";
+    }
+    if (this.tongue) {
+      const ts = this.screenPoint(this.tongue.getWorldPosition(new T.Vector3()));
+      const rad = this.pixelRadius(0.85);
+      if (Math.abs(screenX - ts.x) < rad * 1.3 && Math.abs(screenY - ts.y) < rad * 0.65) return "tongue";
+    }
+    if (this.grip) {
+      const gs = this.screenPoint(this.grip.getWorldPosition(new T.Vector3()));
+      const rad = this.pixelRadius(0.7);
+      if (Math.hypot(screenX - gs.x, screenY - gs.y) < rad) return "grip";
+    }
+    return null;
+  }
+  tapTongue() {
+    this.tickle = 2.4;
+    this.burst(this.tongue.getWorldPosition(new T.Vector3()).add(new T.Vector3(0, 0.1, 0.2)), 6, 1.0);
+  }
+  tapGrip() {
+    const origZ = this.face.rotation.z;
+    this.tween(0.35, (p) => {
+      this.face.rotation.z = origZ + Math.sin(p * pie * 4) * (1 - p) * 0.09;
+    });
+    this.tickle = Math.max(this.tickle || 0, 1.2);
+    this.burst(this.grip.getWorldPosition(new T.Vector3()).add(new T.Vector3(0, 0.2, 0.2)), 8, 1.2);
+  }
   // ---------- Инструмент в руке ----------
   // name — инструмент или украшение (или null), x/y — где на экране его кончик, active — палец прижат
   pointer(name, x, y, active, touch = false) {
@@ -618,6 +663,10 @@ export class Clinic {
       const br = this.braceIcon(g, labial("central", [0.5, 0.74, 0.26], 0.45), k.id);
       // Крупный план замочка: вокруг видно зубик и проволоку
       out["braces-" + k.id] = renderIcon(this.renderer, this.env, g, { angle: [0.12, -0.3, 0], frame: br, zoom: 0.62 });
+      g.traverse((o) => {
+        if (o.geometry && !SHARED.includes(o.geometry) && o.geometry !== heartGeo && o.geometry !== starGeo) o.geometry.dispose();
+        o.material?.dispose?.();
+      });
     }
     return out;
   }
@@ -752,6 +801,7 @@ export class Clinic {
   fill(c) {
     c.state = "soft";
     const soft = new T.MeshPhysicalMaterial({ color: "#bdf0ff", roughness: 0.08, clearcoat: 1, emissive: "#6fd8ff", emissiveIntensity: 0.4 });
+    c.softMat = soft;
     c.mesh.material = soft;
     c.mesh.children.forEach((m) => (m.material = soft));
     c.mesh.scale.multiplyScalar(1.25);
@@ -761,8 +811,12 @@ export class Clinic {
     item.progress = Math.min(1, item.progress + dt / 1.1);
     if (item.progress === 1) {
       item.state = "done";
-      if (item.frag) item.frag.material = item.tooth.mat;
-      else {
+      item.softMat?.dispose();
+      item.softMat = null;
+      if (item.frag) {
+        if (item.frag.material !== item.tooth.mat) item.frag.material?.dispose?.();
+        item.frag.material = item.tooth.mat;
+      } else {
         // Пломба цвета зуба, почти незаметная
         const m = new T.MeshPhysicalMaterial({ color: "#fffaf1", roughness: 0.13, clearcoat: 1 });
         item.mesh.material = m;

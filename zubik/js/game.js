@@ -1,9 +1,9 @@
 // «Зубик»: ход приёма, инструменты, подсказки, голос, галерея улыбок. Всё 3D — в mouth.js.
-import { Clinic, decorations, braceKinds } from "./mouth.js?v=3296954b";
-import { tools as TOOL_ART, gems, ui } from "./icons.js?v=3296954b";
+import { Clinic, decorations, braceKinds } from "./mouth.js?v=24d361ed";
+import { tools as TOOL_ART, gems, ui } from "./icons.js?v=24d361ed";
 
-import { patients, portraitUrl } from "./patients.js?v=3296954b";
-import { postcard } from "./postcard.js?v=3296954b";
+import { patients, portraitUrl } from "./patients.js?v=24d361ed";
+import { postcard } from "./postcard.js?v=24d361ed";
 
 const el = (id) => document.getElementById(id);
 const KEY = "zubik-v1";
@@ -74,6 +74,30 @@ async function say(id, delay = 0) {
   } catch {}
 }
 const praise = () => say("hint/praise" + (1 + Math.floor(Math.random() * 7)));
+function checkWish(chosenId) {
+  if (chosenId !== patient.wish || patient._wished) return;
+  patient._wished = true;
+  clinic.cheer();
+  el("buddy").animate(
+    [
+      { transform: "translateY(0) scale(1)" },
+      { transform: "translateY(-20px) scale(1.15)" },
+      { transform: "translateY(0) scale(1)" },
+    ],
+    { duration: clinic.motion.matches ? 0 : 520, easing: "ease-out" },
+  );
+  praise();
+  flash("💖");
+}
+function tubeSvg(color, cap, emoji) {
+  return `<svg viewBox="0 0 54 54" aria-hidden="true"><path d="M14 42 L24 14 C25 11 29 11 30 14 L40 42 C41 45 38 48 35 48 L19 48 C16 48 13 45 14 42 Z" fill="${color}" stroke="#1f4b45" stroke-width="1.8"/><rect x="23" y="8" width="8" height="6" rx="2" fill="${cap}" stroke="#1f4b45" stroke-width="1.5"/><circle cx="27" cy="32" r="7.5" fill="#ffffffd0"/><text x="27" y="36.5" font-size="11" text-anchor="middle">${emoji}</text></svg>`;
+}
+const PASTE_FLAVORS = [
+  { id: "strawberry", name: "Клубничная", color: "#ff82aa", emoji: "🍓", svg: tubeSvg("#ff6897", "#fff", "🍓") },
+  { id: "mint", name: "Мятная", color: "#32d8b4", emoji: "🌿", svg: tubeSvg("#2ecaa7", "#fff", "🌿") },
+  { id: "banana", name: "Банановая", color: "#ffd53f", emoji: "🍌", svg: tubeSvg("#f8c826", "#fff", "🍌") },
+];
+let currentFlavor = "strawberry";
 
 // ---------- Шаги приёма ----------
 let clinic,
@@ -140,17 +164,24 @@ function nextPatient() {
   el("photo").hidden = true;
   const index = save.served % patients.length;
   patient = patients[index];
+  patient._wished = false;
+  const round = Math.floor(save.served / patients.length);
   const src = portraitUrl(patient);
   happyPortrait.src = portraitUrl(patient, true);
   el("guest-art").src = el("buddy-img").src = src;
   el("patient-name").textContent = el("who").textContent = patient.name;
-  el("story").textContent = patient.story;
+  el("story").textContent = round > 0 && patient.repeatStory ? patient.repeatStory : patient.story;
   el("story-token").textContent = patient.token;
   if (patient.food === "berry") el("story-token").innerHTML = raspberry;
   el("buddy").hidden = true;
   el("welcome").hidden = false;
   el("start").disabled = el("greet").disabled = false;
   el("start").firstChild.textContent = "Поздороваться ";
+  el("count").textContent = save.served;
+  const decoEl = el("deco-count");
+  if (decoEl) decoEl.textContent = unlocked().length;
+  const decoEl = el("deco-count");
+  if (decoEl) decoEl.textContent = unlocked().length;
   el("tray").replaceChildren();
   el("steps").replaceChildren();
   app.dataset.screen = "welcome";
@@ -163,17 +194,20 @@ const raspberry =
   '<svg viewBox="0 0 64 64" aria-hidden="true"><path fill="#529568" d="M32 23Q12 23 12 11q13-4 20 8 3-15 18-14-1 15-18 18Z"/><g fill="#df4263" stroke="#bc3455" stroke-width="1.7"><circle cx="32" cy="48" r="8"/><circle cx="24" cy="39" r="9"/><circle cx="40" cy="39" r="9"/><circle cx="20" cy="27" r="9"/><circle cx="44" cy="27" r="9"/><circle cx="32" cy="27" r="10"/></g><ellipse cx="29" cy="24" rx="3" ry="2.7" fill="#ffa0a7"/></svg>';
 const waitVoice = (seconds) => new Promise((done) => setTimeout(done, (seconds || 0.2) * 1000));
 async function greet() {
-  if (app.dataset.screen !== "welcome") return;
+  if (app.dataset.screen !== "welcome" || el("gallery").open) return;
   if (greeting) return enterMirror();
   greeting = true;
   unlock();
   Sound.bell();
   el("start").firstChild.textContent = "К зеркалу ";
   const guest = patient;
+  const round = Math.floor(save.served / patients.length);
   await waitVoice(await say(guest.kind + "/hello"));
-  if (app.dataset.screen !== "welcome" || guest !== patient) return;
-  await waitVoice(await say(guest.kind + "/story"));
-  if (app.dataset.screen === "welcome" && guest === patient) enterMirror();
+  if (app.dataset.screen !== "welcome" || guest !== patient || !greeting || el("gallery").open) return;
+  const storyAudio = round > 0 ? (await say(guest.kind + "/story2")) : (await say(guest.kind + "/story"));
+  if (storyAudio) await waitVoice(storyAudio);
+  else if (round > 0) await waitVoice(1.8);
+  if (app.dataset.screen === "welcome" && guest === patient && greeting && !el("gallery").open) enterMirror();
 }
 async function enterMirror() {
   el("welcome").hidden = true;
@@ -191,6 +225,10 @@ function startStep() {
   const st = current();
   tool = st.tools[0] || null;
   deco = null;
+  if (steps[stepAt] === "brush") {
+    const flav = PASTE_FLAVORS.find((f) => f.id === currentFlavor);
+    if (flav) clinic.setFoamColor(flav.color);
+  }
   idleAt = performance.now();
   renderTray();
   renderSteps();
@@ -273,6 +311,8 @@ async function finishPatient() {
   el("photo").hidden = false;
   if (fresh) say("hint/unlock", 1.2);
   el("count").textContent = save.served;
+  const decoEl = el("deco-count");
+  if (decoEl) decoEl.textContent = unlocked().length;
 }
 
 // ---------- Панель инструментов ----------
@@ -286,8 +326,18 @@ function renderTray() {
     if (!tool) tray.innerHTML = "";
   }
   const name = steps[stepAt];
+  if (name === "brush") {
+    tray.innerHTML =
+      `<button class="tool on" data-tool="brush" aria-label="Щётка">${img("brush")}</button>` +
+      PASTE_FLAVORS.map(
+        (f) =>
+          `<button class="tool flavor${currentFlavor === f.id ? " on" : ""}" data-flavor="${f.id}" aria-label="${f.name}">${f.svg}</button>`,
+      ).join("");
+    return;
+  }
   if (name === "decorate") {
     tray.innerHTML =
+      `<div class="tray-progress">Украшений открыто: <b>${unlocked().length} из ${decorations.length}</b></div>` +
       unlocked()
         .map((d) => {
           const b = `<button class="tool gem${patient.wish === d.id ? " wish" : ""}${deco === d.id ? " on" : ""}" data-deco="${d.id}" aria-label="${d.name}">${img(d.id)}</button>`;
@@ -326,12 +376,24 @@ el("tray").addEventListener("click", (e) => {
     finishStep();
     return;
   }
+  if (b.dataset.flavor) {
+    currentFlavor = b.dataset.flavor;
+    const flav = PASTE_FLAVORS.find((f) => f.id === currentFlavor);
+    if (flav) {
+      clinic.setFoamColor(flav.color);
+      Sound.squish();
+      flash(flav.emoji);
+    }
+    renderTray();
+    return;
+  }
   if (b.dataset.kind) {
     // Другой вид брекетов: снимаются старые, надеваются новые
     braceKind = b.dataset.kind;
     clinic.braces(braceKind);
     Sound.sparkle();
     say("hint/braces-" + braceKind);
+    checkWish("braces");
   } else if (b.dataset.deco) {
     const was = deco;
     deco = b.dataset.deco;
@@ -343,6 +405,7 @@ el("tray").addEventListener("click", (e) => {
         clinic.braces(braceKind);
         Sound.sparkle();
         say("hint/braces-" + braceKind);
+        checkWish("braces");
       }
     } else if (!heard.has(deco)) {
       heard.add(deco);
@@ -428,6 +491,22 @@ function ring(item) {
 // Что делает инструмент: down — касание, move — ведёт пальцем, hold — держит (каждый кадр)
 function act(kind, x, y, dist, dt = 0) {
   if (busy) return;
+  if (kind === "down") {
+    const nearTooth = clinic.nearest(clinic.toothTargets(), x, y, R() * 1.3);
+    if (!nearTooth) {
+      const prop = clinic.hitProp(x, y);
+      if (prop === "tongue") {
+        clinic.tapTongue();
+        Sound.boing();
+        return;
+      }
+      if (prop === "grip") {
+        clinic.tapGrip();
+        Sound.boing();
+        return;
+      }
+    }
+  }
   const name = steps[stepAt];
   if (kind === "down" && (name === "cavity" || name === "chip")) {
     const target = clinic.nearest(current().pending(), x, y, R() * 1.6);
@@ -437,11 +516,40 @@ function act(kind, x, y, dist, dt = 0) {
     }
   }
   if (name === "decorate") {
-    if (kind !== "down" || !deco || deco === "braces") return;
+    if (kind !== "down" || !deco || deco === "braces") {
+      if (kind === "down") {
+        const prop = clinic.hitProp(x, y);
+        if (prop === "tongue") {
+          clinic.tapTongue();
+          Sound.boing();
+          return;
+        }
+        if (prop === "grip") {
+          clinic.tapGrip();
+          Sound.boing();
+          return;
+        }
+      }
+      return;
+    }
     const t = clinic.nearest(clinic.toothTargets(), x, y, R() * 1.4);
     if (t) {
-      clinic.decorate(t.tooth, deco);
-      Sound.sparkle();
+      if (clinic.decorate(t.tooth, deco)) {
+        Sound.sparkle();
+        checkWish(deco);
+      }
+    } else if (kind === "down") {
+      const prop = clinic.hitProp(x, y);
+      if (prop === "tongue") {
+        clinic.tapTongue();
+        Sound.boing();
+        return;
+      }
+      if (prop === "grip") {
+        clinic.tapGrip();
+        Sound.boing();
+        return;
+      }
     }
     return;
   }
@@ -501,6 +609,19 @@ function act(kind, x, y, dist, dt = 0) {
       say("hint/lamp");
     }
   } else if (kind === "hold" && (name === "cavity" || name === "chip")) hold(x, y, dt);
+  if (kind === "down") {
+    const prop = clinic.hitProp(x, y);
+    if (prop === "tongue") {
+      clinic.tapTongue();
+      Sound.boing();
+      return;
+    }
+    if (prop === "grip") {
+      clinic.tapGrip();
+      Sound.boing();
+      return;
+    }
+  }
 }
 // Инструменты, которые держат: жужжалка, паста на сколе, лампа
 function hold(x, y, dt) {
@@ -656,6 +777,11 @@ el("compare").onclick = (e) => compareClick(e, el("compare"), el("photo-img"), c
 el("gallery-open").onclick = () => {
   unlock();
   releaseTool();
+  stopVoice();
+  if (greeting && app.dataset.screen === "welcome") {
+    greeting = false;
+    el("start").firstChild.textContent = "Поздороваться ";
+  }
   const grid = el("gallery-grid");
   grid.replaceChildren();
   if (!save.photos.length) grid.textContent = "Здесь появится первый портрет после приёма.";
@@ -675,18 +801,37 @@ el("gallery-open").onclick = () => {
   el("gallery").showModal();
 };
 el("gallery-close").onclick = () => el("gallery").close();
+el("gallery").addEventListener("click", (e) => {
+  if (e.target === el("gallery")) {
+    const rect = el("gallery").getBoundingClientRect();
+    const inDialog =
+      rect.top <= e.clientY &&
+      e.clientY <= rect.top + rect.height &&
+      rect.left <= e.clientX &&
+      e.clientX <= rect.left + rect.width;
+    if (!inDialog) {
+      el("gallery").close();
+    }
+  }
+});
 el("next").onclick = () => {
   unlock();
   say("hint/next");
   nextPatient();
 };
+window.addEventListener("keydown", (e) => {
+  if ((e.key === "Enter" || e.key === " " || e.code === "Space") && !el("photo").hidden) {
+    e.preventDefault();
+    el("next").click();
+  }
+});
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     if (clinic) releaseTool();
     stopVoice();
     Music.stop();
     Sound.stopHum?.();
-  } else if (save.sound && save.music && Sound.ctx) Music.start();
+  } else if (save.sound && save.music) unlock();
 });
 el("gallery-open").innerHTML = ui.photos;
 el("gallery-close").innerHTML = ui.close;
@@ -699,6 +844,8 @@ try {
   stage.addEventListener("pointermove", move);
   stage.addEventListener("pointerup", up);
   stage.addEventListener("pointercancel", up);
+  stage.addEventListener("lostpointercapture", up);
+  stage.addEventListener("contextmenu", (e) => e.preventDefault());
   if (new URLSearchParams(location.search).has("debug"))
     window.zubik = {
       clinic,

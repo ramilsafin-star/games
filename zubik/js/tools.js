@@ -1,7 +1,7 @@
 // 3D-инструменты доктора. У каждого кончик в начале координат, ручка вдоль +Y,
 // рабочая сторона (щетина, бор, луч) смотрит в −Z, то есть в ротик.
-import * as T from "../vendor/three/three.module.min.js?v=3296954b";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=3296954b";
+import * as T from "../vendor/three/three.module.min.js?v=24d361ed";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=24d361ed";
 
 const pie = Math.PI;
 const plastic = (color, extra = {}) => new T.MeshPhysicalMaterial({ color, roughness: 0.28, clearcoat: 1, clearcoatRoughness: 0.12, ...extra });
@@ -29,7 +29,7 @@ function brush() {
   // Колбаска пасты в полоску
   const paste = new T.CatmullRomCurve3([0, 1, 2, 3, 4, 5].map((k) => new T.Vector3(Math.sin(k * 1.4) * 0.04, 0.08 + k * 0.08, -0.1 - Math.cos(k) * 0.01)));
   add(body, new T.TubeGeometry(paste, 40, 0.045, 10), plastic("#ffffff", { roughness: 0.35 }));
-  add(body, new T.TubeGeometry(paste, 40, 0.047, 10, false), plastic("#4fc3ff", { roughness: 0.35, transparent: true, opacity: 0.55 }));
+  const pasteStripe = add(body, new T.TubeGeometry(paste, 40, 0.047, 10, false), plastic("#4fc3ff", { roughness: 0.35, transparent: true, opacity: 0.55 }));
   // Ручка: шейка, розовый корпус, белые вставки
   const neck = add(body, capsule(0.05, 0.5), plastic("#ff7aa8"), 0, 0.95, 0.15);
   neck.rotation.x = -0.12;
@@ -37,6 +37,9 @@ function brush() {
   for (const y of [1.55, 1.75, 1.95]) add(body, new T.TorusGeometry(0.1, 0.025, 8, 24), plastic("#ffffff"), 0, y, 0.21).rotation.x = pie / 2;
   return {
     group: g,
+    setPasteColor(color) {
+      pasteStripe.material.color.set(color);
+    },
     update(t, active) {
       // Чистит: головка ходит взад-вперёд
       body.position.x = active ? Math.sin(t * 28) * 0.05 : 0;
