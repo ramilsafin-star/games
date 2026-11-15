@@ -1,10 +1,10 @@
 await window.vkGameHost?.ready;
 // «Зубик»: ход приёма, инструменты, подсказки, голос, галерея улыбок. Всё 3D — в mouth.js.
-import { Clinic, decorations, braceKinds } from "./mouth.js?v=d94fb73f";
-import { tools as TOOL_ART, gems, ui } from "./icons.js?v=d94fb73f";
+import { Clinic, decorations, braceKinds } from "./mouth.js?v=8211d21b";
+import { tools as TOOL_ART, gems, ui } from "./icons.js?v=8211d21b";
 
-import { patients, portraitUrl } from "./patients.js?v=d94fb73f";
-import { postcard } from "./postcard.js?v=d94fb73f";
+import { patients, portraitUrl } from "./patients.js?v=8211d21b";
+import { postcard } from "./postcard.js?v=8211d21b";
 
 const el = (id) => document.getElementById(id);
 const KEY = "zubik-v1";
@@ -179,8 +179,6 @@ function nextPatient() {
   el("start").disabled = el("greet").disabled = false;
   el("start").firstChild.textContent = "Поздороваться ";
   el("count").textContent = save.served;
-  const decoEl = el("deco-count");
-  if (decoEl) decoEl.textContent = unlocked().length;
   const decoEl = el("deco-count");
   if (decoEl) decoEl.textContent = unlocked().length;
   el("tray").replaceChildren();

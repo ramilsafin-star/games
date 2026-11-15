@@ -1,10 +1,10 @@
-import * as T from "../vendor/three/three.module.min.js?v=d94fb73f";
-import "./gfx.js?v=d94fb73f";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=d94fb73f";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=d94fb73f";
-import { toothGeometry, enamel, archCurve, layout, gumGeometry, gumMaterial, labial } from "./teeth.js?v=d94fb73f";
-import { makeTools, renderIcon } from "./tools.js?v=d94fb73f";
-import { patients } from "./patients.js?v=d94fb73f";
+import * as T from "../vendor/three/three.module.min.js?v=8211d21b";
+import "./gfx.js?v=8211d21b";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=8211d21b";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=8211d21b";
+import { toothGeometry, enamel, archCurve, layout, gumGeometry, gumMaterial, labial } from "./teeth.js?v=8211d21b";
+import { makeTools, renderIcon } from "./tools.js?v=8211d21b";
+import { patients } from "./patients.js?v=8211d21b";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;
