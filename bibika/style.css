@@ -74,12 +74,19 @@ button:active {
   height: 66px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 9px;
+}
+.home-slot:empty {
+  display: none;
+}
+.home-slot a {
+  text-decoration: none;
 }
 .brand {
   font-size: 28px;
   font-weight: 900;
   letter-spacing: -1px;
+  margin-right: auto;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -167,6 +174,20 @@ button:active {
   display: block;
   touch-action: none;
   cursor: grab;
+}
+#selected-name {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  max-width: calc(100% - 164px);
+  padding: 7px 12px;
+  border-radius: 16px;
+  background: #fbffe9f5;
+  color: var(--ink);
+  font-size: clamp(13px, 2.2vw, 18px);
+  font-weight: 800;
+  overflow-wrap: anywhere;
+  pointer-events: none;
 }
 #hero-car:active {
   cursor: grabbing;
@@ -309,7 +330,7 @@ button:active {
   gap: 10px;
   justify-content: center;
   flex-wrap: wrap;
-  padding: 18px 0 2px;
+  padding: 18px 0 12px;
 }
 .paint-chip {
   position: relative;
@@ -338,6 +359,22 @@ button:active {
   place-items: center;
   font-size: 17px;
   opacity: 0.6;
+}
+.paint-cost {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  bottom: -8px;
+  transform: translateX(-50%);
+  background: #fff4cb;
+  color: #5f4116;
+  border-radius: 999px;
+  padding: 1px 4px;
+  font-size: clamp(10px, 1.7vw, 13px);
+  line-height: 1.1;
+  font-weight: 900;
+  white-space: nowrap;
+  pointer-events: none;
 }
 /* Ближайший цвет показывает, сколько звёзд до него осталось */
 .paint-chip.next {
@@ -566,6 +603,17 @@ body[data-mode="drive"] #drive {
   border: 2px solid #fff;
   box-shadow: 0 1px 2px #0005;
   transition: left 0.3s linear;
+}
+#star-combo {
+  flex: none;
+  padding: 4px 8px;
+  margin-left: 5px;
+  margin-right: 24px;
+  border-radius: 999px;
+  background: #fff0b7;
+  color: #66441b;
+  font-weight: 900;
+  font-size: clamp(12px, 2.4vw, 18px);
 }
 #star-end {
   position: absolute;
@@ -966,11 +1014,22 @@ body[data-finished="yes"] .drive-bottom {
     font-size: 58px;
   }
 }
+@media (max-width: 360px) {
+  .garage-header, .header-tools { gap: 5px; }
+  .garage-header .brand { font-size: 20px; gap: 5px; }
+  .garage-header .brand-mark { width: 31px; height: 31px; line-height: 29px; }
+  .garage-header .icon-button { width: 40px; height: 40px; border-radius: 14px; }
+  .garage-header .total-stars { padding: 6px 9px; font-size: 15px; }
+}
 @media (max-width: 430px) {
+  #selected-name { max-width: calc(100% - 134px); }
   .paint-list {
     flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
     gap: 4px;
-    padding-top: 14px;
+    padding: 14px 4px 12px;
   }
   .paint-chip {
     width: 34px;
@@ -1092,11 +1151,12 @@ body[data-finished="yes"] .drive-bottom {
     font-size: 25px;
     line-height: 44px;
   }
+  #selected-name { max-width: calc(100% - 114px); }
   .paint-list {
     flex-wrap: nowrap;
     overflow-x: auto;
     justify-content: flex-start;
-    padding: 9px 3px 2px;
+    padding: 9px 3px 12px;
     gap: 6px;
     scrollbar-width: none;
   }

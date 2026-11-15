@@ -132,13 +132,12 @@ function updateWagon(e, dt, fx) {
   }
 }
 
-function addWorkTarget(type, x, y) {
-  if (type === "fire") {
-    Game.entities.push({kind:"brazier", x, y, heat:1, phase:0});
-  } else {
-    for (let i = 0; i < 3; i++)
-      Game.entities.push({kind:"crop", x, y:y - i * 75, phase:i});
-  }
+function addWorkTarget(type, x, y, count = 3) {
+  const targets = type === "fire"
+    ? [{ kind: "brazier", x, y, heat: 1, phase: 0 }]
+    : Array.from({ length: count }, (_, i) => ({ kind: "crop", x, y: y - i * 75, phase: i }));
+  Game.entities.push(...targets);
+  return targets;
 }
 
 function updateWorkTarget(e, dt, fx, ahead, dx, airborne) {
@@ -158,7 +157,9 @@ function updateWorkTarget(e, dt, fx, ahead, dx, airborne) {
 }
 
 function finishWorkTarget(e) {
+  if (e.spent || Game.finished) return;
   e.spent = true;
+  if (completeWork(e)) return;
   Game.entities.push({kind:"star", x:e.x, y:e.y - 45, phase:e.phase});
 }
 

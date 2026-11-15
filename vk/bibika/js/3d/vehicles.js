@@ -1,7 +1,7 @@
-import * as T from "../../vendor/three/three.module.min.js?v=517659a9";
-import { RoundedBoxGeometry } from "../../vendor/three/RoundedBoxGeometry.js?v=517659a9";
-import { mergeGeometries } from "../../vendor/three/BufferGeometryUtils.js?v=517659a9";
-import { GLTFLoader } from "../../vendor/three/GLTFLoader.js?v=517659a9";
+import * as T from "../../vendor/three/three.module.min.js?v=d6b13c21";
+import { RoundedBoxGeometry } from "../../vendor/three/RoundedBoxGeometry.js?v=d6b13c21";
+import { mergeGeometries } from "../../vendor/three/BufferGeometryUtils.js?v=d6b13c21";
+import { GLTFLoader } from "../../vendor/three/GLTFLoader.js?v=d6b13c21";
 
 // Metres. Local -Z is the nose. Animated assemblies remain separate from the body.
 const surfaces = new Map(),

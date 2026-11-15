@@ -24,12 +24,13 @@
     <main id="garage">
       <section class="stage-panel">
         <header class="garage-header">
+          <nav class="home-slot"><a class="icon-button" href="../" aria-label="Все игры">🎮</a></nav>
           <span class="brand"
             ><span class="brand-mark">b.</span>бибика<span class="brand-dot"
               >★</span
             ></span
           >
-          <div class="header-tools"><a class="icon-button" href="../" aria-label="Все игры" style="text-decoration:none">🎮</a>
+          <div class="header-tools">
             <span class="total-stars" aria-label="Всего звёзд"
               >★ <b id="total-count">0</b></span
             ><button
@@ -57,7 +58,7 @@
               <span aria-hidden="true">🚨</span>
             </button>
           </div>
-          <span id="selected-name" class="visually-hidden" aria-live="polite"></span>
+          <span id="selected-name" aria-live="polite"></span>
           <button id="btn-play" class="play-button" disabled aria-label="Поехали">
             <span class="play-icon" aria-hidden="true">▶</span>
           </button>
@@ -92,6 +93,7 @@
               <i style="left: 33.3%"></i><i style="left: 66.6%"></i>
               <span id="rival-dots" aria-hidden="true"></span>
             </div>
+            <span id="star-combo" hidden></span>
             <span id="star-end" aria-hidden="true">★</span>
           </div>
           <button id="btn-pause" class="icon-button" aria-label="Пауза">
@@ -183,9 +185,7 @@
         status.textContent =
           "Этот браузер не тянет 3D-графику игры. Обновите систему устройства или откройте игру в свежем Safari или Chrome.";
       };
-      setTimeout(function () {
-        if (!window.driveView) window.bibikaFail();
-      }, 30000);
+      setTimeout(window.bibikaFail, 30000);
     </script>
     <script src="./js/audio.js"></script>
     <script src="./js/art.js"></script>

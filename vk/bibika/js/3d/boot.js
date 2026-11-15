@@ -1,6 +1,6 @@
-import { DriveView } from "./view.js?v=517659a9";
-import { prepareFacades } from "./scenery.js?v=517659a9";
-import { prepareConcept } from "./vehicles.js?v=517659a9";
+import { DriveView } from "./view.js?v=d6b13c21";
+import { prepareFacades } from "./scenery.js?v=d6b13c21";
+import { prepareConcept } from "./vehicles.js?v=d6b13c21";
 // Игра (js/game.js) уже загружена обычным скриптом: гараж виден сразу, а 3D догоняет.
 function progress(event) {
   if (event.lengthComputable)

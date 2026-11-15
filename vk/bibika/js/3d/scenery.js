@@ -1,5 +1,5 @@
-import * as T from "../../vendor/three/three.module.min.js?v=517659a9";
-import { mergeGeometries } from "../../vendor/three/BufferGeometryUtils.js?v=517659a9";
+import * as T from "../../vendor/three/three.module.min.js?v=d6b13c21";
+import { mergeGeometries } from "../../vendor/three/BufferGeometryUtils.js?v=d6b13c21";
 
 export const UNITS_PER_METRE = 22,
   TILE = 64;

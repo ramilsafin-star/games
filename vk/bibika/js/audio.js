@@ -241,7 +241,7 @@ const Sound = {
 
   // Сирена погони: протяжный вой, вплотную частый. Громкость задаёт расстояние до полиции
   siren(level, close = false) {
-    if (!this.ctx) return;
+    if (!this.ctx || (!level && !this.wail)) return;
     const c = this.ctx;
     if (!this.wail) {
       const sweep = c.createOscillator(),

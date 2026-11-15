@@ -6,11 +6,24 @@ function missionHint(text, brake = false) {
   $("btn-brake").hidden = !brake;
 }
 
+const WORK_GOAL = 3;
+const WORK_JOBS = {
+  fire: { world: 0, icon: "🔥", title: "Потуши 3 огонька", unit: "огоньков", action: "Полей огонёк водой", stop: 310 },
+  harvester: { world: 1, icon: "🌾", title: "Собери урожай", unit: "рядов колосьев", action: "Включи жатку", stop: 65 },
+};
+
+function workJob(world, car) {
+  const job = WORK_JOBS[car];
+  return job?.world === world ? job : null;
+}
+
 function garageMission() {
-  const city = save.world === 0, farm = save.world === 1 && save.car === "tractor";
+  const city = save.world === 0;
+  const farm = save.world === 1 && save.car === "tractor";
+  const job = workJob(save.world, save.car);
   const button = $("btn-mission");
-  button.hidden = !city && !farm;
-  button.textContent = city
+  button.hidden = !job && !city && !farm;
+  button.textContent = job ? job.icon + " " + job.title : city
     ? save.car === "police" ? "🚓 На дежурство" : "🚦 Правила города"
     : "🌾 Собрать три тюка";
 }
@@ -19,12 +32,46 @@ function beginEpisode(mode) {
   Game.demo = mode === "demo";
   Game.farm = mode === "mission" && Game.world === 1 && Game.car.type === "tractor"
     ? { count: 0, bale: null, next: 0.25 } : null;
-  Game.city = !Game.demo && Game.world === 0 ? {
+  const job = mode === "mission" && workJob(Game.world, Game.car.type);
+  Game.work = job ? { job, count: 0, target: null, next: 0.3 } : null;
+  Game.city = !Game.demo && !Game.work && Game.world === 0 ? {
     manual: mode === "mission", signal: driveView.nextSignal(0), phase: "approach",
     lesson: true, brake: false, elapsed: 0, npc: null,
   } : null;
   missionHint(Game.demo ? CARS[Game.car.type].icon + " " + CARS[Game.car.type].power
     : Game.farm ? "🌾   0 / 3   ·   Подъедь к тюку" : "");
+  if (Game.work) workHint(Game.work, "Подъезжай к цели");
+}
+
+function workHint(work, action = "") {
+  missionHint(`${work.job.icon}   ${work.count} / ${WORK_GOAL}${action ? "   ·   " + action : ""}`);
+}
+
+function workSpeed(work, base, dt) {
+  const car = Game.car;
+  if (!work.target) {
+    work.next -= dt;
+    if (work.next <= 0) {
+      [work.target] = addWorkTarget(car.type, nearestLane(car.x), car.y - 720, 1);
+      workHint(work, "Подъезжай к цели");
+    }
+  }
+  if (!work.target) return base * 0.5;
+  const gap = car.y - work.target.y;
+  if (gap < work.job.stop + 230) workHint(work, work.job.action);
+  return Math.min(base * 0.55, Math.max(0, (gap - work.job.stop) * 1.8));
+}
+
+function completeWork(e) {
+  const work = Game.work;
+  if (work?.target !== e || Game.finished) return false;
+  work.count++;
+  work.target = null;
+  work.next = 0.75;
+  workHint(work);
+  collect({ x: e.x, y: e.y });
+  if (work.count === WORK_GOAL) finish();
+  return true;
 }
 
 function bladeExtension(t) {
@@ -216,6 +263,7 @@ function episodeSpeed(dt, base) {
     }
     return base * 0.62;
   }
+  if (Game.work) return workSpeed(Game.work, base, dt);
   if (Game.city) return citySpeed(Game.city, base, dt);
   const farm = Game.farm;
   if (!farm) return base;
@@ -244,7 +292,7 @@ const CHASE_MEMORY = 16,
   CHASE_FAR = 62,
   CHASE_CLOSE = 7.5;
 function callPolice() {
-  if (Game.demo || Game.farm || Game.city?.manual || Game.finished || Game.car.type === "police") return;
+  if (Game.demo || Game.farm || Game.work || Game.city?.manual || Game.finished || Game.car.type === "police") return;
   if (Game.chase) {
     Game.chase.memory = CHASE_MEMORY;
     return;

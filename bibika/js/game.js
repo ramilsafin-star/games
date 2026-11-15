@@ -271,10 +271,11 @@ function paintNextThumb() {
   window.driveView.thumbnail(card.querySelector("canvas"), type);
 }
 function selectCar(type) {
+  applyPendingPaint();
   save.car = type;
   store();
   const c = CARS[type];
-  $("selected-name").textContent = c.name + ". " + c.power;
+  $("selected-name").textContent = c.name + " · " + c.icon + " " + c.power;
   $("hero-car").setAttribute("aria-label", c.name);
   $("hero-power").textContent = c.icon;
   $("hero-power").setAttribute("aria-label", "Показать: " + c.power);
@@ -339,6 +340,11 @@ function buildGarage() {
     const b = document.createElement("button");
     b.className = "paint-chip";
     b.type = "button";
+    const cost = document.createElement("span");
+    cost.className = "paint-cost";
+    cost.setAttribute("aria-hidden", "true");
+    cost.textContent = "★" + p.at;
+    b.appendChild(cost);
     b.addEventListener("click", () => choosePaint(p));
     $("paint-list").appendChild(b);
   });
@@ -356,6 +362,7 @@ function syncPaints() {
       open = save.stars >= p.at;
     b.style.setProperty("--swatch", p.color || CARS[type].color);
     b.classList.toggle("locked", !open);
+    b.firstElementChild.hidden = open;
     b.setAttribute("aria-pressed", String(open && p.id === chosen));
     b.setAttribute(
       "aria-label",
@@ -374,6 +381,20 @@ function syncPaints() {
     }
   });
 }
+let pendingPaint;
+function applyPendingPaint(celebrate = false) {
+  if (!pendingPaint) return;
+  const { type, timer } = pendingPaint;
+  pendingPaint = null;
+  clearTimeout(timer);
+  window.driveView?.setPaint(type, paintSpec(type));
+  if (window.driveView?.ready) thumbQueue.unshift(type);
+  if (celebrate && Game.mode === "garage" && type === save.car) {
+    Sound.gift();
+    paintHero();
+  }
+}
+
 function choosePaint(p) {
   Sound.unlock();
   if (save.stars < p.at) {
@@ -386,18 +407,14 @@ function choosePaint(p) {
   }
   const type = save.car;
   if ((save.paint[type] || "own") === p.id) return;
+  applyPendingPaint();
   save.paint[type] = p.id;
   store();
   syncPaints();
   Sound.splash();
   washBubbles(p.color || CARS[type].color);
   // Кузов меняет цвет в самой пене, а не до неё
-  setTimeout(() => {
-    window.driveView?.setPaint(type, paintSpec(type));
-    Sound.gift();
-    if (window.driveView?.ready) thumbQueue.unshift(type);
-    paintHero();
-  }, 420);
+  pendingPaint = { type, timer: setTimeout(() => applyPendingPaint(true), 420) };
 }
 // Тюнинг одним касанием: диски по кругу, мигалка вкл/выкл
 function syncTune() {
@@ -475,6 +492,7 @@ function clearInput() {
 }
 function startDrive(mode) {
   if (!window.driveView?.ready) return;
+  applyPendingPaint();
   driveView.begin(save.world);
   driveView.far = save.farCamera;
   Sound.unlock();
@@ -565,7 +583,7 @@ function startDrive(mode) {
   };
   setWorld(save.world, false);
   beginEpisode(mode);
-  if (!Game.demo && !Game.farm) {
+  if (!Game.demo && !Game.farm && !Game.work) {
     fillRoad();
     addRivals();
   }
@@ -576,7 +594,7 @@ function startDrive(mode) {
     $("world-toast").classList.remove("show");
   } else showToast(WORLDS[Game.world].icon);
   syncCameraButton();
-  $("star-end").textContent = Game.farm ? "🌾" : "★";
+  $("star-end").textContent = Game.work?.job.icon || (Game.farm ? "🌾" : "★");
   $("fire-ammo").textContent = AMMO[save.car].icon;
   $("btn-fire").setAttribute("aria-label", "Стрелять: " + AMMO[save.car].name);
   $("btn-fire").classList.remove("call");
@@ -585,8 +603,8 @@ function startDrive(mode) {
     "aria-label",
     CARS[save.car].power + ": " + CARS[save.car].description,
   );
-  $("steer-hint").style.opacity = Game.demo || Game.farm ? "0" : "1";
-  hud.stars = hud.power = hud.fill = null;
+  $("steer-hint").style.opacity = Game.demo || Game.farm || Game.work ? "0" : "1";
+  hud.stars = hud.power = hud.fill = hud.combo = null;
   updateHUD();
   $("btn-pause").focus({ preventScroll: true });
 }
@@ -596,7 +614,7 @@ function garage() {
   clearInput();
   Game.mode = "garage";
   Game.demo = false;
-  Game.farm = Game.city = null;
+  Game.farm = Game.city = Game.work = null;
   missionHint("");
   Game.paused = false;
   Game.finished = false;
@@ -622,6 +640,7 @@ function pause() {
     : $("btn-pause");
   Game.paused = true;
   Sound.engine(Game.car.type, false, false);
+  Sound.siren(0);
   clearInput();
   $("dialog-backdrop").hidden = false;
   $("btn-resume").focus();
@@ -647,7 +666,7 @@ function finish() {
   Game.finale = 0;
   Game.fireworkIn = 0.15;
   clearInput();
-  if (!Game.farm) missionHint("");
+  if (!Game.farm && !Game.work) missionHint("");
   Sound.fanfare();
   const id = WORLDS[Game.world].id;
   save.stickers[id] = (save.stickers[id] || 0) + 1;
@@ -662,7 +681,8 @@ function finish() {
 }
 function showFinish() {
   Game.finishShown = true;
-  $("finish-sticker").textContent = Game.farm ? "🌾" : WORLDS[Game.world].icon;
+  $("finish-sticker").textContent = Game.work?.job.icon || (Game.farm ? "🌾" : WORLDS[Game.world].icon);
+  $("finish").querySelector(".finish-card").setAttribute("aria-label", Game.farm || Game.work ? "Задание выполнено!" : "Все звёзды собраны!");
   const fresh = PAINTS.find((p) => p.id === Game.newPaints[0]);
   $("finish-paint").hidden = !fresh;
   if (fresh) {
@@ -709,7 +729,7 @@ function collect(e) {
     Sound.gift();
   }
   updateHUD();
-  if (!Game.demo && !Game.farm && Game.stars >= TARGET_STARS) finish();
+  if (!Game.demo && !Game.farm && !Game.work && Game.stars >= TARGET_STARS) finish();
 }
 function burst(x, y, color, n = 16) {
   for (let i = 0; i < n; i++) {
@@ -1085,17 +1105,24 @@ function moveRival(e, dt) {
     e.dot.style.left = pct + "%";
   }
 }
-const hud = { stars: null, power: null, fill: null };
+const hud = { stars: null, power: null, fill: null, combo: null };
 function updateHUD() {
-  const progress = Game.farm ? Game.farm.count : Game.stars;
-  const goal = Game.farm ? 3 : TARGET_STARS;
+  const job = Game.farm || Game.work;
+  const progress = job ? job.count : Game.stars;
+  const goal = job ? WORK_GOAL : TARGET_STARS;
+  const combo = !job && Game.sinceStar < 1.6 && Game.combo >= 2 ? Game.combo : 0;
+  if (hud.combo !== combo) {
+    hud.combo = combo;
+    $("star-combo").hidden = combo === 0;
+    $("star-combo").textContent = combo ? "×" + combo : "";
+  }
   if (hud.stars !== progress) {
     const grew = hud.stars !== null && progress > hud.stars;
     hud.stars = progress;
     $("star-fill").style.width = `${(progress / goal) * 100}%`;
     $("star-progress").setAttribute(
       "aria-label",
-      Game.farm ? `${progress} из 3 тюков` : `${progress} из ${goal} звёзд`,
+      `${progress} из ${goal} ${Game.work?.job.unit || (Game.farm ? "тюков" : "звёзд")}`,
     );
     if (grew) {
       const end = $("star-end");
@@ -1352,7 +1379,7 @@ function update(dt) {
   }
   // Мёртвая петля: дорога замирает, машина проходит круг и вылетает с ускорением
   const metres = Game.distance / 22;
-  if (!Game.loop && !done) {
+  if (!Game.loop && !done && !Game.work) {
     const start = window.driveView?.loopAt(metres);
     if (start != null && Game.loopedAt !== start) {
       Game.loop = { theta: 0, s: start };
@@ -1411,7 +1438,7 @@ function update(dt) {
     if (zone && !done) Sound.whoosh();
   }
   // Вертолёт прилетает, кружит над дорогой и сбрасывает подарки на парашютах
-  if (!done && !Game.farm && !Game.demo && !(Game.city?.manual)) {
+  if (!done && !Game.farm && !Game.work && !Game.demo && !(Game.city?.manual)) {
     Game.heliIn -= dt;
     if (!Game.heli && Game.heliIn <= 0) {
       Game.heli = { t: 0, x: -520, y: c.y - 860, alt: 11, vx: 0, drops: 2, dropIn: 2.6 };
@@ -1486,7 +1513,7 @@ function update(dt) {
   const bounds = fx === "allterrain" ? [53, 547] : [145, 455];
   c.tx = Game.city?.phase === "pullOver" ? 483 : clamp(c.tx, ...bounds);
   // На уборке держим ковш на фиксированной глубине, пока игрок выбирает полосу.
-  c.ty = Game.farm ? CAR_Y : clamp(c.ty, Game.h * 0.38, Game.h - 165);
+  c.ty = Game.farm || Game.work ? CAR_Y : clamp(c.ty, Game.h * 0.38, Game.h - 165);
   const blend = 1 - Math.exp(-dt * 20),
     oldX = c.x;
   c.x = lerp(c.x, c.tx, blend);
@@ -1505,7 +1532,7 @@ function update(dt) {
       Game.fireworkIn = 0.42 + Math.random() * 0.3;
     }
     if (!Game.finishShown && Game.finale >= FINALE_DELAY) showFinish();
-  } else if (!Game.demo && !Game.farm) fillRoad();
+  } else if (!Game.demo && !Game.farm && !Game.work) fillRoad();
   const airborne =
       c.air > 0 || fx === "jump" || fx === "fly" || leap || !!Game.loop,
     // Ребёнок не рулит: звёзды и трамплины сами подъезжают, машины уступают
@@ -1775,6 +1802,10 @@ function update(dt) {
         c.bump = 0.9;
         Game.shake = Math.max(Game.shake, 0.7);
         giveWay(e);
+        if (e.kind === "traffic") {
+          c.tx = nearestLane(c.x);
+          e.y -= 70;
+        }
         Sound.boing();
         addRing(c.x, c.y, "#fff1b9", 80);
       }
@@ -2114,6 +2145,8 @@ document.addEventListener("visibilitychange", () => {
     clearInput();
     pause();
     if (Sound.ctx) Sound.ctx.suspend().catch(() => {});
+  } else if (save.sound && !Game.paused && Sound.ctx) {
+    Sound.unlock();
   }
 });
 // На iPad панель Safari дёргает высоту при поездке: палец сбрасываем только при повороте

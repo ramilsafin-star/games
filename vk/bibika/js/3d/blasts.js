@@ -1,9 +1,9 @@
 // Взрыв машины: разлетаются куски её настоящей модели, растут объёмные клубы огня и дыма,
 // на дороге остаётся подпалина. Всё считается в координатах дороги и уезжает назад вместе с ней.
-import * as T from "../../vendor/three/three.module.min.js?v=517659a9";
-import { mergeVertices } from "../../vendor/three/BufferGeometryUtils.js?v=517659a9";
-import { wreckParts } from "./vehicles.js?v=517659a9";
-import { bend, heading, rise, riseSlope, UNITS_PER_METRE } from "./scenery.js?v=517659a9";
+import * as T from "../../vendor/three/three.module.min.js?v=d6b13c21";
+import { mergeVertices } from "../../vendor/three/BufferGeometryUtils.js?v=d6b13c21";
+import { wreckParts } from "./vehicles.js?v=d6b13c21";
+import { bend, heading, rise, riseSlope, UNITS_PER_METRE } from "./scenery.js?v=d6b13c21";
 
 const BIG_BALLS = 48,
   SMALL_BALLS = 170,

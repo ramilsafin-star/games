@@ -1,6 +1,6 @@
-import * as T from "../../vendor/three/three.module.min.js?v=517659a9";
-import "./gfx.js?v=517659a9";
-import { RoomEnvironment } from "../../vendor/three/RoomEnvironment.js?v=517659a9";
+import * as T from "../../vendor/three/three.module.min.js?v=d6b13c21";
+import "./gfx.js?v=d6b13c21";
+import { RoomEnvironment } from "../../vendor/three/RoomEnvironment.js?v=d6b13c21";
 import {
   vehicle,
   pose,
@@ -14,7 +14,7 @@ import {
   fishGeometry,
   washRollers,
   animalModel,
-} from "./vehicles.js?v=517659a9";
+} from "./vehicles.js?v=d6b13c21";
 import {
   Scenery,
   bend,
@@ -38,8 +38,8 @@ import {
   TILE,
   LOOP_RADIUS,
   UNITS_PER_METRE,
-} from "./scenery.js?v=517659a9";
-import { Blasts } from "./blasts.js?v=517659a9";
+} from "./scenery.js?v=d6b13c21";
+import { Blasts } from "./blasts.js?v=d6b13c21";
 
 const TOOL_CAMERA_OFFSET = { whistle: 4.5, harvest: 6, scoop: 4.8, water: 3.3 };
 const SHOT_LIMIT = 32;

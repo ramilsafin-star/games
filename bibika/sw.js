@@ -1,4 +1,4 @@
-const CACHE = "bibika-v31-juice";
+const CACHE = "bibika-v32-missions";
 const FILES = [
   "./",
   "./index.html",
@@ -69,6 +69,10 @@ self.addEventListener("fetch", (e) => {
         }
         return r;
       })
-      .catch(() => caches.match(e.request)),
+      .catch(async () => {
+        const cache = await caches.open(CACHE);
+        const cached = await cache.match(e.request);
+        return cached || (await cache.match(e.request, { ignoreSearch: true })) || Response.error();
+      }),
   );
 });
