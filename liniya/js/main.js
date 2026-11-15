@@ -1,11 +1,11 @@
 // «Линия спасения»: экраны, ввод, игровой цикл, сохранение и связь с VK.
-import { LEVELS, CHAPTERS, PER_CHAPTER, ATTRACT, dailyLevel } from "./levels.js?v=dbaf642d";
-import { useMatter, createSim, DT, play } from "./sim.js?v=dbaf642d";
-import { Pen, starsFor, W, H, flyHit } from "./world.js?v=dbaf642d";
-import { View, THEMES } from "./view.js?v=dbaf642d";
-import { Sound } from "./sound.js?v=dbaf642d";
-import { FOLK, critter } from "./art.js?v=dbaf642d";
-import * as R from "./rules.js?v=dbaf642d";
+import { LEVELS, CHAPTERS, PER_CHAPTER, ATTRACT, dailyLevel } from "./levels.js?v=8fd75fe1";
+import { useMatter, createSim, DT, play } from "./sim.js?v=8fd75fe1";
+import { Pen, starsFor, W, H, flyHit } from "./world.js?v=8fd75fe1";
+import { View, THEMES } from "./view.js?v=8fd75fe1";
+import { Sound } from "./sound.js?v=8fd75fe1";
+import { FOLK, critter } from "./art.js?v=8fd75fe1";
+import * as R from "./rules.js?v=8fd75fe1";
 
 useMatter(window.Matter);
 const host = window.vkGameHost;
@@ -61,6 +61,7 @@ const game = {
   paused: false,
   ended: false,
   resultAt: 0,
+  resultSheet: null,
   wonAt: 0,
   open: 0,
   dt: 0,
@@ -91,6 +92,7 @@ function layout() {
   st.setProperty("--wh", H * view.s + "px");
   st.setProperty("--wr", w - view.ox - W * view.s + "px");
   st.setProperty("--wb", h - view.oy - H * view.s + "px");
+  if (game.mode === "level") updateHud();
 }
 addEventListener("resize", layout);
 layout();
@@ -98,6 +100,7 @@ if (autoLow || save.quality === 2) applyQuality();
 
 // ---------- Экраны ----------
 function screen(name) {
+  Sound.buzz(0);
   game.mode = name;
   document.body.dataset.screen = name;
   $("menu").hidden = name !== "menu";
@@ -143,7 +146,7 @@ function startAttract() {
   const line = L.sol[0].map(([x, y]) => [x, y]);
   game.attractLine = line;
   game.attractAt = performance.now();
-  game.attractDrawn = 0;
+  game.attractJoyAt = -Infinity;
 }
 function attractTick(now) {
   const sim = game.sim;
@@ -217,6 +220,7 @@ function startLevel(i, opts = {}) {
     paused: false,
     ended: false,
     resultAt: 0,
+    resultSheet: null,
     wonAt: 0,
     open: 0,
     demo: !!L.demo && !save.stars[i] && !opts.hint && !L.daily,
@@ -318,6 +322,9 @@ function updateHud() {
   $("hint-n").textContent = free ? "✓" : n;
   $("hint").classList.toggle("free", !!free);
   $("hint").classList.toggle("on", game.hint);
+  const editing = sim.state === "draw" && !game.paused && $("sheet").hidden;
+  $("undo").disabled = !editing || !!game.pen || !sim.lines.length;
+  $("go").hidden = !editing || !!game.pen || (L.type === "home" ? !sim.ready : !sim.lines.length);
 }
 
 // ---------- Рисование ----------
@@ -334,6 +341,16 @@ function canDraw() {
   return game.strokes > 0 && sim.inkLeft > 4;
 }
 stage.addEventListener("pointerdown", (e) => {
+  if (!e.isPrimary || e.button !== 0) return;
+  if (game.mode === "menu" && $("sheet").hidden) {
+    game.attractJoyAt = performance.now() / 1000;
+    for (const h of game.sim.heroes) {
+      view.burst("heart", h.b.position.x, h.b.position.y - 30);
+    }
+    Sound.unlock();
+    Sound.home();
+    return;
+  }
   if (!canDraw() || game.pen) return;
   const p = worldPoint(e);
   const pen = new Pen(game.L, game.lines, game.sim.inkLeft);
@@ -349,6 +366,7 @@ stage.addEventListener("pointerdown", (e) => {
   stage.setPointerCapture?.(e.pointerId);
   lastMove = { p, t: performance.now() };
   $("task").classList.add("fade");
+  updateHud();
 });
 stage.addEventListener("pointermove", (e) => {
   const pen = game.pen;
@@ -386,7 +404,10 @@ function penUp(e) {
   game.pen = null;
   game.pending = false;
   Sound.scratch(0);
-  if (!pen.pts.length) return;
+  if (!pen.pts.length) {
+    updateHud();
+    return;
+  }
   const res = pen.finish();
   const { sim, L } = game;
   if (!res.ok) {
@@ -405,16 +426,15 @@ function penUp(e) {
     Sound.fly();
     $("flyhud").className = "flyhud on";
   }
+  game.lines.push(res.pts);
   if (L.type === "home") {
     sim.addPath(res.walker, res.pts, res.len);
     game.taken.push(res.walker);
-    if (sim.ready) launch();
+    if (L.walkers.length === 1 && sim.ready) launch();
   } else {
     sim.addStroke(res.pts, res.len);
-    game.lines.push(res.pts);
     game.strokes--;
-    if (game.strokes <= 0 || sim.inkLeft < 12) launch();
-    else $("go").hidden = false;
+    if (L.strokes === 1) launch();
   }
   updateHud();
 }
@@ -422,14 +442,45 @@ stage.addEventListener("pointerup", penUp);
 stage.addEventListener("pointercancel", penUp);
 stage.addEventListener("lostpointercapture", penUp);
 
+$("undo").onclick = () => {
+  if ($("undo").disabled || adBusy) return;
+  const { sim, L } = game;
+  if (L.type === "home") {
+    if (sim.undoPath() === null) return;
+    game.taken.pop();
+  } else {
+    if (!sim.undoStroke()) return;
+    game.strokes++;
+  }
+  game.lines.pop();
+  if (game.flyGot && !game.lines.some((line) => flyHit(L, line))) {
+    game.fly.state = "free";
+    game.flyGot = false;
+    $("flyhud").className = "flyhud";
+  }
+  Sound.back();
+  updateHud();
+};
+
+function updateTimer() {
+  const { sim, L } = game;
+  const left = Math.max(0, L.time - sim.t);
+  const shield = L.type === "shield";
+  const timer = $("timer");
+  timer.hidden = sim.state !== "run" || (!shield && left > 4);
+  if (timer.hidden) return;
+  timer.classList.toggle("warn", !shield);
+  $("timer-text").textContent = `${shield ? "Держись" : "Время"}: ${left.toFixed(1).replace(".", ",")} с`;
+  $("timer-fill").style.transform = `scaleX(${left / L.time})`;
+}
 function launch() {
   const sim = game.sim;
-  if (sim.state !== "draw") return;
+  if (sim.state !== "draw" || game.paused || adBusy || !$("sheet").hidden) return;
   sim.start();
   Sound.go();
-  $("go").hidden = true;
   $("task").classList.add("fade");
-  if (game.L.type === "shield") $("timer").hidden = false;
+  updateTimer();
+  updateHud();
 }
 $("go").onclick = () => {
   if (adBusy) return;
@@ -478,8 +529,14 @@ const LOSE_TIP = {
   ghost: "Привидения летят сквозь землю и камни, но не сквозь линию. Закрой Тошу с той стороны, откуда они летят.",
   wisp: "Огонёк сжигает линию, которой коснётся. Нарисуй ещё одну — запасную.",
 };
+function afterRun(sim, delay, effect) {
+  setTimeout(() => {
+    if (game.sim === sim && !game.paused && !adBusy && !document.hidden && !host?.hidden) effect();
+  }, delay);
+}
 function finish() {
   const { sim, L } = game;
+  if (game.ended) return;
   game.ended = true;
   $("timer").hidden = true;
   const won = sim.state === "won";
@@ -522,9 +579,9 @@ function finish() {
       ${last ? `<p>Звёзд собрано: ${R.totalStars(save)} из ${LEVELS.length * 3}.</p>` : ""}
       <div class="row">${last ? `<button class="btn primary" data-a="map">К уровням</button>` : `<button class="btn primary" data-a="next">Дальше <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>`}</div>
       <div class="row"><button class="btn" data-a="again">Ещё раз</button><button class="btn" data-a="menu">В меню</button></div>`;
-    stars && [0, 1, 2].slice(0, stars).forEach((k) => setTimeout(() => Sound.star(k), 260 + k * 250));
-    if (newFly) setTimeout(() => Sound.fly(), 1000);
-    if (awards.length) setTimeout(() => Sound.reward(), 1300);
+    for (let k = 0; k < stars; k++) afterRun(sim, 260 + k * 250, () => Sound.star(k));
+    if (newFly) afterRun(sim, 1000, Sound.fly);
+    if (awards.length) afterRun(sim, 1300, Sound.reward);
   } else {
     const why = sim.why;
     const tip = LOSE_TIP[why] || "Попробуй нарисовать иначе.";
@@ -587,7 +644,7 @@ function finishDaily(won) {
     : `<p class="eyebrow">ЗАДАЧА ДНЯ</p><h2 id="result-title">${LOSE_TEXT[game.sim.why] || "Ой!"}</h2><p>${LOSE_TIP[game.sim.why] || "Вспомни, как решался этот уровень, — только всё наоборот."}</p>
       <div class="row"><button class="btn primary" data-a="again">Ещё раз</button></div>
       <div class="row"><button class="btn" data-a="menu">В меню</button></div>`;
-  if (won && (got || awards.length)) setTimeout(() => Sound.reward(), 700);
+  if (won && (got || awards.length)) afterRun(game.sim, 700, Sound.reward);
   showSheet(html, won ? "win" : "lose");
 }
 const plural = (n, one, few, many) => (n % 10 === 1 && n % 100 !== 11 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? few : many);
@@ -665,11 +722,12 @@ function settingsSheet() {
 
 // ---------- Окна ----------
 function showSheet(html, kind) {
+  if (kind === "win" || kind === "lose") game.resultSheet = { html, kind };
   $("sheet-body").innerHTML = html;
   $("sheet").hidden = false;
   $("sheet").dataset.kind = kind;
   $("go").hidden = true;
-  const first = $("sheet-body").querySelector(".btn.primary, .btn");
+  const first = $("sheet-body").querySelector(".btn.primary:not(:disabled)") || $("sheet-body").querySelector(".btn:not(:disabled)");
   first?.focus({ preventScroll: true });
 }
 function hideSheet() {
@@ -677,9 +735,10 @@ function hideSheet() {
   $("sheet").dataset.kind = "";
 }
 function pause() {
-  if (game.mode !== "level" || game.paused || game.ended) return;
+  if (game.mode !== "level" || game.paused || game.ended || !$("sheet").hidden) return;
   game.paused = true;
   if (game.pen) penUp();
+  Sound.buzz(0);
   pauseSheet();
 }
 function pauseSheet() {
@@ -695,7 +754,7 @@ function resume() {
   game.paused = false;
   hideSheet();
   Sound.unlock();
-  if (game.sim?.state === "draw" && game.strokes < game.L.strokes && game.L.type !== "home") $("go").hidden = false;
+  updateHud();
 }
 
 function hintSheet() {
@@ -724,7 +783,8 @@ function openHint() {
     } else startLevel(L.index, { hint: true, retry: true });
     return;
   }
-  if (game.sim.state === "run") game.paused = true;
+  if (game.sim.state !== "draw") game.paused = true;
+  Sound.buzz(0);
   hintSheet();
 }
 function grantHint(byAd) {
@@ -753,11 +813,13 @@ $("sheet-body").addEventListener("click", async (e) => {
   else if (a === "map") showMap(L ? L.chapter : game.chapter);
   else if (a === "menu") showMenu();
   else if (a === "close") {
-    hideSheet();
     if (game.mode === "level") {
-      game.paused = false;
-      if (game.ended) finish();
-    } else if (game.mode === "menu") paintMenu();
+      if (game.ended && game.resultSheet) showSheet(game.resultSheet.html, game.resultSheet.kind);
+      else resume();
+    } else {
+      hideSheet();
+      if (game.mode === "menu") paintMenu();
+    }
   } else if (a === "settings") settingsSheet();
   else if (a === "pause-back") pauseSheet();
   else if (a === "daily-go") startLevel(0, { daily: todayDaily() });
@@ -885,12 +947,26 @@ $("sound").onclick = () => {
   if (on) Sound.tap();
 };
 addEventListener("keydown", (e) => {
-  if (game.mode !== "level") return;
+  if (adBusy || e.defaultPrevented) return;
+  const sheet = $("sheet");
+  if (e.key === "Enter" || e.key === " ") {
+    const focused = e.target.closest?.("button, a[href], input, textarea, select, [contenteditable]");
+    if (focused && (sheet.hidden || sheet.contains(focused))) return;
+    let action;
+    if (!sheet.hidden) action = $("sheet-body").querySelector(".btn.primary:not(:disabled)");
+    else if (game.mode === "menu") action = $("play");
+    else if (game.mode === "level" && !$("go").hidden) action = $("go");
+    if (action) {
+      e.preventDefault();
+      if (!e.repeat) action.click();
+    }
+    return;
+  }
+  if (e.repeat || game.mode !== "level") return;
   if (e.key === "Escape") {
-    if (game.paused && $("sheet").dataset.kind === "pause") resume();
+    if (game.paused && sheet.dataset.kind === "pause") resume();
     else pause();
-  } else if ((e.key === "r" || e.key === "к") && $("sheet").hidden) restart();
-  else if ((e.key === " " || e.key === "Enter") && !$("go").hidden) launch();
+  } else if ((e.key === "r" || e.key === "к") && sheet.hidden) restart();
 });
 // любое нажатие разрешает звук (браузеры требуют жест игрока)
 addEventListener("pointerdown", () => Sound.on && Sound.unlock());
@@ -1005,7 +1081,7 @@ function handleFx() {
         view.flash(p.x, p.y - 30);
         Sound.win();
       }
-    } else if (f.k === "lose" && game.mode === "level") setTimeout(() => Sound.lose(), 350);
+    } else if (f.k === "lose" && game.mode === "level") afterRun(sim, 350, Sound.lose);
   }
   if (game.mode === "level" || game.mode === "menu") {
     const bugs = sim.bugs ? sim.bugs.length : 0;
@@ -1047,11 +1123,8 @@ function frame(now) {
     } else acc = 0;
     if (game.mode === "level") {
       game.levelTime += dt;
-      if (sim.state === "run" && game.L.type === "shield") {
-        const left = Math.max(0, game.L.time - sim.t);
-        $("timer").innerHTML = `Держись: ${left.toFixed(1).replace(".", ",")} с<i style="transform:scaleX(${left / game.L.time})"></i>`;
-      }
-      if (sim.state !== "draw" && sim.state !== "run" && !game.ended) {
+      updateTimer();
+      if (sim.state !== "draw" && sim.state !== "run" && !game.ended && $("sheet").hidden) {
         if (!game.resultAt) game.resultAt = now + (sim.state === "won" ? 1300 : 1000);
         if (now >= game.resultAt) finish();
       }

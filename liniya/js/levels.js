@@ -1,8 +1,8 @@
 // Главы и уровни «Линии спасения». Только данные и маленькие помощники — без DOM.
 // Координаты мира: 1280 × 720, y вниз. У каждого уровня есть эталон sol — ломаные,
 // которыми уровень точно проходится (проверяется тестами и показывается как подсказка).
-import { compile } from "./world.js?v=dbaf642d";
-import { arc } from "./geom.js?v=dbaf642d";
+import { compile } from "./world.js?v=8fd75fe1";
+import { arc } from "./geom.js?v=8fd75fe1";
 
 // ---------- Помощники ----------
 const R = (x, y, w, h, m, o) => ({ shape: "rect", x, y, w, h, m: m || "ground", ...o });

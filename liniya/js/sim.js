@@ -1,8 +1,8 @@
 // Симуляция уровня с постоянным шагом 1/120 с. Физика — matter.js (передаётся снаружи:
 // в браузере window.Matter, в Node — require). DOM не нужен, поэтому проверки гоняют
 // те же правила, что и игра.
-import { dist, rng, cumLengths, pathAt, chaikin, polyLength } from "./geom.js?v=dbaf642d";
-import { W, H, LINE_T, HERO_R, WALKER_R, BERRY_R, icicle, drawWith } from "./world.js?v=dbaf642d";
+import { dist, rng, cumLengths, pathAt, chaikin, polyLength } from "./geom.js?v=8fd75fe1";
+import { W, H, LINE_T, HERO_R, WALKER_R, BERRY_R, icicle, drawWith } from "./world.js?v=8fd75fe1";
 
 export const HZ = 120;
 export const DT = 1 / HZ;
@@ -222,7 +222,7 @@ class PhysSim {
     body.plugin = { k: "line" };
     Composite.add(this.world, body);
     const local = pts.map(([x, y]) => [x - body.position.x, y - body.position.y]);
-    const line = { b: body, local, pts, pins: [], cons: [], burn: 0, gone: false };
+    const line = { b: body, local, pts, ink: len, pins: [], cons: [], burn: 0, gone: false };
     // Гвоздики: линия, прошедшая рядом, на них повисает
     for (const nail of this.L.nails) {
       let best = Infinity,
@@ -255,6 +255,17 @@ class PhysSim {
     this.lines.push(line);
     this.inkUsed += len;
     return line;
+  }
+
+  undoStroke() {
+    if (this.state !== "draw") return false;
+    const line = this.lines.pop();
+    if (!line) return false;
+    const { Composite } = M;
+    for (const constraint of line.cons) Composite.remove(this.world, constraint);
+    Composite.remove(this.world, line.b);
+    this.inkUsed = Math.max(0, this.inkUsed - line.ink);
+    return true;
   }
 
   start() {
@@ -588,8 +599,15 @@ class PhysSim {
     }
     if (tg.k === "star" && L.lock && dist([p.x, p.y], [L.lock[0], L.lock[1] - 36]) < 40) return this.end(true, "key");
     if (tg.k === "roll" && L.house && dist([p.x, p.y], [L.house[0], L.house[1] - 34]) < 42) return this.end(true, "home");
-    const v = Body.getVelocity(tg.b);
-    tg.still = Math.hypot(v.x, v.y) < 0.08 ? (tg.still || 0) + DT : 0;
+    const moved = Math.hypot(p.x - tg.prevX, p.y - tg.prevY);
+    tg.prevX = p.x;
+    tg.prevY = p.y;
+    // Плот может двигаться под целью, даже если её позиция за шаг почти не изменилась.
+    const onMover = this.movers.some((m) => (m.dx || m.dy) && p.y < m.b.position.y
+      && this.engine.pairs.list.some((pair) => pair.isActive
+        && ((pair.collision.parentA === tg.b && pair.collision.parentB === m.b)
+          || (pair.collision.parentB === tg.b && pair.collision.parentA === m.b))));
+    tg.still = moved < 0.015 && !onMover ? (tg.still || 0) + DT : 0;
     if (tg.still > 2.5 && !this.doors.some((d) => d.open > 0 && d.open < 1)) return this.end(false, "stuck");
     if (this.t > L.time) this.end(false, "time");
   }
@@ -721,8 +739,19 @@ class HomeSim {
     w.path = smooth;
     w.cum = cumLengths(smooth);
     w.len = w.cum[w.cum.length - 1];
-    this.lines.push({ walker: i, pts: smooth, c: w.c });
-    this.inkUsed += len ?? polyLength(pts);
+    const ink = len ?? polyLength(pts);
+    this.lines.push({ walker: i, pts: smooth, c: w.c, ink });
+    this.inkUsed += ink;
+  }
+  undoPath() {
+    if (this.state !== "draw") return null;
+    const line = this.lines.pop();
+    if (!line) return null;
+    const w = this.walkers[line.walker];
+    w.path = w.cum = null;
+    w.len = 0;
+    this.inkUsed = Math.max(0, this.inkUsed - line.ink);
+    return line.walker;
   }
   get ready() {
     return this.walkers.every((w) => w.path);

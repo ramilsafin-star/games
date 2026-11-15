@@ -1,8 +1,8 @@
 // Отрисовка уровня: фон главы, земля (кэш в отдельном холсте), линии, герои, опасности, частицы.
-import { W, H, LINE_VIEW, HERO_R, WALKER_R, BERRY_R, HOUSE_R } from "./world.js?v=dbaf642d";
-import { patrolAt } from "./sim.js?v=dbaf642d";
-import { rng, dist, cumLengths, pathAt } from "./geom.js?v=dbaf642d";
-import * as A from "./art.js?v=dbaf642d";
+import { W, H, LINE_VIEW, HERO_R, WALKER_R, BERRY_R, HOUSE_R } from "./world.js?v=8fd75fe1";
+import { patrolAt } from "./sim.js?v=8fd75fe1";
+import { rng, dist, cumLengths, pathAt } from "./geom.js?v=8fd75fe1";
+import * as A from "./art.js?v=8fd75fe1";
 
 const { ellipse, TAU } = A;
 
@@ -179,7 +179,7 @@ export class View {
     this.cv.width = Math.round(w * this.dpr);
     this.cv.height = Math.round(h * this.dpr);
     const side = w < 900 ? 60 : 72,
-      top = h < 450 ? 54 : 64;
+      top = w <= 620 ? 94 : h < 450 ? 54 : 64;
     const aw = w - safe.l - safe.r,
       ah = h - safe.t - safe.b;
     const sA = Math.min((aw - 2 * side) / W, (ah - 6) / H);
@@ -1087,8 +1087,11 @@ export class View {
       const p = h.b.position;
       if (h === sim.target) continue;
       A.groundShadow(c, p.x, p.y + HERO_R, HERO_R);
-      const mood = this.moodOf(h, g, t);
-      const jump = sim.state === "won" ? Math.abs(Math.sin((t - g.wonAt) * 7)) * 16 : 0;
+      const cheer = g.mode === "menu" ? (t - g.attractJoyAt) / 0.55 : 1;
+      const cheering = cheer >= 0 && cheer < 1;
+      const mood = cheering ? "joy" : this.moodOf(h, g, t);
+      const jump = cheering ? Math.sin(cheer * Math.PI) * 30
+        : sim.state === "won" ? Math.abs(Math.sin((t - g.wonAt) * 7)) * 16 : 0;
       // пока рисуют — иногда подпрыгивает и переминается (живой, а не картинка)
       const idle = sim.state === "draw" ? idleHop(t, h.c) : 0;
       A.critter(c, p.x, p.y - jump - idle * 10, HERO_R, h.c, {

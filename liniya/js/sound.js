@@ -122,7 +122,7 @@ function buzzVoice() {
   o.start();
   o2.start();
   lfo.start();
-  return { g, o, o2, lfo };
+  return { g, o, o2, lfo, lg, f };
 }
 
 // ---------- Музыка: тихий пентатонический мотив, своя тоника у каждой главы ----------
@@ -165,7 +165,7 @@ export const Sound = {
   },
   set(v) {
     on = !!AC && v;
-    if (!on) ctx?.suspend().catch(() => {});
+    if (!on) this.hush();
   },
   toggle() {
     this.set(!on);
@@ -214,11 +214,18 @@ export const Sound = {
     scratch.f.frequency.setTargetAtTime(2000 + Math.min(2500, speed * 6), a.currentTime, 0.05);
   },
   buzz(n) {
+    if (n <= 0) {
+      if (!buzz) return;
+      const { g, o, o2, lfo, lg, f } = buzz;
+      buzz = null;
+      for (const oscillator of [o, o2, lfo]) oscillator.stop();
+      for (const node of [g, o, o2, lfo, lg, f]) node.disconnect();
+      return;
+    }
     const a = live();
     if (!a) return;
-    if (!buzz && n > 0) buzz = buzzVoice();
-    if (!buzz) return;
-    buzz.g.gain.setTargetAtTime(Math.min(0.05, n * 0.004), a.currentTime, 0.1);
+    buzz ??= buzzVoice();
+    buzz?.g.gain.setTargetAtTime(Math.min(0.05, n * 0.004), a.currentTime, 0.1);
   },
   tap: () => tone(660, 0.07, "triangle", 0.08, 1.3),
   back: () => tone(520, 0.08, "triangle", 0.07, 0.75),
