@@ -385,7 +385,9 @@
       <!-- Right: Controls & Kill Feed -->
       <div class="flex flex-col items-end gap-1.5">
         <div class="flex items-center gap-1.5 pointer-events-auto">
-          <button id="btn-pause-hud" class="glass px-2.5 py-1.5 rounded-xl text-xs font-black text-amber-300 hover:bg-slate-800/90" title="Пауза [Esc]">⏸</button>
+          <button id="btn-pause-hud" class="glass px-2.5 py-1.5 rounded-xl text-xs font-black text-amber-300 hover:bg-slate-800/90" title="Пауза и настройки (Esc)">
+            ⏸
+          </button>
           <button id="btn-music-hud" class="glass px-2.5 py-1.5 rounded-xl text-xs font-black text-cyan-300 hover:bg-slate-800/90" title="Индастриал-саундтрек (N)">
             N♫
           </button>
@@ -409,7 +411,7 @@
       </div>
 
       <!-- Twisted Metal 5-Slot Weapon Carousel + Mines + Energy Quick Moves -->
-      <div class="flex flex-col items-center gap-1.5 pointer-events-auto mx-auto scale-90 sm:scale-100 origin-bottom">
+      <div class="fixed bottom-[152px] left-1/2 -translate-x-1/2 sm:static sm:translate-x-0 flex flex-col items-center gap-1.5 pointer-events-auto sm:mx-auto scale-90 sm:scale-100 origin-bottom">
         <div id="weapon-carousel" class="glass rounded-2xl p-1.5 flex items-center gap-1.5"></div>
         <div class="flex items-center gap-1.5 text-[10px] font-black">
           <button id="btn-mine" class="glass px-2.5 py-1 rounded-lg text-rose-300 hover:bg-slate-800/90 active:scale-95">💣 МИНА <span id="hud-mines">3</span> [X/ПКМ]</button>
@@ -441,19 +443,19 @@
     <div id="touch-knob" class="touch-knob"></div>
   </div>
 
-  <!-- Индикатор направления полученного урона -->
+  <!-- Directional Damage Indicator -->
   <div id="dmg-dir-wrap" class="fixed inset-0 pointer-events-none z-25 flex items-center justify-center opacity-0 transition-opacity duration-200">
     <div id="dmg-dir-ring" class="w-64 h-64 sm:w-80 sm:h-80 rounded-full border-t-[10px] border-t-rose-500 border-x-transparent border-b-transparent shadow-[0_-14px_30px_rgba(244,63,94,0.75)]"></div>
   </div>
 
-  <!-- Меню паузы и настроек -->
+  <!-- ===================== PAUSE & SETTINGS MODAL ===================== -->
   <div id="pause-modal" class="hidden fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
     <div class="glass rounded-3xl p-6 max-w-sm w-full space-y-4 border-amber-400/40">
       <h2 class="font-display text-2xl text-amber-400 text-center">ПАУЗА</h2>
       <div class="space-y-3 text-xs">
         <label class="block">
-          <div class="flex justify-between font-bold text-slate-300 mb-1"><span>Громкость эффектов</span><span id="set-sfx-val">100%</span></div>
-          <input id="set-sfx" type="range" min="0" max="100" value="100" class="w-full accent-amber-400" />
+          <div class="flex justify-between font-bold text-slate-300 mb-1"><span>Громкость звука</span><span id="set-sfx-val">100%</span></div>
+          <input id="set-sfx" type="range" min="0" max="100" value="100" class="w-full accent-amber-400 cursor-pointer" />
         </label>
         <div class="flex items-center justify-between bg-slate-900/70 px-3 py-2 rounded-xl">
           <span class="font-bold text-slate-200">Тени 3D</span>
@@ -467,8 +469,8 @@
       <div class="flex flex-col gap-2 pt-1">
         <button id="btn-resume" class="btn-primary font-display py-2.5 rounded-2xl text-slate-950">ПРОДОЛЖИТЬ [ESC]</button>
         <div class="flex gap-2">
-          <button id="btn-pause-retry" class="glass flex-1 font-display py-2.5 rounded-xl text-white">ЗАНОВО</button>
-          <button id="btn-pause-garage" class="glass flex-1 font-display py-2.5 rounded-xl text-rose-300">В ГАРАЖ</button>
+          <button id="btn-pause-retry" class="glass flex-1 font-display py-2.5 rounded-xl text-white hover:bg-slate-800">ЗАНОВО</button>
+          <button id="btn-pause-garage" class="glass flex-1 font-display py-2.5 rounded-xl text-rose-300 hover:bg-slate-800">В ГАРАЖ</button>
         </div>
       </div>
     </div>
@@ -637,6 +639,7 @@
         this.driftFilter = null;
         this.engineOsc = null;
         this.engineGain = null;
+        this.userVolume = 1.0;
         this.lastSound = {};
       }
 
@@ -646,7 +649,7 @@
             const AC = window.AudioContext || window.webkitAudioContext;
             this.ctx = new AC();
             this.master = this.ctx.createGain();
-            this.master.gain.value = 0.34;
+            this.master.gain.value = 0.34 * this.userVolume;
             const comp = this.ctx.createDynamicsCompressor();
             comp.threshold.value = -14;
             comp.ratio.value = 10;
@@ -756,19 +759,20 @@
           return;
         }
         if (engineType === 'ev') {
-          this.engineOsc.type = 'sine';
+          if (this.engineOsc.type !== 'sine') this.engineOsc.type = 'sine';
           this.engineOsc.frequency.setTargetAtTime(190 + speedRatio * 540, t, 0.05);
           this.engineGain.gain.setTargetAtTime(0.02 + speedRatio * 0.045, t, 0.06);
         } else if (engineType === 'v8') {
-          this.engineOsc.type = 'sawtooth';
+          if (this.engineOsc.type !== 'sawtooth') this.engineOsc.type = 'sawtooth';
           this.engineOsc.frequency.setTargetAtTime(42 + speedRatio * 108, t, 0.05);
           this.engineGain.gain.setTargetAtTime(0.055 + speedRatio * 0.06, t, 0.07);
         } else {
-          this.engineOsc.type = 'sawtooth';
-          const baseFreq = engineType === 'heavy' ? 32 : 48;
-          const maxFreq = engineType === 'heavy' ? 62 : 92;
+          if (this.engineOsc.type !== 'sawtooth') this.engineOsc.type = 'sawtooth';
+          const isHeavy = engineType === 'heavy' || engineType === true;
+          const baseFreq = isHeavy ? 32 : 48;
+          const maxFreq = isHeavy ? 62 : 92;
           this.engineOsc.frequency.setTargetAtTime(baseFreq + speedRatio * maxFreq, t, 0.06);
-          this.engineGain.gain.setTargetAtTime((engineType === 'heavy' ? 0.065 : 0.045) + speedRatio * 0.055, t, 0.08);
+          this.engineGain.gain.setTargetAtTime((isHeavy ? 0.065 : 0.045) + speedRatio * 0.055, t, 0.08);
         }
         if (drifting && speedRatio > 0.25) {
           this.driftFilter.frequency.setTargetAtTime(isSand ? 620 : 1850, t, 0.05);
@@ -780,23 +784,27 @@
       }
 
       playSpatialExplosion(worldX, worldZ, big = false) {
-        if (!this.ctx || this.ctx.state !== 'running' || !this.noiseBuf || !player) return;
+        if (!this.ctx || this.ctx.state !== 'running' || !this.noiseBuf) return;
+        if (!player) { this.playExplosion(big); return; }
+        if (!this.can(big ? 'spExpBig' : 'spExp', big ? 0.1 : 0.06)) return;
         const dx = worldX - player.x, dz = worldZ - player.z;
         const dist = Math.hypot(dx, dz);
-        if (dist > 110) return;
+        if (dist > 115) return;
         const rightX = -Math.cos(player.yaw), rightZ = Math.sin(player.yaw);
         const pan = Math.max(-0.9, Math.min(0.9, (dx * rightX + dz * rightZ) / Math.max(18, dist)));
-        const atten = Math.max(0.15, 1 - dist / 115);
+        const atten = Math.max(0.16, 1 - dist / 120);
+
         const t = this.ctx.currentTime;
+        const dur = big ? 0.72 : 0.34;
         const s = this.ctx.createBufferSource();
         s.buffer = this.noiseBuf;
         const flt = this.ctx.createBiquadFilter();
         flt.type = 'lowpass';
         flt.frequency.setValueAtTime(1800, t);
-        flt.frequency.exponentialRampToValueAtTime(80, t + (big ? 0.7 : 0.35));
+        flt.frequency.exponentialRampToValueAtTime(80, t + dur);
         const g = this.ctx.createGain();
         g.gain.setValueAtTime((big ? 0.34 : 0.2) * atten, t);
-        g.gain.exponentialRampToValueAtTime(0.001, t + (big ? 0.7 : 0.35));
+        g.gain.exponentialRampToValueAtTime(0.001, t + dur);
         s.connect(flt);
         flt.connect(g);
         if (typeof this.ctx.createStereoPanner === 'function') {
@@ -807,7 +815,8 @@
         } else {
           g.connect(this.master);
         }
-        s.start(t, Math.random() * 0.3, big ? 0.72 : 0.36);
+        s.start(t, Math.random() * 0.35, dur);
+        this.tone(big ? 90 : 120, 26, big ? 0.55 : 0.25, 'sawtooth', (big ? 0.24 : 0.14) * atten);
       }
 
       playShot(wType) {
@@ -1088,36 +1097,35 @@
     const MAT_CARBON = new THREE.MeshStandardMaterial({ color: 0x1f2430, roughness: 0.38, metalness: 0.55 });
     const MAT_CRIMSON = new THREE.MeshBasicMaterial({ color: 0xff1f4b });
 
-    // Помечаем общие ресурсы, чтобы не удалять их при очистке
-    [MAT_GLASS, MAT_DARK, MAT_CHROME, MAT_STEEL, MAT_TIRE, MAT_WELL, MAT_HEADLIGHT, MAT_DRL, MAT_AMBER, MAT_TAILLIGHT, MAT_CALIPER, MAT_CARBON, MAT_CRIMSON]
+    [MAT_GLASS, MAT_DARK, MAT_CHROME, MAT_STEEL, MAT_TIRE, MAT_WELL, MAT_HEADLIGHT,
+     MAT_DRL, MAT_AMBER, MAT_TAILLIGHT, MAT_CALIPER, MAT_CARBON, MAT_CRIMSON]
       .forEach(m => { m.userData.shared = true; });
 
     const PARTICLE_MAT_CACHE = new Map();
     function getParticleMat(hex) {
       if (!PARTICLE_MAT_CACHE.has(hex)) {
-        const m = new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+        const m = new THREE.MeshBasicMaterial({
+          color: hex, transparent: true, opacity: 0.92,
+          blending: THREE.AdditiveBlending, depthWrite: false
+        });
         m.userData.shared = true;
         PARTICLE_MAT_CACHE.set(hex, m);
       }
       return PARTICLE_MAT_CACHE.get(hex);
     }
 
-    let CONTACT_SHADOW_TEX = null;
-    function getContactShadowTex() {
-      if (!CONTACT_SHADOW_TEX) {
-        const sc = document.createElement('canvas');
-        sc.width = 64; sc.height = 64;
-        const sctx = sc.getContext('2d');
-        const sg = sctx.createRadialGradient(32, 32, 4, 32, 32, 30);
-        sg.addColorStop(0, 'rgba(0,0,0,0.72)');
-        sg.addColorStop(1, 'rgba(0,0,0,0)');
-        sctx.fillStyle = sg;
-        sctx.fillRect(0, 0, 64, 64);
-        CONTACT_SHADOW_TEX = new THREE.CanvasTexture(sc);
-        CONTACT_SHADOW_TEX.userData = { shared: true };
-      }
-      return CONTACT_SHADOW_TEX;
-    }
+    const CONTACT_SHADOW_TEX = (function () {
+      const sc = document.createElement('canvas');
+      sc.width = 64; sc.height = 64;
+      const sctx = sc.getContext('2d');
+      const sg = sctx.createRadialGradient(32, 32, 4, 32, 32, 30);
+      sg.addColorStop(0, 'rgba(0,0,0,0.75)');
+      sg.addColorStop(1, 'rgba(0,0,0,0)');
+      sctx.fillStyle = sg; sctx.fillRect(0, 0, 64, 64);
+      const tex = new THREE.CanvasTexture(sc);
+      tex.userData = { shared: true };
+      return tex;
+    })();
 
     function disposeObject3D(obj) {
       if (!obj) return;
@@ -1147,13 +1155,139 @@
       return m;
     }
 
-    function makeCarPaint(hex, finish = 'gloss') {
+    // Procedural Livery & Panel-Seam Texture Cache (shared per vehicle style)
+    const VEHICLE_TEX_CACHE = new Map();
+    function getVehicleTextures(styleKey) {
+      if (VEHICLE_TEX_CACHE.has(styleKey)) return VEHICLE_TEX_CACHE.get(styleKey);
+      const cw = 512, ch = 256;
+      const mc = document.createElement('canvas'); mc.width = cw; mc.height = ch;
+      const mctx = mc.getContext('2d');
+      const bc = document.createElement('canvas'); bc.width = cw; bc.height = ch;
+      const bctx = bc.getContext('2d');
+
+      // Base neutral bright canvas (multiplied by paint.color so custom paints & chameleon work!)
+      mctx.fillStyle = '#efefef';
+      mctx.fillRect(0, 0, cw, ch);
+      bctx.fillStyle = '#808080';
+      bctx.fillRect(0, 0, cw, ch);
+
+      // Subtle automotive metallic micro-flake / surface texture
+      for (let i = 0; i < 1600; i++) {
+        const v = 230 + Math.floor(Math.random() * 25);
+        mctx.fillStyle = `rgb(${v},${v},${v})`;
+        mctx.fillRect(Math.random() * cw, Math.random() * ch, 2, 2);
+      }
+
+      if (styleKey === 'tank' || styleKey === 'colossus') {
+        // Organic military camouflage blotches + armor weld seams & rivets
+        const blobs = styleKey === 'colossus'
+          ? [['rgba(255,30,75,0.22)', 16], ['rgba(20,15,25,0.45)', 24]]
+          : [['rgba(35,45,20,0.34)', 22], ['rgba(185,175,130,0.26)', 18], ['rgba(25,25,20,0.28)', 14]];
+        for (const [col, cnt] of blobs) {
+          mctx.fillStyle = col;
+          for (let i = 0; i < cnt; i++) {
+            mctx.beginPath();
+            mctx.ellipse(Math.random() * cw, Math.random() * ch, 22 + Math.random() * 48, 14 + Math.random() * 26, Math.random() * Math.PI, 0, Math.PI * 2);
+            mctx.fill();
+          }
+        }
+        // Welded armor plates & rivets on bumpMap
+        bctx.strokeStyle = '#383838'; bctx.lineWidth = 3;
+        for (let x = 64; x < cw; x += 96) {
+          bctx.beginPath(); bctx.moveTo(x, 0); bctx.lineTo(x, ch); bctx.stroke();
+          bctx.fillStyle = '#d4d4d4';
+          for (let y = 16; y < ch; y += 22) {
+            bctx.beginPath(); bctx.arc(x + 8, y, 2.5, 0, Math.PI * 2); bctx.fill();
+            bctx.beginPath(); bctx.arc(x - 8, y, 2.5, 0, Math.PI * 2); bctx.fill();
+          }
+        }
+      } else if (styleKey === 'cyber') {
+        // Brushed stainless steel horizontal grain + sharp angular panel seams
+        for (let y = 0; y < ch; y += 2) {
+          const v = 220 + Math.floor(Math.random() * 32);
+          mctx.fillStyle = `rgb(${v},${v},${v})`;
+          mctx.fillRect(0, y, cw, 1.5);
+          const bv = 116 + Math.floor(Math.random() * 24);
+          bctx.fillStyle = `rgb(${bv},${bv},${bv})`;
+          bctx.fillRect(0, y, cw, 1.5);
+        }
+        mctx.strokeStyle = 'rgba(20,25,35,0.45)'; mctx.lineWidth = 3;
+        bctx.strokeStyle = '#252525'; bctx.lineWidth = 4;
+        for (const sx of [145, 270, 390]) {
+          mctx.beginPath(); mctx.moveTo(sx, 20); mctx.lineTo(sx, ch - 10); mctx.stroke();
+          bctx.beginPath(); bctx.moveTo(sx, 20); bctx.lineTo(sx, ch - 10); bctx.stroke();
+        }
+      } else if (styleKey === 'sweet') {
+        // Twisted ice-cream stripes + polka dots + battle scorch grime
+        mctx.fillStyle = 'rgba(244, 63, 94, 0.35)';
+        mctx.fillRect(0, ch * 0.34, cw, ch * 0.22);
+        mctx.fillStyle = 'rgba(250, 204, 21, 0.45)';
+        mctx.fillRect(0, ch * 0.56, cw, ch * 0.11);
+        mctx.fillStyle = 'rgba(236, 72, 153, 0.48)';
+        for (let i = 0; i < 24; i++) {
+          mctx.beginPath();
+          mctx.arc(20 + i * 21, ch * (0.22 + (i % 2) * 0.08), 7, 0, Math.PI * 2);
+          mctx.fill();
+        }
+      } else if (styleKey === 'rally') {
+        // KAMAZ Dakar racing side chevrons & body vents
+        mctx.fillStyle = 'rgba(255,255,255,0.65)';
+        mctx.beginPath(); mctx.moveTo(40, ch * 0.45); mctx.lineTo(290, ch * 0.25); mctx.lineTo(340, ch * 0.25); mctx.lineTo(100, ch * 0.62); mctx.closePath(); mctx.fill();
+        mctx.fillStyle = 'rgba(250, 204, 21, 0.55)';
+        mctx.beginPath(); mctx.moveTo(110, ch * 0.64); mctx.lineTo(350, ch * 0.28); mctx.lineTo(385, ch * 0.28); mctx.lineTo(155, ch * 0.70); mctx.closePath(); mctx.fill();
+        bctx.strokeStyle = '#303030'; bctx.lineWidth = 3;
+        for (let x = 60; x < 340; x += 55) { bctx.beginPath(); bctx.moveTo(x, 30); bctx.lineTo(x, ch - 30); bctx.stroke(); }
+      } else {
+        // Automotive door seams, beltline crease & side accent pinstripe
+        mctx.strokeStyle = 'rgba(15,23,42,0.34)'; mctx.lineWidth = 2.5;
+        bctx.strokeStyle = '#2d2d2d'; bctx.lineWidth = 3.5;
+        for (const sx of [130, 245, 365]) {
+          mctx.beginPath(); mctx.moveTo(sx, ch * 0.22); mctx.lineTo(sx, ch * 0.88); mctx.stroke();
+          bctx.beginPath(); bctx.moveTo(sx, ch * 0.22); bctx.lineTo(sx, ch * 0.88); bctx.stroke();
+        }
+        // Crisp sculpted shoulder highlight crease along side
+        mctx.fillStyle = 'rgba(255,255,255,0.24)';
+        mctx.fillRect(0, ch * 0.44, cw, 6);
+        bctx.fillStyle = '#c0c0c0';
+        bctx.fillRect(0, ch * 0.44, cw, 6);
+        if (styleKey === 'sport') {
+          mctx.fillStyle = 'rgba(15,23,42,0.42)';
+          mctx.fillRect(0, ch * 0.78, cw, 14);
+        }
+      }
+
+      // Bottom road dust & subtle wear gradient (helps ground the car visually)
+      const grime = mctx.createLinearGradient(0, ch * 0.78, 0, ch);
+      grime.addColorStop(0, 'rgba(30,24,18,0)');
+      grime.addColorStop(1, 'rgba(30,24,18,0.42)');
+      mctx.fillStyle = grime;
+      mctx.fillRect(0, ch * 0.78, cw, ch * 0.22);
+
+      const map = new THREE.CanvasTexture(mc);
+      map.encoding = THREE.sRGBEncoding;
+      map.wrapS = map.wrapT = THREE.ClampToEdgeWrapping;
+      map.userData = { shared: true };
+
+      const bumpMap = new THREE.CanvasTexture(bc);
+      bumpMap.wrapS = bumpMap.wrapT = THREE.ClampToEdgeWrapping;
+      bumpMap.userData = { shared: true };
+
+      const res = { map, bumpMap };
+      VEHICLE_TEX_CACHE.set(styleKey, res);
+      return res;
+    }
+
+    function makeCarPaint(hex, finish = 'gloss', styleKey = 'car') {
+      const tex = getVehicleTextures(styleKey);
       const mat = new THREE.MeshPhysicalMaterial({
         color: new THREE.Color(hex),
-        roughness: finish === 'matte' ? 0.72 : finish === 'metallic' ? 0.22 : 0.18,
-        metalness: finish === 'metallic' ? 0.85 : finish === 'matte' ? 0.15 : 0.32,
-        clearcoat: finish === 'matte' ? 0.08 : 1.0,
-        clearcoatRoughness: finish === 'matte' ? 0.6 : 0.08
+        map: tex.map,
+        bumpMap: tex.bumpMap,
+        bumpScale: styleKey === 'tank' || styleKey === 'colossus' ? 0.045 : 0.022,
+        roughness: finish === 'matte' ? 0.68 : finish === 'metallic' ? 0.20 : 0.16,
+        metalness: finish === 'metallic' ? 0.84 : finish === 'matte' ? 0.16 : 0.34,
+        clearcoat: finish === 'matte' ? 0.12 : 1.0,
+        clearcoatRoughness: finish === 'matte' ? 0.55 : 0.06
       });
       if (finish === 'chameleon') mat.userData.chameleon = true;
       return mat;
@@ -1181,7 +1315,6 @@
         ctx.strokeStyle = '#0f172a';
         ctx.lineWidth = 6;
         ctx.strokeRect(3, 3, 250, 58);
-        // Mini flag bar on right
         ctx.fillStyle = '#ffffff'; ctx.fillRect(216, 10, 28, 8);
         ctx.fillStyle = '#2563eb'; ctx.fillRect(216, 18, 28, 8);
         ctx.fillStyle = '#dc2626'; ctx.fillRect(216, 26, 28, 8);
@@ -1199,11 +1332,92 @@
       );
     }
 
-    // Multi-slice 3D lofted hull (real tapered car/tank geometry)
+    // Beveled 3D Extruded Side-Profile Body Builder with 3D Tumblehome, Nose/Tail Taper & Clean UVs!
+    function makeProfileBody(shape, width, opts = {}) {
+      const {
+        bevel = 0.13,
+        bevelSize = 0.07,
+        bevelSegments = 4,
+        curveSegments = 16,
+        yBelt = 0.95,
+        topTaper = 0.18,
+        noseTaper = 0.10,
+        tailTaper = 0.08,
+        cokeWaist = 0.0,
+        flatShaded = false,
+        camoUV = false
+      } = opts;
+      const effBevel = Math.min(bevel, width * 0.32);
+      const depth = Math.max(0.08, width - effBevel * 2);
+      let geo = new THREE.ExtrudeGeometry(shape, {
+        depth,
+        bevelEnabled: effBevel > 0.005,
+        bevelThickness: effBevel,
+        bevelSize: bevelSize,
+        bevelSegments: flatShaded ? 1 : bevelSegments,
+        curveSegments: flatShaded ? 4 : curveSegments
+      });
+      // Center along extrusion and rotate so 2D X (+front/-rear) maps to +Z/-Z and extrusion maps to X width
+      geo.translate(0, 0, -depth / 2);
+      geo.rotateY(-Math.PI / 2);
+
+      geo.computeBoundingBox();
+      const bb = geo.boundingBox;
+      const zMin = bb.min.z, zMax = bb.max.z, zLen = Math.max(0.01, zMax - zMin);
+      const yMin = bb.min.y, yMax = bb.max.y, ySpan = Math.max(0.01, yMax - yMin);
+      const hw = Math.max(0.1, (bb.max.x - bb.min.x) * 0.5);
+
+      const pos = geo.attributes.position;
+      const uv = geo.attributes.uv;
+      for (let i = 0; i < pos.count; i++) {
+        let vx = pos.getX(i);
+        const vy = pos.getY(i);
+        const vz = pos.getZ(i);
+        const zNorm = (vz - zMin) / zLen; // 0 = rear, 1 = front
+
+        // Greenhouse tumblehome (taper upper cabin inward for authentic automotive proportions)
+        let sx = 1.0;
+        if (vy > yBelt && yMax > yBelt + 0.02) {
+          const t = Math.min(1, (vy - yBelt) / (yMax - yBelt));
+          sx *= 1 - topTaper * Math.pow(t, 1.15);
+        }
+        // Aerodynamic nose & tail plan-view curvature
+        if (noseTaper > 0 && zNorm > 0.72) {
+          const tn = (zNorm - 0.72) / 0.28;
+          sx *= 1 - noseTaper * tn * tn;
+        }
+        if (tailTaper > 0 && zNorm < 0.24) {
+          const tr = (0.24 - zNorm) / 0.24;
+          sx *= 1 - tailTaper * tr * tr;
+        }
+        // Muscle car "Coke-bottle" sculpted waist & flared rear haunches
+        if (cokeWaist > 0) {
+          const waist = Math.sin(zNorm * Math.PI);
+          sx *= 1 - cokeWaist * waist * 0.55 + (zNorm < 0.35 ? cokeWaist * 0.65 : 0);
+        }
+
+        vx *= sx;
+        pos.setX(i, vx);
+
+        // Clean continuous UV mapping (flipped Y so top of canvas = top of car, bottom = road grime)
+        const hNorm = (vy - yMin) / ySpan;
+        const vCoord = camoUV ? (hNorm * 0.62 + (Math.abs(vx) / hw) * 0.38) : (1 - hNorm);
+        uv.setXY(i, zNorm, vCoord);
+      }
+      pos.needsUpdate = true;
+      uv.needsUpdate = true;
+      if (flatShaded) geo = geo.toNonIndexed();
+      geo.computeVertexNormals();
+      return geo;
+    }
+
+    // Multi-slice 3D lofted hull (used for sculpted turrets & tapered greenhouses)
     function makeSculptedHull(slices, flatShaded = false) {
       const pos = [];
+      const uvs = [];
       const idx = [];
       const ringSize = 8;
+      const zMin = slices[0].z, zMax = slices[slices.length - 1].z, zLen = Math.max(0.01, zMax - zMin);
       for (const s of slices) {
         const h = Math.max(0.01, s.yTop - s.yBot);
         const wBot = s.wBot;
@@ -1212,11 +1426,12 @@
         const wTop = s.wTop;
         const y1 = s.yBot + h * 0.22;
         const y2 = s.yBot + h * 0.76;
+        const u = (s.z - zMin) / zLen;
         const pts = [
-          [ wBot * 0.9, s.yBot, s.z], [ wMid, y1, s.z], [ wBelt, y2, s.z], [ wTop, s.yTop, s.z],
-          [-wTop, s.yTop, s.z], [-wBelt, y2, s.z], [-wMid, y1, s.z], [-wBot * 0.9, s.yBot, s.z]
+          [ wBot * 0.9, s.yBot, s.z, 1.0], [ wMid, y1, s.z, 0.72], [ wBelt, y2, s.z, 0.32], [ wTop, s.yTop, s.z, 0.08],
+          [-wTop, s.yTop, s.z, 0.08], [-wBelt, y2, s.z, 0.32], [-wMid, y1, s.z, 0.72], [-wBot * 0.9, s.yBot, s.z, 1.0]
         ];
-        for (const p of pts) pos.push(p[0], p[1], p[2]);
+        for (const p of pts) { pos.push(p[0], p[1], p[2]); uvs.push(u, p[3]); }
       }
       for (let j = 0; j < slices.length - 1; j++) {
         for (let i = 0; i < ringSize; i++) {
@@ -1227,60 +1442,111 @@
         }
       }
       const first = slices[0], rearCenter = pos.length / 3;
-      pos.push(0, (first.yBot + first.yTop) * 0.5, first.z);
+      pos.push(0, (first.yBot + first.yTop) * 0.5, first.z); uvs.push(0, 0.5);
       for (let i = 0; i < ringSize; i++) idx.push(rearCenter, (i + 1) % ringSize, i);
 
       const last = slices[slices.length - 1], lastOff = (slices.length - 1) * ringSize, frontCenter = pos.length / 3;
-      pos.push(0, (last.yBot + last.yTop) * 0.5, last.z);
+      pos.push(0, (last.yBot + last.yTop) * 0.5, last.z); uvs.push(1, 0.5);
       for (let i = 0; i < ringSize; i++) idx.push(frontCenter, lastOff + i, lastOff + ((i + 1) % ringSize));
 
       let geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
       geo.setIndex(idx);
       if (flatShaded) geo = geo.toNonIndexed();
       geo.computeVertexNormals();
       return geo;
     }
 
+    // Upgraded Detailed 3D Wheel: Beveled tire shoulders, offroad tread lugs, brake rotor & caliper, deep-dish rims!
     function createWheel(radius, width, accentHex, style = 'sport') {
       const g = new THREE.Group();
-      const tire = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, width, 20).rotateZ(Math.PI / 2), MAT_TIRE);
+      const tire = new THREE.Mesh(new THREE.CylinderGeometry(radius * 0.98, radius * 0.98, width * 0.86, 22).rotateZ(Math.PI / 2), MAT_TIRE);
       tire.castShadow = true;
       g.add(tire);
+      // Rounded rubber tire sidewalls
+      for (const side of [-1, 1]) {
+        const shoulder = new THREE.Mesh(new THREE.TorusGeometry(radius * 0.88, radius * 0.13, 8, 20).rotateY(Math.PI / 2), MAT_TIRE);
+        shoulder.position.x = side * (width * 0.36);
+        g.add(shoulder);
+      }
+      // 3D Knobby off-road tread lugs for SUVs, trucks & tanks
+      if (style === 'offroad') {
+        const lugCount = 12;
+        for (let i = 0; i < lugCount; i++) {
+          const a = (i / lugCount) * Math.PI * 2;
+          const lug = new THREE.Mesh(new THREE.BoxGeometry(width * 0.88, 0.075, radius * 0.24), MAT_TIRE);
+          lug.position.set(0, Math.sin(a) * (radius * 0.99), Math.cos(a) * (radius * 0.99));
+          lug.rotation.x = -a;
+          g.add(lug);
+        }
+      }
       const rimRad = radius * 0.64;
       const rimMat = style === 'aero' ? MAT_DARK : style === 'deep' ? MAT_CHROME : MAT_STEEL;
-      g.add(new THREE.Mesh(new THREE.CylinderGeometry(rimRad, rimRad, width + 0.02, 16).rotateZ(Math.PI / 2), MAT_DARK));
-      const lip = new THREE.Mesh(new THREE.TorusGeometry(rimRad, 0.03, 7, 18).rotateY(Math.PI / 2), rimMat);
-      lip.position.x = width * 0.46; g.add(lip);
-      const caliper = new THREE.Mesh(new THREE.BoxGeometry(width * 0.45, radius * 0.36, radius * 0.25), MAT_CALIPER);
-      caliper.position.set(0, radius * 0.14, rimRad * 0.52); g.add(caliper);
+      // Recessed wheel barrel + metallic ventilated brake disc + red caliper
+      g.add(new THREE.Mesh(new THREE.CylinderGeometry(rimRad, rimRad, width * 0.72, 16).rotateZ(Math.PI / 2), MAT_WELL));
+      g.add(new THREE.Mesh(new THREE.CylinderGeometry(rimRad * 0.78, rimRad * 0.78, width * 0.24, 16).rotateZ(Math.PI / 2), MAT_STEEL));
+      const caliper = new THREE.Mesh(new THREE.BoxGeometry(width * 0.36, radius * 0.36, radius * 0.22), MAT_CALIPER);
+      caliper.position.set(0, radius * 0.16, rimRad * 0.56); g.add(caliper);
+
+      // Outer & inner rim lips
+      for (const side of [-1, 1]) {
+        const lip = new THREE.Mesh(new THREE.TorusGeometry(rimRad, 0.036, 8, 20).rotateY(Math.PI / 2), rimMat);
+        lip.position.x = side * (width * 0.44);
+        g.add(lip);
+      }
+
       if (style === 'aero') {
-        g.add(new THREE.Mesh(new THREE.CylinderGeometry(rimRad * 0.92, rimRad * 0.92, width + 0.04, 7).rotateZ(Math.PI / 2), MAT_DARK));
+        g.add(new THREE.Mesh(new THREE.CylinderGeometry(rimRad * 0.92, rimRad * 0.92, width * 0.96, 7).rotateZ(Math.PI / 2), MAT_DARK));
+        const aeroRing = new THREE.Mesh(new THREE.TorusGeometry(rimRad * 0.66, 0.025, 6, 7).rotateY(Math.PI / 2), MAT_STEEL);
+        aeroRing.position.x = width * 0.48; g.add(aeroRing);
       } else {
-        const cnt = style === 'offroad' ? 6 : 5;
+        const cnt = style === 'offroad' ? 6 : style === 'luxury' ? 10 : 5;
+        const spkThick = style === 'luxury' ? 0.038 : 0.062;
         for (let i = 0; i < cnt; i++) {
           const a = (i / cnt) * Math.PI * 2;
-          const spk = new THREE.Mesh(new THREE.BoxGeometry(width + 0.03, 0.06, rimRad * 0.9), rimMat);
+          const spk = new THREE.Mesh(new THREE.BoxGeometry(width * 0.92, spkThick, rimRad * 0.92), rimMat);
           spk.position.set(0, Math.sin(a) * rimRad * 0.44, Math.cos(a) * rimRad * 0.44);
           spk.rotation.x = -a;
           g.add(spk);
         }
       }
-      g.add(new THREE.Mesh(new THREE.CylinderGeometry(radius * 0.18, radius * 0.18, width + 0.05, 10).rotateZ(Math.PI / 2), new THREE.MeshStandardMaterial({ color: accentHex, metalness: 0.7, roughness: 0.25 })));
+      g.add(new THREE.Mesh(new THREE.CylinderGeometry(radius * 0.2, radius * 0.2, width * 0.98, 12).rotateZ(Math.PI / 2), new THREE.MeshStandardMaterial({ color: accentHex, metalness: 0.75, roughness: 0.22 })));
       return g;
     }
 
-    function addWheelArches(parent, wX, wZList, radius, archMat, width = 0.28) {
-      for (const sz of wZList) {
+    function addWheelArches(parent, wX, wZList, radiusList, archMat, width = 0.28, angular = false) {
+      const radii = Array.isArray(radiusList) ? radiusList : [radiusList, radiusList];
+      for (let idx = 0; idx < wZList.length; idx++) {
+        const sz = wZList[idx];
+        const radius = radii[idx] || radii[0];
         for (const s of [-1, 1]) {
-          const well = new THREE.Mesh(new THREE.CylinderGeometry(radius + 0.1, radius + 0.1, width * 1.35, 14, 1, false, 0, Math.PI).rotateZ(Math.PI / 2), MAT_WELL);
-          well.position.set(s * (wX - 0.08), radius, sz);
+          const well = new THREE.Mesh(new THREE.CylinderGeometry(radius + 0.11, radius + 0.11, width * 1.45, angular ? 4 : 14, 1, false, 0, Math.PI).rotateZ(Math.PI / 2), MAT_WELL);
+          well.position.set(s * (wX - 0.12), radius, sz);
           parent.add(well);
-          const flare = new THREE.Mesh(new THREE.TorusGeometry(radius + 0.11, 0.08, 7, 14, Math.PI).rotateY(Math.PI / 2), archMat);
-          flare.position.set(s * (wX + 0.03), radius, sz);
+          const flare = new THREE.Mesh(new THREE.TorusGeometry(radius + 0.12, 0.095, 7, angular ? 4 : 16, Math.PI).rotateY(Math.PI / 2), archMat);
+          flare.position.set(s * (wX + 0.02), radius, sz);
           parent.add(flare);
         }
       }
+    }
+
+    // Side mirrors + dual glowing headlight/taillight helper for instant visual polish
+    function addSideMirrors(parent, xPos, yPos, zPos, mat) {
+      for (const s of [-1, 1]) {
+        addPart(parent, new THREE.BoxGeometry(0.18, 0.045, 0.06), MAT_DARK, s * xPos, yPos, zPos, 0, 0, s * 0.18, false);
+        addPart(parent, new THREE.BoxGeometry(0.16, 0.11, 0.13), mat, s * (xPos + 0.09), yPos + 0.03, zPos - 0.02, 0, s * -0.15, 0, false);
+      }
+    }
+
+    function addLightHalo(parent, w, h, x, y, z, color = 0xff1e42, opacity = 0.42) {
+      const halo = new THREE.Mesh(
+        new THREE.PlaneGeometry(w, h),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
+      );
+      halo.position.set(x, y, z);
+      parent.add(halo);
+      return halo;
     }
 
     function addTaperedCabin(parent, paint, cfg) {
@@ -1293,8 +1559,8 @@
       ], flat);
       addPart(parent, glassGeo, MAT_GLASS, 0, 0, 0, 0, 0, 0, false);
       const roofGeo = makeSculptedHull([
-        { z: zRoofRear, yBot: yRoof - 0.055, yTop: yRoof + 0.015, wBot: wRoof * 0.99, wBelt: wRoof * 0.98, wTop: wRoof * 0.92 },
-        { z: zRoofFront, yBot: yRoof - 0.055, yTop: yRoof + 0.015, wBot: wRoof * 0.99, wBelt: wRoof * 0.98, wTop: wRoof * 0.92 }
+        { z: zRoofRear, yBot: yRoof - 0.055, yTop: yRoof + 0.025, wBot: wRoof * 0.99, wBelt: wRoof * 0.98, wTop: wRoof * 0.90 },
+        { z: zRoofFront, yBot: yRoof - 0.055, yTop: yRoof + 0.025, wBot: wRoof * 0.99, wBelt: wRoof * 0.98, wTop: wRoof * 0.90 }
       ], flat);
       addPart(parent, roofGeo, paint);
       const addPillar = (x0, y0, z0, x1, y1, z1, thick, mat) => {
@@ -1318,64 +1584,80 @@
       const turret = new THREE.Group();
       let spinBarrels = null;
       if (isColossus) {
-        // КОЛОСС-Х: гигантская башня с багровыми полосами и сдвоенным 152-мм орудием
+        // КОЛОСС-Х: гигантская цитадель-башня с багровыми энергоконтурами, дымовыми мортирами и сдвоенной 152-мм пушкой
         const tGeo = makeSculptedHull([
-          { z: -2.1, yBot: 0, yTop: 1.05, wBot: 1.55, wBelt: 1.65, wTop: 1.35 },
-          { z:  0.8, yBot: 0, yTop: 1.15, wBot: 1.85, wBelt: 1.95, wTop: 1.60 },
-          { z:  2.1, yBot: 0, yTop: 0.95, wBot: 1.15, wBelt: 1.25, wTop: 0.95 }
+          { z: -2.2, yBot: 0, yTop: 1.08, wBot: 1.55, wBelt: 1.68, wTop: 1.38 },
+          { z:  0.8, yBot: 0, yTop: 1.22, wBot: 1.88, wBelt: 1.98, wTop: 1.62 },
+          { z:  2.2, yBot: 0, yTop: 0.96, wBot: 1.15, wBelt: 1.26, wTop: 0.95 }
         ], true);
         addPart(turret, tGeo, paint);
+        addPart(turret, new THREE.BoxGeometry(2.6, 0.45, 1.0), MAT_DARK, 0, 0.65, -2.55);
         for (const s of [-0.52, 0.52]) {
-          addPart(turret, new THREE.CylinderGeometry(0.16, 0.21, 5.6, 12).rotateX(Math.PI / 2), MAT_DARK, s, 0.56, 3.6);
-          addPart(turret, new THREE.CylinderGeometry(0.24, 0.24, 0.7, 12).rotateX(Math.PI / 2), MAT_CRIMSON, s, 0.56, 4.9, 0, 0, 0, false);
-          addPart(turret, new THREE.BoxGeometry(0.14, 0.35, 2.8), MAT_CRIMSON, s * 3.55, 0.58, -0.3, 0, 0, 0, false);
+          addPart(turret, new THREE.CylinderGeometry(0.16, 0.22, 5.8, 12).rotateX(Math.PI / 2), MAT_DARK, s, 0.58, 3.7);
+          addPart(turret, new THREE.CylinderGeometry(0.26, 0.26, 0.72, 12).rotateX(Math.PI / 2), MAT_CRIMSON, s, 0.58, 5.0, 0, 0, 0, false);
+          addPart(turret, new THREE.BoxGeometry(0.38, 0.34, 0.65), MAT_STEEL, s, 0.58, 6.45);
+          addPart(turret, new THREE.BoxGeometry(0.14, 0.35, 2.9), MAT_CRIMSON, s * 3.55, 0.62, -0.3, 0, 0, 0, false);
         }
       } else if (spec.id === 't34') {
-        const pts = [new THREE.Vector2(0.01, 0.78), new THREE.Vector2(0.76, 0.72), new THREE.Vector2(1.06, 0.36), new THREE.Vector2(1.12, 0.02), new THREE.Vector2(0.88, -0.04)];
-        const tMesh = new THREE.Mesh(new THREE.LatheGeometry(pts, 20), paint);
-        tMesh.scale.set(0.95, 1, 1.32); tMesh.castShadow = true; turret.add(tMesh);
-        addPart(turret, new THREE.CylinderGeometry(0.28, 0.28, 0.85, 12).rotateZ(Math.PI / 2), paint, 0, 0.36, 1.22);
-        addPart(turret, new THREE.CylinderGeometry(0.1, 0.14, 3.5, 12).rotateX(Math.PI / 2), paint, 0, 0.36, 2.35);
-        addPart(turret, new THREE.CylinderGeometry(0.32, 0.36, 0.24, 12), paint, -0.34, 0.82, -0.22);
+        const pts = [new THREE.Vector2(0.01, 0.80), new THREE.Vector2(0.76, 0.74), new THREE.Vector2(1.08, 0.38), new THREE.Vector2(1.14, 0.02), new THREE.Vector2(0.88, -0.04)];
+        const tMesh = new THREE.Mesh(new THREE.LatheGeometry(pts, 22), paint);
+        tMesh.scale.set(0.96, 1, 1.36); tMesh.castShadow = true; turret.add(tMesh);
+        addPart(turret, new THREE.CylinderGeometry(0.28, 0.28, 0.88, 12).rotateZ(Math.PI / 2), paint, 0, 0.38, 1.26);
+        addPart(turret, new THREE.CylinderGeometry(0.1, 0.145, 3.65, 12).rotateX(Math.PI / 2), paint, 0, 0.38, 2.45);
+        addPart(turret, new THREE.CylinderGeometry(0.34, 0.38, 0.28, 14), paint, -0.34, 0.84, -0.24);
+        // Tactical white stripe & handrails on turret flanks
+        for (const s of [-1, 1]) {
+          addPart(turret, new THREE.BoxGeometry(0.05, 0.16, 1.15), MAT_CHROME, s * 1.02, 0.42, 0.0, 0, 0, 0, false);
+          addPart(turret, new THREE.CylinderGeometry(0.025, 0.025, 1.1, 6).rotateX(Math.PI / 2), MAT_STEEL, s * 1.12, 0.52, -0.2, 0, 0, 0, false);
+        }
       } else if (spec.id === 't90m') {
         const tGeo = makeSculptedHull([
-          { z: -1.45, yBot: 0, yTop: 0.62, wBot: 0.95, wBelt: 1.0, wTop: 0.85 },
-          { z:  0.45, yBot: 0, yTop: 0.68, wBot: 1.18, wBelt: 1.22, wTop: 1.02 },
-          { z:  1.35, yBot: 0, yTop: 0.56, wBot: 0.68, wBelt: 0.72, wTop: 0.55 }
+          { z: -1.55, yBot: 0, yTop: 0.64, wBot: 0.96, wBelt: 1.04, wTop: 0.88 },
+          { z:  0.48, yBot: 0, yTop: 0.72, wBot: 1.22, wBelt: 1.28, wTop: 1.05 },
+          { z:  1.42, yBot: 0, yTop: 0.58, wBot: 0.70, wBelt: 0.74, wTop: 0.56 }
         ], true);
         addPart(turret, tGeo, paint);
+        // Rear turret bustle ammo rack + anti-RPG slat cage
+        addPart(turret, new THREE.BoxGeometry(1.72, 0.46, 0.88), MAT_DARK, 0, 0.38, -1.85);
+        for (let r = -1; r <= 1; r++) addPart(turret, new THREE.BoxGeometry(1.92, 0.05, 0.06), MAT_STEEL, 0, 0.24 + r * 0.16, -2.36);
         for (const s of [-1, 1]) {
-          addPart(turret, new THREE.BoxGeometry(0.82, 0.44, 0.9), MAT_DARK, s * 0.82, 0.34, 0.88, 0, s * 0.52, 0);
-          addPart(turret, new THREE.CylinderGeometry(0.09, 0.09, 0.14, 10).rotateX(Math.PI / 2), MAT_CRIMSON, s * 0.56, 0.38, 1.32, 0, 0, 0, false);
+          addPart(turret, new THREE.BoxGeometry(0.84, 0.46, 0.94), MAT_DARK, s * 0.84, 0.34, 0.90, 0, s * 0.52, 0);
+          addPart(turret, new THREE.CylinderGeometry(0.095, 0.095, 0.16, 10).rotateX(Math.PI / 2), MAT_CRIMSON, s * 0.56, 0.38, 1.38, 0, 0, 0, false);
+          // Smoke grenade launchers
+          for (let g = 0; g < 3; g++) addPart(turret, new THREE.CylinderGeometry(0.045, 0.045, 0.32, 6).rotateX(Math.PI / 3), MAT_STEEL, s * 1.18, 0.44 + g * 0.08, 0.42 - g * 0.14);
         }
-        addPart(turret, new THREE.CylinderGeometry(0.11, 0.14, 4.25, 12).rotateX(Math.PI / 2), paint, 0, 0.36, 2.7);
-        addPart(turret, new THREE.CylinderGeometry(0.18, 0.18, 0.65, 12).rotateX(Math.PI / 2), MAT_STEEL, 0, 0.36, 2.3);
+        // Panoramic commander sight
+        addPart(turret, new THREE.CylinderGeometry(0.18, 0.22, 0.36, 10), MAT_DARK, 0.48, 0.86, -0.3);
+        addPart(turret, new THREE.CylinderGeometry(0.11, 0.145, 4.45, 12).rotateX(Math.PI / 2), paint, 0, 0.36, 2.8);
+        addPart(turret, new THREE.CylinderGeometry(0.19, 0.19, 0.72, 12).rotateX(Math.PI / 2), MAT_STEEL, 0, 0.36, 2.35);
       } else if (spec.weaponType === 'tesla') {
-        addPart(turret, new THREE.CylinderGeometry(0.28, 0.38, 0.45, 12), MAT_DARK, 0, 0.22, 0);
-        for (let i = 0; i < 3; i++) addPart(turret, new THREE.TorusGeometry(0.32 - i * 0.05, 0.045, 8, 18).rotateX(Math.PI / 2), MAT_AMBER, 0, 0.48 + i * 0.2, 0);
-        addPart(turret, new THREE.SphereGeometry(0.22, 12, 10), MAT_DRL, 0, 1.08, 0, 0, 0, 0, false);
+        addPart(turret, new THREE.CylinderGeometry(0.32, 0.42, 0.42, 12), MAT_DARK, 0, 0.21, 0);
+        for (let i = 0; i < 3; i++) addPart(turret, new THREE.TorusGeometry(0.34 - i * 0.055, 0.048, 8, 18).rotateX(Math.PI / 2), MAT_AMBER, 0, 0.48 + i * 0.21, 0);
+        addPart(turret, new THREE.SphereGeometry(0.24, 14, 12), MAT_DRL, 0, 1.12, 0, 0, 0, 0, false);
       } else if (spec.weaponType === 'rocket') {
-        addPart(turret, new THREE.BoxGeometry(0.95, 0.55, 1.1), MAT_DARK, 0, 0.38, 0);
+        addPart(turret, new THREE.BoxGeometry(1.0, 0.56, 1.16), MAT_DARK, 0, 0.38, 0);
         for (let r = 0; r < 2; r++) for (let c = -1; c <= 1; c++) {
-          addPart(turret, new THREE.CylinderGeometry(0.09, 0.09, 1.25, 10).rotateX(Math.PI / 2), MAT_STEEL, c * 0.26, 0.28 + r * 0.24, 0.12);
-          addPart(turret, new THREE.ConeGeometry(0.08, 0.2, 8).rotateX(Math.PI / 2), MAT_TAILLIGHT, c * 0.26, 0.28 + r * 0.24, 0.82, 0, 0, 0, false);
+          addPart(turret, new THREE.CylinderGeometry(0.095, 0.095, 1.32, 10).rotateX(Math.PI / 2), MAT_STEEL, c * 0.27, 0.28 + r * 0.24, 0.12);
+          addPart(turret, new THREE.ConeGeometry(0.085, 0.22, 8).rotateX(Math.PI / 2), MAT_TAILLIGHT, c * 0.27, 0.28 + r * 0.24, 0.86, 0, 0, 0, false);
         }
       } else if (spec.weaponType === 'minigun') {
-        addPart(turret, new THREE.BoxGeometry(0.55, 0.36, 0.72), MAT_DARK, 0, 0.25, 0);
+        addPart(turret, new THREE.BoxGeometry(0.58, 0.38, 0.78), MAT_DARK, 0, 0.26, 0);
+        addPart(turret, new THREE.CylinderGeometry(0.18, 0.18, 0.32, 10).rotateZ(Math.PI / 2), MAT_AMBER, 0.36, 0.22, -0.05);
         spinBarrels = new THREE.Group();
-        spinBarrels.position.set(0, 0.26, 0.88);
+        spinBarrels.position.set(0, 0.26, 0.92);
         for (let i = 0; i < 6; i++) {
           const a = (i / 6) * Math.PI * 2;
-          addPart(spinBarrels, new THREE.CylinderGeometry(0.035, 0.035, 1.35, 6).rotateX(Math.PI / 2), MAT_STEEL, Math.cos(a) * 0.11, Math.sin(a) * 0.11, 0);
+          addPart(spinBarrels, new THREE.CylinderGeometry(0.036, 0.036, 1.42, 6).rotateX(Math.PI / 2), MAT_STEEL, Math.cos(a) * 0.115, Math.sin(a) * 0.115, 0);
         }
+        addPart(spinBarrels, new THREE.CylinderGeometry(0.16, 0.16, 0.08, 12).rotateX(Math.PI / 2), MAT_DARK, 0, 0, 0.55);
         turret.add(spinBarrels);
       } else {
-        addPart(turret, new THREE.BoxGeometry(0.54, 0.32, 0.76), MAT_DARK, 0, 0.22, 0);
-        for (const s of [-0.14, 0.14]) {
-          addPart(turret, new THREE.CylinderGeometry(0.055, 0.065, 1.32, 10).rotateX(Math.PI / 2), MAT_STEEL, s, 0.24, 0.82);
+        addPart(turret, new THREE.BoxGeometry(0.56, 0.32, 0.78), MAT_DARK, 0, 0.22, 0);
+        for (const s of [-0.15, 0.15]) {
+          addPart(turret, new THREE.CylinderGeometry(0.058, 0.068, 1.38, 10).rotateX(Math.PI / 2), MAT_STEEL, s, 0.24, 0.84);
         }
         if (spec.weaponType === 'laser' || spec.weaponType === 'plasma') {
-          addPart(turret, new THREE.BoxGeometry(0.36, 0.1, 0.85), MAT_DRL, 0, 0.38, 0.35, 0, 0, 0, false);
+          addPart(turret, new THREE.BoxGeometry(0.38, 0.1, 0.90), MAT_DRL, 0, 0.39, 0.36, 0, 0, 0, false);
         }
       }
       return { turret, spinBarrels };
@@ -1389,7 +1671,8 @@
 
       const paintHex = isColossus ? '#1e1b24' : isSweetBoss ? '#fff1f2' : (custom ? custom.color : '#' + spec.color.toString(16).padStart(6, '0'));
       const finish = isColossus ? 'metallic' : (custom ? custom.finish : (spec.isTank ? 'matte' : 'gloss'));
-      const paint = makeCarPaint(paintHex, finish);
+      const texStyle = isColossus ? 'colossus' : spec.isTank ? 'tank' : spec.id === 'cybertruck' ? 'cyber' : (spec.id === 'sweetpaz' || isSweetBoss) ? 'sweet' : spec.id === 'kamaz' ? 'rally' : (spec.id === 'zeekr001' || spec.id === 'charger') ? 'sport' : 'car';
+      const paint = makeCarPaint(paintHex, finish, texStyle);
       const w = isColossus ? 4.4 : isSweetBoss ? 3.2 : spec.bodyW;
       const l = isColossus ? 8.6 : isSweetBoss ? 7.2 : spec.bodyL;
       const isTank = isColossus || spec.isTank;
@@ -1418,257 +1701,548 @@
       }
 
       if (isTank) {
-        const hullW = w * 0.42;
-        const hullSlices = spec.id === 't34' && !isColossus
-          ? [
-              { z: -l * 0.5, yBot: 0.44, yTop: 1.12, wBot: hullW * 0.9, wBelt: hullW * 0.85, wTop: hullW * 0.65 },
-              { z: -l * 0.3, yBot: 0.42, yTop: 1.22, wBot: hullW * 1.0, wBelt: hullW * 0.98, wTop: hullW * 0.72 },
-              { z:  l * 0.26, yBot: 0.42, yTop: 1.22, wBot: hullW * 1.0, wBelt: hullW * 0.98, wTop: hullW * 0.72 },
-              { z:  l * 0.52, yBot: 0.58, yTop: 0.78, wBot: hullW * 0.94, wBelt: hullW * 0.92, wTop: hullW * 0.88 }
-            ]
-          : [
-              { z: -l * 0.5, yBot: 0.42, yTop: isColossus ? 1.75 : 1.14, wBot: hullW * 1.02, wBelt: hullW * 1.04, wTop: hullW * 0.94 },
-              { z:  l * 0.28, yBot: 0.42, yTop: isColossus ? 1.8 : 1.16, wBot: hullW * 1.04, wBelt: hullW * 1.05, wTop: hullW * 0.96 },
-              { z:  l * 0.52, yBot: 0.56, yTop: isColossus ? 1.1 : 0.76, wBot: hullW * 1.0, wBelt: hullW * 0.98, wTop: hullW * 0.95 }
-            ];
-        addPart(bodyGroup, makeSculptedHull(hullSlices, true), paint);
+        const hullW = w * 0.78;
+        const sh = new THREE.Shape();
+        if (spec.id === 't34' && !isColossus) {
+          // Authentic T-34-85 60-degree sloped glacis & sloped rear engine deck!
+          sh.moveTo(-l * 0.46, 0.56);
+          sh.lineTo(-l * 0.51, 0.96);
+          sh.lineTo(-l * 0.34, 1.22);
+          sh.lineTo( l * 0.24, 1.24);
+          sh.lineTo( l * 0.52, 0.76);
+          sh.lineTo( l * 0.44, 0.44);
+          sh.lineTo(-l * 0.38, 0.44);
+          sh.closePath();
+          addPart(bodyGroup, makeProfileBody(sh, hullW, { bevel: 0.08, bevelSize: 0.05, yBelt: 0.9, topTaper: 0.16, noseTaper: 0.04, tailTaper: 0.04, flatShaded: true, camoUV: true }), paint);
+          // Rear engine louver grill + wooden unditching log strapped across rear!
+          addPart(bodyGroup, new THREE.BoxGeometry(hullW * 0.72, 0.08, 1.05), MAT_DARK, 0, 1.26, -l * 0.22);
+          const logMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.92 });
+          addPart(bodyGroup, new THREE.CylinderGeometry(0.14, 0.14, w * 0.88, 10).rotateZ(Math.PI / 2), logMat, 0, 1.06, -l * 0.50);
+          // Twin angled rear exhaust pipes
+          for (const s of [-0.45, 0.45]) addPart(bodyGroup, new THREE.CylinderGeometry(0.08, 0.08, 0.45, 8).rotateX(Math.PI / 3), MAT_DARK, s, 0.86, -l * 0.52);
+        } else {
+          // T-90M / COLOSSUS-X: low, wide angular MBT hull with sloped glacis & stepped engine deck
+          const hTop = isColossus ? 1.82 : 1.18;
+          sh.moveTo(-l * 0.48, 0.48);
+          sh.lineTo(-l * 0.50, hTop * 0.92);
+          sh.lineTo(-l * 0.36, hTop);
+          sh.lineTo( l * 0.28, hTop);
+          sh.lineTo( l * 0.53, hTop * 0.62);
+          sh.lineTo( l * 0.45, 0.42);
+          sh.lineTo(-l * 0.42, 0.42);
+          sh.closePath();
+          addPart(bodyGroup, makeProfileBody(sh, hullW, { bevel: 0.09, bevelSize: 0.05, yBelt: hTop * 0.7, topTaper: 0.08, flatShaded: true, camoUV: true }), paint);
+          // ERA ("Relikt") brick blocks across front glacis!
+          for (let b = -3; b <= 3; b++) {
+            addPart(bodyGroup, new THREE.BoxGeometry(hullW * 0.12, isColossus ? 0.24 : 0.15, 0.42), isColossus ? MAT_CRIMSON : MAT_DARK, b * (hullW * 0.13), hTop * 0.82, l * 0.38, 0.42, 0, 0);
+          }
+          // Glowing radiator vents on rear deck
+          addPart(bodyGroup, new THREE.BoxGeometry(hullW * 0.76, 0.09, l * 0.22), isColossus ? MAT_CRIMSON : MAT_DARK, 0, hTop + 0.04, -l * 0.28, 0, 0, 0, !isColossus);
+        }
+
         const rwCount = isColossus ? 7 : spec.id === 't90m' ? 6 : 5;
+        const trackY = isColossus ? 0.54 : 0.39;
         for (const s of [-1, 1]) {
           const tx = s * (w * 0.43);
-          addPart(bodyGroup, new THREE.BoxGeometry(0.66, 0.1, l * 0.96), paint, tx, isColossus ? 1.32 : 0.96, 0);
-          addPart(bodyGroup, new THREE.BoxGeometry(0.6, 0.11, l * 0.88), MAT_TIRE, tx, isColossus ? 1.18 : 0.84, 0);
-          addPart(bodyGroup, new THREE.BoxGeometry(0.6, 0.11, l * 0.78), MAT_TIRE, tx, 0.06, 0);
+          addPart(bodyGroup, new THREE.BoxGeometry(0.68, 0.11, l * 0.96), paint, tx, isColossus ? 1.32 : 0.96, 0);
+          // Wrapped track bands (top, bottom, sloped front & rear return segments)
+          addPart(bodyGroup, new THREE.BoxGeometry(0.62, 0.11, l * 0.88), MAT_TIRE, tx, isColossus ? 1.18 : 0.84, 0);
+          addPart(bodyGroup, new THREE.BoxGeometry(0.62, 0.11, l * 0.78), MAT_TIRE, tx, 0.06, 0);
+          addPart(bodyGroup, new THREE.BoxGeometry(0.62, 0.11, l * 0.18), MAT_TIRE, tx, trackY * 0.9, l * 0.43, -0.78, 0, 0);
+          addPart(bodyGroup, new THREE.BoxGeometry(0.62, 0.11, l * 0.18), MAT_TIRE, tx, trackY * 0.9, -l * 0.43, 0.78, 0, 0);
           for (let i = 0; i < rwCount; i++) {
-            const f = (i / (rwCount - 1) - 0.5) * (l * 0.74);
+            const f = (i / (rwCount - 1) - 0.5) * (l * 0.76);
             const rw = createWheel(isColossus ? 0.52 : 0.37, 0.54, accentHex, 'offroad');
-            rw.position.set(tx, isColossus ? 0.54 : 0.39, f);
+            rw.position.set(tx, trackY, f);
             root.add(rw);
             wheels.push(rw);
           }
         }
-        // Detachable tank armor zones: Front plow/ERA, Rear drums, Left/Right side skirts
-        const frontPlow = addPart(bodyGroup, new THREE.BoxGeometry(w * 0.92, isColossus ? 0.65 : 0.34, 0.38), isColossus ? MAT_CRIMSON : MAT_DARK, 0, isColossus ? 0.85 : 0.62, l * 0.54, 0.3);
+        // Detachable tank armor zones: Front plow/ERA, Rear drums, Left/Right ERA side skirts
+        const frontPlow = new THREE.Group();
+        addPart(frontPlow, new THREE.BoxGeometry(w * 0.94, isColossus ? 0.72 : 0.36, 0.38), isColossus ? MAT_CRIMSON : MAT_DARK, 0, isColossus ? 0.85 : 0.62, l * 0.54, 0.32);
+        if (isColossus) {
+          for (let t = -3; t <= 3; t++) addPart(frontPlow, new THREE.ConeGeometry(0.14, 0.65, 5).rotateX(Math.PI / 2), MAT_CHROME, t * 0.55, 0.72, l * 0.58);
+        }
+        bodyGroup.add(frontPlow);
+
         const rearDrums = new THREE.Group();
-        for (const sx of [-0.55, 0.55]) addPart(rearDrums, new THREE.CylinderGeometry(0.22, 0.22, 0.85, 10).rotateZ(Math.PI / 2), paint, sx, isColossus ? 1.6 : 1.14, -l * 0.48);
+        for (const sx of [-0.62, 0.62]) addPart(rearDrums, new THREE.CylinderGeometry(0.24, 0.24, 0.92, 12).rotateZ(Math.PI / 2), paint, sx, isColossus ? 1.62 : 1.16, -l * 0.49);
         bodyGroup.add(rearDrums);
-        const skirtL = addPart(bodyGroup, new THREE.BoxGeometry(0.14, isColossus ? 0.75 : 0.48, l * 0.84), isColossus ? MAT_DARK : paint, -w * 0.55, isColossus ? 0.95 : 0.66, 0);
-        const skirtR = addPart(bodyGroup, new THREE.BoxGeometry(0.14, isColossus ? 0.75 : 0.48, l * 0.84), isColossus ? MAT_DARK : paint, w * 0.55, isColossus ? 0.95 : 0.66, 0);
+        const skirtL = addPart(bodyGroup, new THREE.BoxGeometry(0.16, isColossus ? 0.76 : 0.48, l * 0.86), isColossus ? MAT_DARK : paint, -w * 0.55, isColossus ? 0.95 : 0.66, 0);
+        const skirtR = addPart(bodyGroup, new THREE.BoxGeometry(0.16, isColossus ? 0.76 : 0.48, l * 0.86), isColossus ? MAT_DARK : paint, w * 0.55, isColossus ? 0.95 : 0.66, 0);
         zones.front.push(frontPlow); zones.rear.push(rearDrums); zones.left.push(skirtL); zones.right.push(skirtR);
 
         if (isColossus) {
           for (const s of [-1, 1]) {
-            addPart(bodyGroup, new THREE.BoxGeometry(0.45, 0.22, 0.16), MAT_CRIMSON, s * 1.25, 1.35, l * 0.48, 0, 0, 0, false);
+            addPart(bodyGroup, new THREE.BoxGeometry(0.48, 0.24, 0.16), MAT_CRIMSON, s * 1.25, 1.38, l * 0.48, 0, 0, 0, false);
+            addLightHalo(bodyGroup, 1.1, 0.55, s * 1.25, 1.38, l * 0.57, 0xff1f4b, 0.65);
           }
         } else {
           for (const s of [-1, 1]) addPart(bodyGroup, new THREE.BoxGeometry(0.28, 0.14, 0.12), MAT_HEADLIGHT, s * (w * 0.3), 1.0, l * 0.45, 0, 0, 0, false);
         }
-        // 3D Hull Number Plate on front & rear
         if (custom?.plate) {
           const plF = makePlateMesh(custom.plate, true); plF.position.set(0, 1.15, l * 0.33); plF.rotation.x = -0.35; bodyGroup.add(plF);
-          const plR = makePlateMesh(custom.plate, true); plR.position.set(0, 1.02, -l * 0.51); plR.rotation.y = Math.PI; bodyGroup.add(plR);
+          const plR = makePlateMesh(custom.plate, true); plR.position.set(0, 1.02, -l * 0.52); plR.rotation.y = Math.PI; bodyGroup.add(plR);
         }
-        turretY = isColossus ? 1.82 : 1.22;
+        turretY = isColossus ? 1.84 : 1.24;
       } else {
-        // SCULPTED CARS & TRUCKS
+        // =====================================================================
+        // SCULPTED UNIQUE 3D CARS, SUVS, VANS & RALLY TRUCKS (ExtrudeGeometry + Bevels)
+        // =====================================================================
         const hw = w * 0.5;
-        let wheelRad = 0.42, wheelWidth = 0.34, wheelStyle = 'sport', wZ = [l * 0.31, -l * 0.31], archMat = MAT_DARK;
-        let spoilerY = 1.06, frontBumperMat = MAT_DARK;
+        let wheelRadF = 0.42, wheelRadR = 0.42, wheelWidthF = 0.34, wheelWidthR = 0.34;
+        let wheelStyle = 'sport', wZ = [l * 0.31, -l * 0.31], archMat = MAT_DARK, angularArch = false;
+        let frontBumperMat = MAT_DARK, customRearSpoiler = null, customFrontBumper = null;
+        let spoilerY = 1.06;
 
         if (spec.id === 'kamaz') {
-          // КАМАЗ Дакар-Монстр: массивная кабина над двигателем + спортивный тент-кузов + стальной отвал
-          addPart(bodyGroup, makeSculptedHull([
-            { z: -l * 0.5, yBot: 0.62, yTop: 2.38, wBot: hw * 0.96, wBelt: hw * 1.0, wTop: hw * 0.90 },
-            { z:  l * 0.16, yBot: 0.62, yTop: 2.42, wBot: hw * 0.98, wBelt: hw * 1.0, wTop: hw * 0.90 },
-            { z:  l * 0.48, yBot: 0.65, yTop: 2.28, wBot: hw * 0.95, wBelt: hw * 0.98, wTop: hw * 0.86 }
-          ], true), paint);
-          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.84, 0.68, 0.12), MAT_GLASS, 0, 1.86, l * 0.485, -0.08, 0, 0, false);
-          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.78, 0.48, 0.12), MAT_DARK, 0, 1.12, l * 0.49);
+          // КАМАЗ «Дакар»: отдельная кабина + рама + сдвоенные вертикальные трубы + аэродинамический скошенный кузов!
+          // Heavy exposed chassis frame rails
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.68, 0.34, l * 0.94), MAT_DARK, 0, 0.68, 0);
+          // 1) Forward-control aggressive cab
+          const cabSh = new THREE.Shape();
+          cabSh.moveTo(l * 0.16, 0.78);
+          cabSh.lineTo(l * 0.16, 2.40);
+          cabSh.lineTo(l * 0.38, 2.38);
+          cabSh.quadraticCurveTo(l * 0.46, 2.34, l * 0.49, 1.62);
+          cabSh.lineTo(l * 0.51, 0.84);
+          cabSh.closePath();
+          addPart(bodyGroup, makeProfileBody(cabSh, w * 0.94, { bevel: 0.11, bevelSize: 0.06, yBelt: 1.55, topTaper: 0.10, noseTaper: 0.07 }), paint);
+          // Cab windshield, visor & 4 orange Dakar marker lights
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.80, 0.62, 0.12), MAT_GLASS, 0, 1.94, l * 0.465, -0.20, 0, 0, false);
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.88, 0.14, 0.32), MAT_DARK, 0, 2.32, l * 0.44, 0.22, 0, 0);
+          for (let m = -1.5; m <= 1.5; m++) addPart(bodyGroup, new THREE.BoxGeometry(0.14, 0.08, 0.08), MAT_AMBER, m * 0.42, 2.40, l * 0.43, 0, 0, 0, false);
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.76, 0.48, 0.12), MAT_DARK, 0, 1.24, l * 0.515);
+          addSideMirrors(bodyGroup, hw + 0.04, 1.88, l * 0.42, MAT_DARK);
+
+          // 2) Twin vertical chrome smokestacks & rollcage bars between cab & rear body!
           for (const s of [-1, 1]) {
-            addPart(bodyGroup, new THREE.BoxGeometry(0.36, 0.18, 0.1), MAT_HEADLIGHT, s * (w * 0.34), 0.92, l * 0.495, 0, 0, 0, false);
-            addPart(bodyGroup, new THREE.BoxGeometry(0.24, 0.38, 0.1), MAT_TAILLIGHT, s * (w * 0.38), 1.0, -l * 0.505, 0, 0, 0, false);
+            addPart(bodyGroup, new THREE.CylinderGeometry(0.085, 0.085, 1.75, 10), MAT_CHROME, s * (hw * 0.78), 1.68, l * 0.11);
+            addPart(bodyGroup, new THREE.CylinderGeometry(0.09, 0.085, 0.28, 10), MAT_CHROME, s * (hw * 0.78), 2.58, l * 0.07, -0.45, 0, 0);
           }
-          wheelRad = 0.66; wheelWidth = 0.46; wheelStyle = 'offroad'; wZ = [l * 0.32, -l * 0.32];
-          spoilerY = 2.42; turretY = 2.45;
+
+          // 3) Sloped aerodynamic Dakar rally cargo body
+          const boxSh = new THREE.Shape();
+          boxSh.moveTo(-l * 0.50, 0.88);
+          boxSh.lineTo(-l * 0.50, 2.08);
+          boxSh.lineTo(-l * 0.32, 2.46);
+          boxSh.lineTo( l * 0.08, 2.46);
+          boxSh.lineTo( l * 0.08, 0.84);
+          boxSh.closePath();
+          addPart(bodyGroup, makeProfileBody(boxSh, w * 0.98, { bevel: 0.08, bevelSize: 0.04, yBelt: 1.8, topTaper: 0.08, tailTaper: 0.04 }), paint);
+          // High-contrast Dakar livery side panels & rear spare wheels recess
+          for (const s of [-1, 1]) {
+            addPart(bodyGroup, new THREE.BoxGeometry(0.06, 0.42, l * 0.48), MAT_CHROME, s * (hw + 0.01), 1.65, -l * 0.21, 0, 0, 0, false);
+            addPart(bodyGroup, new THREE.BoxGeometry(0.07, 0.16, l * 0.44), MAT_AMBER, s * (hw + 0.015), 1.38, -l * 0.21, 0, 0, 0, false);
+            addPart(bodyGroup, new THREE.BoxGeometry(0.38, 0.20, 0.1), MAT_HEADLIGHT, s * (w * 0.33), 0.98, l * 0.52, 0, 0, 0, false);
+            addPart(bodyGroup, new THREE.BoxGeometry(0.28, 0.42, 0.1), MAT_TAILLIGHT, s * (w * 0.36), 1.12, -l * 0.51, 0, 0, 0, false);
+            addLightHalo(bodyGroup, 0.65, 0.65, s * (w * 0.36), 1.12, -l * 0.57, 0xff1e42, 0.48);
+          }
+          // Heavy front steel Dakar ram wedge
+          customFrontBumper = new THREE.Group();
+          addPart(customFrontBumper, new THREE.BoxGeometry(w * 1.08, 0.56, 0.42), MAT_STEEL, 0, 0.72, l * 0.55, 0.22, 0, 0);
+          addPart(customFrontBumper, new THREE.BoxGeometry(w * 0.88, 0.18, 0.14), MAT_AMBER, 0, 0.82, l * 0.62, 0, 0, 0, false);
+          bodyGroup.add(customFrontBumper);
+
+          wheelRadF = wheelRadR = 0.68; wheelWidthF = wheelWidthR = 0.48; wheelStyle = 'offroad';
+          wZ = [l * 0.33, -l * 0.30]; spoilerY = 2.48; turretY = 2.50;
+
         } else if (spec.id === 'niva') {
-          // Нива 4×4 «Тайга»: компактный внедорожник с классической решёткой, надфарниками и экспедиционным багажником
-          addPart(bodyGroup, makeSculptedHull([
-            { z: -l * 0.49, yBot: 0.48, yTop: 1.08, wBot: hw * 0.95, wBelt: hw * 0.98, wTop: hw * 0.92 },
-            { z:  l * 0.42, yBot: 0.46, yTop: 1.12, wBot: hw * 0.96, wBelt: hw * 1.0, wTop: hw * 0.93 },
-            { z:  l * 0.50, yBot: 0.52, yTop: 1.04, wBot: hw * 0.92, wBelt: hw * 0.95, wTop: hw * 0.90 }
-          ]), paint);
-          addTaperedCabin(bodyGroup, paint, { zRear: -l * 0.44, zRoofRear: -l * 0.35, zRoofFront: l * 0.1, zFront: l * 0.21, yBase: 1.08, yRoof: 1.66, wBase: hw * 0.93, wRoof: hw * 0.80 });
-          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.78, 0.28, 0.08), MAT_DARK, 0, 0.82, l * 0.505);
+          // Нива 4×4 «Тайга»: короткая лифтованная база, скошенная задняя дверь, шноркель, багажник с канистрой и 4 фарами!
+          const sh = new THREE.Shape();
+          sh.moveTo(-l * 0.47, 0.50);
+          sh.lineTo(-l * 0.50, 1.06);
+          sh.lineTo(-l * 0.34, 1.66); // Classic Niva sloped rear hatch!
+          sh.lineTo( l * 0.10, 1.68);
+          sh.lineTo( l * 0.24, 1.16);
+          sh.lineTo( l * 0.49, 1.10);
+          sh.lineTo( l * 0.50, 0.54);
+          sh.closePath();
+          addPart(bodyGroup, makeProfileBody(sh, w * 0.96, { bevel: 0.12, bevelSize: 0.06, yBelt: 1.12, topTaper: 0.18, noseTaper: 0.07, tailTaper: 0.07 }), paint);
+          // Recessed windshield + side windows + sloped rear glass
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.78, 0.52, 0.09), MAT_GLASS, 0, 1.40, l * 0.18, -0.34, 0, 0, false);
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.74, 0.50, 0.09), MAT_GLASS, 0, 1.38, -l * 0.42, 0.38, 0, 0, false);
+          for (const s of [-1, 1]) addPart(bodyGroup, new THREE.BoxGeometry(0.08, 0.44, l * 0.48), MAT_GLASS, s * (hw * 0.86), 1.38, -l * 0.12, 0, 0, s * 0.16, false);
+
+          // Classic Niva grille, round headlights & iconic eyebrow turn signals
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.82, 0.28, 0.1), MAT_DARK, 0, 0.86, l * 0.505);
           for (const s of [-1, 1]) {
-            addPart(bodyGroup, new THREE.CylinderGeometry(0.12, 0.12, 0.08, 14).rotateX(Math.PI / 2), MAT_HEADLIGHT, s * (w * 0.34), 0.82, l * 0.51, 0, 0, 0, false);
-            addPart(bodyGroup, new THREE.BoxGeometry(0.24, 0.06, 0.08), MAT_AMBER, s * (w * 0.34), 0.98, l * 0.505, 0, 0, 0, false);
-            addPart(bodyGroup, new THREE.BoxGeometry(0.28, 0.14, 0.08), MAT_TAILLIGHT, s * (w * 0.34), 0.84, -l * 0.495, 0, 0, 0, false);
+            addPart(bodyGroup, new THREE.CylinderGeometry(0.135, 0.135, 0.1, 16).rotateX(Math.PI / 2), MAT_HEADLIGHT, s * (w * 0.34), 0.86, l * 0.515, 0, 0, 0, false);
+            addPart(bodyGroup, new THREE.TorusGeometry(0.14, 0.025, 6, 16), MAT_CHROME, s * (w * 0.34), 0.86, l * 0.555, 0, 0, 0, false);
+            addPart(bodyGroup, new THREE.BoxGeometry(0.26, 0.065, 0.09), MAT_AMBER, s * (w * 0.34), 1.04, l * 0.50, 0, 0, 0, false);
+            addPart(bodyGroup, new THREE.BoxGeometry(0.32, 0.15, 0.09), MAT_TAILLIGHT, s * (w * 0.33), 0.90, -l * 0.495, 0, 0, 0, false);
+            addLightHalo(bodyGroup, 0.52, 0.28, s * (w * 0.33), 0.90, -l * 0.55, 0xff1e42, 0.45);
           }
-          wheelRad = 0.46; wheelWidth = 0.36; wheelStyle = 'offroad'; spoilerY = 1.7; turretY = 1.68;
-        } else if (spec.id === 'bydu8') {
-          // BYD Yangwang U8: футуристичный люксовый внедорожник с пиксельной решёткой, лидаром и запаской
-          addPart(bodyGroup, makeSculptedHull([
-            { z: -l * 0.49, yBot: 0.52, yTop: 1.24, wBot: hw * 0.97, wBelt: hw * 1.02, wTop: hw * 0.96 },
-            { z:  l * 0.43, yBot: 0.50, yTop: 1.26, wBot: hw * 0.98, wBelt: hw * 1.02, wTop: hw * 0.96 },
-            { z:  l * 0.51, yBot: 0.56, yTop: 1.18, wBot: hw * 0.94, wBelt: hw * 0.98, wTop: hw * 0.92 }
-          ]), paint);
-          addTaperedCabin(bodyGroup, MAT_DARK, { zRear: -l * 0.46, zRoofRear: -l * 0.40, zRoofFront: l * 0.12, zFront: l * 0.22, yBase: 1.22, yRoof: 1.88, wBase: hw * 0.95, wRoof: hw * 0.84 });
-          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.88, 0.42, 0.09), MAT_DARK, 0, 0.92, l * 0.51);
-          for (const s of [-1, 1]) {
-            addPart(bodyGroup, new THREE.BoxGeometry(0.28, 0.36, 0.1), MAT_DRL, s * (w * 0.36), 0.94, l * 0.515, 0, 0, 0, false);
-            addPart(bodyGroup, new THREE.BoxGeometry(0.16, 0.46, 0.09), MAT_TAILLIGHT, s * (w * 0.42), 1.04, -l * 0.495, 0, 0, 0, false);
+          addSideMirrors(bodyGroup, hw * 0.95, 1.16, l * 0.18, MAT_DARK);
+
+          // Black off-road snorkel up the right A-pillar!
+          addPart(bodyGroup, new THREE.CylinderGeometry(0.055, 0.055, 0.72, 8), MAT_DARK, hw * 0.92, 1.42, l * 0.20, -0.32, 0, 0);
+          addPart(bodyGroup, new THREE.BoxGeometry(0.14, 0.14, 0.16), MAT_DARK, hw * 0.92, 1.74, l * 0.11);
+
+          // Expedition tubular roof rack + red fuel jerrycan + 4 yellow rally lamps!
+          const rack = new THREE.Group();
+          for (const s of [-1, 1]) addPart(rack, new THREE.BoxGeometry(0.06, 0.12, l * 0.44), MAT_DARK, s * (hw * 0.68), 1.78, -l * 0.12);
+          for (const rz of [-l * 0.34, l * 0.10]) addPart(rack, new THREE.BoxGeometry(w * 0.72, 0.12, 0.06), MAT_DARK, 0, 1.78, rz);
+          addPart(rack, new THREE.BoxGeometry(0.42, 0.16, 0.52), MAT_CALIPER, -0.32, 1.80, -l * 0.22); // Red jerrycan!
+          for (let i = -1.5; i <= 1.5; i++) {
+            addPart(rack, new THREE.CylinderGeometry(0.09, 0.09, 0.1, 12).rotateX(Math.PI / 2), MAT_AMBER, i * 0.30, 1.82, l * 0.14, 0, 0, 0, false);
           }
-          // Восьмиугольный кофр запаски (отлетает при потере кормовой брони)
-          const spareBox = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.48, 0.3, 8).rotateX(Math.PI / 2), paint);
-          spareBox.position.set(0, 1.12, -l * 0.51 - 0.14);
-          bodyGroup.add(spareBox);
-          zones.rear.push(spareBox);
-          wheelRad = 0.51; wheelWidth = 0.40; wheelStyle = 'sport'; spoilerY = 1.9; turretY = 1.92;
-        } else if (spec.id === 'vaz2107') {
-          addPart(bodyGroup, makeSculptedHull([
-            { z: -l * 0.5, yBot: 0.42, yTop: 0.92, wBot: hw * 0.94, wBelt: hw * 0.96, wTop: hw * 0.9 },
-            { z: -l * 0.28, yBot: 0.36, yTop: 0.96, wBot: hw * 0.98, wBelt: hw * 1.0, wTop: hw * 0.94 },
-            { z:  l * 0.24, yBot: 0.36, yTop: 0.98, wBot: hw * 0.98, wBelt: hw * 1.0, wTop: hw * 0.94 },
-            { z:  l * 0.5, yBot: 0.44, yTop: 0.88, wBot: hw * 0.92, wBelt: hw * 0.94, wTop: hw * 0.88 }
-          ]), paint);
-          addTaperedCabin(bodyGroup, paint, { zRear: -l * 0.27, zRoofRear: -l * 0.17, zRoofFront: l * 0.13, zFront: l * 0.24, yBase: 0.96, yRoof: 1.50, wBase: hw * 0.94, wRoof: hw * 0.78 });
-          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.42, 0.34, 0.1), MAT_CHROME, 0, 0.72, l * 0.5 + 0.02);
-          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.36, 0.28, 0.11), MAT_DARK, 0, 0.72, l * 0.5 + 0.025);
-          for (const s of [-1, 1]) {
-            addPart(bodyGroup, new THREE.BoxGeometry(0.32, 0.2, 0.08), MAT_HEADLIGHT, s * (w * 0.33), 0.72, l * 0.5 + 0.01, 0, 0, 0, false);
-            addPart(bodyGroup, new THREE.BoxGeometry(0.1, 0.2, 0.085), MAT_AMBER, s * (w * 0.45), 0.72, l * 0.495, 0, 0, 0, false);
-            addPart(bodyGroup, new THREE.BoxGeometry(0.42, 0.16, 0.08), MAT_TAILLIGHT, s * (w * 0.32), 0.72, -l * 0.5 - 0.01, 0, 0, 0, false);
-          }
-          archMat = paint; frontBumperMat = MAT_CHROME; wheelRad = 0.39; wheelStyle = 'deep'; turretY = 1.52;
+          bodyGroup.add(rack);
+          customRearSpoiler = rack;
+
+          // Winch bumper with twin red tow hooks
+          customFrontBumper = new THREE.Group();
+          addPart(customFrontBumper, new THREE.BoxGeometry(w * 1.04, 0.22, 0.28), MAT_DARK, 0, 0.56, l * 0.53);
+          addPart(customFrontBumper, new THREE.CylinderGeometry(0.11, 0.11, 0.48, 10).rotateZ(Math.PI / 2), MAT_STEEL, 0, 0.66, l * 0.56);
+          for (const s of [-0.45, 0.45]) addPart(customFrontBumper, new THREE.TorusGeometry(0.07, 0.025, 6, 10), MAT_CALIPER, s, 0.54, l * 0.65);
+          bodyGroup.add(customFrontBumper);
+
+          wheelRadF = wheelRadR = 0.49; wheelWidthF = wheelWidthR = 0.38; wheelStyle = 'offroad';
+          wZ = [l * 0.31, -l * 0.30]; turretY = 1.78;
+
         } else if (spec.id === 'bukhanka') {
-          addPart(bodyGroup, makeSculptedHull([
-            { z: -l * 0.5, yBot: 0.48, yTop: 1.24, wBot: hw * 0.96, wBelt: hw * 1.0, wTop: hw * 0.96 },
-            { z:  l * 0.42, yBot: 0.46, yTop: 1.26, wBot: hw * 0.98, wBelt: hw * 1.02, wTop: hw * 0.96 },
-            { z:  l * 0.5, yBot: 0.54, yTop: 1.18, wBot: hw * 0.9, wBelt: hw * 0.94, wTop: hw * 0.88 }
-          ]), paint);
-          addTaperedCabin(bodyGroup, paint, { zRear: -l * 0.48, zRoofRear: -l * 0.43, zRoofFront: l * 0.41, zFront: l * 0.49, yBase: 1.22, yRoof: 1.94, wBase: hw * 0.96, wRoof: hw * 0.84, splitWindshield: true });
+          // УАЗ «Буханка»: настоящий округлый «батон» с куполообразной крышей, скруглённым носом и катушкой Теслы!
+          const sh = new THREE.Shape();
+          sh.moveTo(-l * 0.48, 0.52);
+          sh.quadraticCurveTo(-l * 0.51, 1.25, -l * 0.47, 1.76);
+          sh.quadraticCurveTo(-l * 0.44, 1.98, -l * 0.26, 2.00);
+          sh.lineTo( l * 0.28, 2.00);
+          sh.quadraticCurveTo( l * 0.47, 1.96, l * 0.49, 1.44);
+          sh.quadraticCurveTo( l * 0.52, 0.94, l * 0.48, 0.54);
+          sh.closePath();
+          addPart(bodyGroup, makeProfileBody(sh, w * 0.96, { bevel: 0.20, bevelSize: 0.11, yBelt: 1.24, topTaper: 0.14, noseTaper: 0.12, tailTaper: 0.10 }), paint);
+          // Split 2-pane windshield + side bus windows
           for (const s of [-1, 1]) {
-            addPart(bodyGroup, new THREE.CylinderGeometry(0.14, 0.14, 0.09, 14).rotateX(Math.PI / 2), MAT_HEADLIGHT, s * (w * 0.34), 0.94, l * 0.5, 0, 0, 0, false);
-            addPart(bodyGroup, new THREE.BoxGeometry(0.16, 0.28, 0.08), MAT_TAILLIGHT, s * (w * 0.39), 0.84, -l * 0.5 - 0.01, 0, 0, 0, false);
+            addPart(bodyGroup, new THREE.BoxGeometry(w * 0.36, 0.48, 0.09), MAT_GLASS, s * (w * 0.21), 1.56, l * 0.475, -0.14, s * 0.08, 0, false);
+            addPart(bodyGroup, new THREE.BoxGeometry(0.08, 0.44, l * 0.68), MAT_GLASS, s * (hw * 0.92), 1.54, -l * 0.02, 0, 0, s * 0.08, false);
+            // Iconic round headlights & smiling oval grille
+            addPart(bodyGroup, new THREE.CylinderGeometry(0.15, 0.15, 0.1, 16).rotateX(Math.PI / 2), MAT_HEADLIGHT, s * (w * 0.33), 0.98, l * 0.505, 0, 0, 0, false);
+            addPart(bodyGroup, new THREE.TorusGeometry(0.16, 0.025, 6, 16), MAT_CHROME, s * (w * 0.33), 0.98, l * 0.545, 0, 0, 0, false);
+            addPart(bodyGroup, new THREE.BoxGeometry(0.16, 0.32, 0.09), MAT_TAILLIGHT, s * (w * 0.38), 0.92, -l * 0.495, 0, 0, 0, false);
+            addLightHalo(bodyGroup, 0.34, 0.48, s * (w * 0.38), 0.92, -l * 0.55, 0xff1e42, 0.45);
           }
-          wheelRad = 0.47; wheelWidth = 0.36; wheelStyle = 'offroad'; spoilerY = 1.98; turretY = 1.98;
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.44, 0.26, 0.09), MAT_DARK, 0, 0.94, l * 0.505);
+          addSideMirrors(bodyGroup, hw + 0.02, 1.46, l * 0.38, MAT_DARK);
+
+          // Glowing blue Tesla capacitor insulators along the roof + rear barn-door ladder & spare wheel!
+          for (const s of [-1, 1]) {
+            for (const cz of [-l * 0.28, 0.0, l * 0.24]) {
+              addPart(bodyGroup, new THREE.CylinderGeometry(0.07, 0.09, 0.28, 8), MAT_DRL, s * (hw * 0.66), 2.10, cz, 0, 0, 0, false);
+            }
+          }
+          customRearSpoiler = new THREE.Group();
+          const spareB = createWheel(0.42, 0.26, accentHex, 'offroad');
+          spareB.rotation.y = Math.PI / 2; spareB.position.set(-0.34, 1.12, -l * 0.52);
+          customRearSpoiler.add(spareB);
+          // Rear access ladder
+          for (const lx of [0.28, 0.58]) addPart(customRearSpoiler, new THREE.CylinderGeometry(0.025, 0.025, 1.32, 6), MAT_STEEL, lx, 1.38, -l * 0.51);
+          for (let r = 0; r < 5; r++) addPart(customRearSpoiler, new THREE.CylinderGeometry(0.02, 0.02, 0.32, 6).rotateZ(Math.PI / 2), MAT_STEEL, 0.43, 0.86 + r * 0.26, -l * 0.51);
+          bodyGroup.add(customRearSpoiler);
+
+          wheelRadF = wheelRadR = 0.48; wheelWidthF = wheelWidthR = 0.36; wheelStyle = 'offroad';
+          wZ = [l * 0.30, -l * 0.28]; turretY = 2.02;
+
+        } else if (spec.id === 'vaz2107') {
+          // ВАЗ-2107 «Семёрка»: классический трёхобъёмный дрифт-седан с хромированной решёткой, полосами и дактейлом!
+          const sh = new THREE.Shape();
+          sh.moveTo(-l * 0.49, 0.42);
+          sh.lineTo(-l * 0.50, 0.90);
+          sh.lineTo(-l * 0.29, 0.96);
+          sh.lineTo(-l * 0.17, 1.48);
+          sh.lineTo( l * 0.13, 1.49);
+          sh.lineTo( l * 0.25, 0.98);
+          sh.lineTo( l * 0.49, 0.89);
+          sh.lineTo( l * 0.50, 0.44);
+          sh.closePath();
+          addPart(bodyGroup, makeProfileBody(sh, w * 0.96, { bevel: 0.10, bevelSize: 0.05, yBelt: 0.97, topTaper: 0.18, noseTaper: 0.06, tailTaper: 0.06 }), paint);
+          // Front/rear glass & side greenhouse
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.78, 0.50, 0.08), MAT_GLASS, 0, 1.24, l * 0.20, -0.44, 0, 0, false);
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.76, 0.48, 0.08), MAT_GLASS, 0, 1.24, -l * 0.23, 0.44, 0, 0, false);
+          for (const s of [-1, 1]) {
+            addPart(bodyGroup, new THREE.BoxGeometry(0.08, 0.40, l * 0.40), MAT_GLASS, s * (hw * 0.86), 1.22, -l * 0.02, 0, 0, s * 0.18, false);
+            // Iconic chrome side molding strip
+            addPart(bodyGroup, new THREE.BoxGeometry(0.05, 0.05, l * 0.88), MAT_CHROME, s * (hw * 0.97), 0.78, 0, 0, 0, 0, false);
+          }
+          // Twin white racing stripes across hood, roof & trunk!
+          for (const sx of [-0.22, 0.22]) {
+            addPart(bodyGroup, new THREE.BoxGeometry(0.14, 0.03, l * 0.24), MAT_CHROME, sx, 0.96, l * 0.37, 0.09, 0, 0, false);
+            addPart(bodyGroup, new THREE.BoxGeometry(0.14, 0.03, l * 0.30), MAT_CHROME, sx, 1.52, -l * 0.02, 0, 0, 0, false);
+            addPart(bodyGroup, new THREE.BoxGeometry(0.14, 0.03, l * 0.20), MAT_CHROME, sx, 0.95, -l * 0.39, -0.08, 0, 0, false);
+          }
+          // Iconic upright chrome VAZ-2107 radiator grille + headlights + tri-color taillights
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.42, 0.36, 0.10), MAT_CHROME, 0, 0.74, l * 0.505);
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.35, 0.30, 0.11), MAT_DARK, 0, 0.74, l * 0.512);
+          for (const s of [-1, 1]) {
+            addPart(bodyGroup, new THREE.BoxGeometry(0.32, 0.20, 0.08), MAT_HEADLIGHT, s * (w * 0.33), 0.74, l * 0.502, 0, 0, 0, false);
+            addPart(bodyGroup, new THREE.BoxGeometry(0.10, 0.20, 0.085), MAT_AMBER, s * (w * 0.45), 0.74, l * 0.495, 0, 0, 0, false);
+            addPart(bodyGroup, new THREE.BoxGeometry(0.44, 0.17, 0.09), MAT_TAILLIGHT, s * (w * 0.31), 0.73, -l * 0.502, 0, 0, 0, false);
+            addPart(bodyGroup, new THREE.BoxGeometry(0.12, 0.16, 0.095), MAT_AMBER, s * (w * 0.44), 0.73, -l * 0.504, 0, 0, 0, false);
+            addLightHalo(bodyGroup, 0.62, 0.30, s * (w * 0.32), 0.73, -l * 0.56, 0xff1e42, 0.48);
+          }
+          addSideMirrors(bodyGroup, hw * 0.94, 1.02, l * 0.16, MAT_CHROME);
+          // Angled drift shotgun twin exhaust on the left
+          for (const ex of [-0.46, -0.60]) addPart(bodyGroup, new THREE.CylinderGeometry(0.055, 0.055, 0.46, 10).rotateX(Math.PI / 2), MAT_CHROME, ex, 0.38, -l * 0.54, 0.12, 0.22, 0);
+
+          // Drift ducktail rear lip spoiler
+          customRearSpoiler = addPart(bodyGroup, new THREE.BoxGeometry(w * 0.94, 0.16, 0.24), MAT_CARBON, 0, 1.01, -l * 0.47, 0.48, 0, 0);
+          archMat = paint; frontBumperMat = MAT_CHROME;
+          wheelRadF = wheelRadR = 0.39; wheelWidthF = 0.33; wheelWidthR = 0.38; wheelStyle = 'deep'; turretY = 1.52;
+
         } else if (spec.id === 'cybertruck') {
-          addPart(bodyGroup, makeSculptedHull([
-            { z: -l * 0.5, yBot: 0.52, yTop: 1.34, wBot: hw * 0.96, wBelt: hw * 1.0, wTop: hw * 0.88 },
-            { z:  l * 0.04, yBot: 0.46, yTop: 1.76, wBot: hw * 0.98, wBelt: hw * 1.02, wTop: hw * 0.74 },
-            { z:  l * 0.36, yBot: 0.48, yTop: 1.24, wBot: hw * 0.98, wBelt: hw * 1.0, wTop: hw * 0.84 },
-            { z:  l * 0.51, yBot: 0.58, yTop: 1.06, wBot: hw * 0.9, wBelt: hw * 0.94, wTop: hw * 0.86 }
-          ], true), paint);
-          addPart(bodyGroup, makeSculptedHull([
-            { z: -l * 0.14, yBot: 1.18, yTop: 1.52, wBot: hw * 0.96, wBelt: hw * 0.92, wTop: hw * 0.79 },
-            { z:  l * 0.04, yBot: 1.18, yTop: 1.72, wBot: hw * 0.96, wBelt: hw * 0.89, wTop: hw * 0.73 },
-            { z:  l * 0.35, yBot: 1.14, yTop: 1.23, wBot: hw * 0.92, wBelt: hw * 0.90, wTop: hw * 0.85 }
-          ], true), MAT_GLASS, 0, 0, 0, 0, 0, 0, false);
-          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.92, 0.08, 0.09), MAT_HEADLIGHT, 0, 1.05, l * 0.51, 0, 0, 0, false);
-          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.92, 0.08, 0.09), MAT_TAILLIGHT, 0, 1.28, -l * 0.505, 0, 0, 0, false);
-          wheelRad = 0.51; wheelWidth = 0.39; wheelStyle = 'aero'; spoilerY = 1.38; turretY = 1.74;
+          // Tesla Cybertruck: бритвенно-острый клиновидный силуэт из шлифованной стали + светодиодные балки!
+          const sh = new THREE.Shape();
+          sh.moveTo(-l * 0.50, 0.54);
+          sh.lineTo(-l * 0.50, 1.34);
+          sh.lineTo( l * 0.05, 1.80); // Razor peak!
+          sh.lineTo( l * 0.38, 1.24);
+          sh.lineTo( l * 0.52, 1.04);
+          sh.lineTo( l * 0.49, 0.56);
+          sh.closePath();
+          addPart(bodyGroup, makeProfileBody(sh, w * 0.98, { bevel: 0.04, bevelSize: 0.02, yBelt: 1.18, topTaper: 0.24, noseTaper: 0.08, tailTaper: 0.05, flatShaded: true }), paint);
+          // Dark triangular greenhouse glass + ribbed rear tonneau cover
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.78, 0.08, l * 0.34), MAT_GLASS, 0, 1.52, l * 0.21, 0.34, 0, 0, false);
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.76, 0.08, l * 0.48), MAT_DARK, 0, 1.55, -l * 0.22, -0.22, 0, 0);
+          // Glowing cyan battery capacitor core visible on tonneau
+          addPart(bodyGroup, new THREE.BoxGeometry(0.65, 0.12, 1.05), MAT_DRL, 0, 1.56, -l * 0.24, -0.22, 0, 0, false);
+          // Full-width glowing front & rear laser lightbars with neon halos!
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.94, 0.075, 0.09), MAT_HEADLIGHT, 0, 1.06, l * 0.515, 0, 0, 0, false);
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.94, 0.085, 0.09), MAT_TAILLIGHT, 0, 1.30, -l * 0.508, 0, 0, 0, false);
+          addLightHalo(bodyGroup, w * 1.15, 0.34, 0, 1.30, -l * 0.56, 0xff1e42, 0.62);
+
+          angularArch = true; archMat = MAT_DARK;
+          wheelRadF = wheelRadR = 0.52; wheelWidthF = wheelWidthR = 0.40; wheelStyle = 'aero';
+          spoilerY = 1.38; turretY = 1.78;
+
         } else if (spec.id === 'zeekr001') {
-          addPart(bodyGroup, makeSculptedHull([
-            { z: -l * 0.5, yBot: 0.42, yTop: 0.94, wBot: hw * 0.92, wBelt: hw * 0.98, wTop: hw * 0.88 },
-            { z: -l * 0.24, yBot: 0.34, yTop: 0.98, wBot: hw * 1.02, wBelt: hw * 1.06, wTop: hw * 0.96 },
-            { z:  l * 0.24, yBot: 0.34, yTop: 0.92, wBot: hw * 1.0, wBelt: hw * 1.04, wTop: hw * 0.94 },
-            { z:  l * 0.51, yBot: 0.38, yTop: 0.64, wBot: hw * 0.88, wBelt: hw * 0.9, wTop: hw * 0.82 }
-          ]), paint);
-          addTaperedCabin(bodyGroup, MAT_DARK, { zRear: -l * 0.44, zRoofRear: -l * 0.28, zRoofFront: l * 0.08, zFront: l * 0.27, yBase: 0.93, yRoof: 1.40, wBase: hw * 0.95, wRoof: hw * 0.76 });
+          // Zeekr 001 FR: сверхнизкий обтекаемый шутинг-брейк гиперкар с карбоновой крышей, огромным GT-крылом и диффузором!
+          const sh = new THREE.Shape();
+          sh.moveTo(-l * 0.49, 0.34);
+          sh.lineTo(-l * 0.50, 0.92);
+          sh.quadraticCurveTo(-l * 0.44, 1.34, -l * 0.22, 1.38);
+          sh.lineTo( l * 0.04, 1.38);
+          sh.quadraticCurveTo( l * 0.22, 1.30, l * 0.32, 0.92);
+          sh.quadraticCurveTo( l * 0.46, 0.84, l * 0.52, 0.58);
+          sh.lineTo( l * 0.49, 0.34);
+          sh.closePath();
+          addPart(bodyGroup, makeProfileBody(sh, w * 1.02, { bevel: 0.16, bevelSize: 0.08, yBelt: 0.90, topTaper: 0.24, noseTaper: 0.16, tailTaper: 0.12 }), paint);
+          // Sleek dark carbon panoramic roof & wraparound canopy glass
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.72, 0.07, l * 0.36), MAT_CARBON, 0, 1.39, -l * 0.08);
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.78, 0.44, 0.08), MAT_GLASS, 0, 1.16, l * 0.22, -0.62, 0, 0, false);
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.76, 0.42, 0.08), MAT_GLASS, 0, 1.16, -l * 0.38, 0.65, 0, 0, false);
           for (const s of [-1, 1]) {
-            addPart(bodyGroup, new THREE.BoxGeometry(0.08, 0.05, 0.46), MAT_DRL, s * (w * 0.38), 0.86, l * 0.37, 0.22, s * -0.14, 0, false);
-            addPart(bodyGroup, new THREE.BoxGeometry(0.32, 0.1, 0.08), MAT_HEADLIGHT, s * (w * 0.35), 0.60, l * 0.505, 0, 0, 0, false);
+            // Signature Zeekr vertical claw DRLs on hood ridges
+            addPart(bodyGroup, new THREE.BoxGeometry(0.08, 0.055, 0.52), MAT_DRL, s * (w * 0.38), 0.88, l * 0.36, 0.24, s * -0.14, 0, false);
+            addPart(bodyGroup, new THREE.BoxGeometry(0.32, 0.09, 0.08), MAT_HEADLIGHT, s * (w * 0.34), 0.58, l * 0.505, 0, 0, 0, false);
+            // Red sport side skirt pinstripe
+            addPart(bodyGroup, new THREE.BoxGeometry(0.06, 0.05, l * 0.58), MAT_CALIPER, s * (hw * 1.02), 0.34, 0, 0, 0, 0, false);
           }
-          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.9, 0.09, 0.09), MAT_TAILLIGHT, 0, 0.88, -l * 0.502, 0, 0, 0, false);
-          archMat = MAT_CARBON; wheelRad = 0.44; wheelWidth = 0.38; turretY = 1.42;
+          addSideMirrors(bodyGroup, hw * 0.96, 0.98, l * 0.18, MAT_CARBON);
+          // Full-width glowing cyberpunk taillight bar + multi-fin carbon diffuser!
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.94, 0.10, 0.09), MAT_TAILLIGHT, 0, 0.88, -l * 0.505, 0, 0, 0, false);
+          addLightHalo(bodyGroup, w * 1.12, 0.32, 0, 0.88, -l * 0.56, 0xff1e42, 0.62);
+          for (let f = -2; f <= 2; f++) addPart(bodyGroup, new THREE.BoxGeometry(0.06, 0.22, 0.30), MAT_CARBON, f * 0.30, 0.36, -l * 0.49);
+
+          // Tall twin-pylon Carbon GT Racing Wing with endplates!
+          customRearSpoiler = new THREE.Group();
+          for (const s of [-0.52, 0.52]) addPart(customRearSpoiler, new THREE.BoxGeometry(0.07, 0.42, 0.22), MAT_CARBON, s, 1.12, -l * 0.44, -0.22, 0, 0);
+          addPart(customRearSpoiler, new THREE.BoxGeometry(w * 1.08, 0.07, 0.34), MAT_CARBON, 0, 1.32, -l * 0.48, 0.10, 0, 0);
+          for (const s of [-1, 1]) addPart(customRearSpoiler, new THREE.BoxGeometry(0.05, 0.24, 0.42), MAT_CALIPER, s * (w * 0.55), 1.32, -l * 0.48);
+          bodyGroup.add(customRearSpoiler);
+
+          archMat = MAT_CARBON;
+          wheelRadF = wheelRadR = 0.43; wheelWidthF = 0.38; wheelWidthR = 0.42; wheelStyle = 'sport'; turretY = 1.42;
+
         } else if (spec.id === 'tank300') {
-          addPart(bodyGroup, makeSculptedHull([
-            { z: -l * 0.48, yBot: 0.52, yTop: 1.18, wBot: hw * 0.96, wBelt: hw * 1.0, wTop: hw * 0.94 },
-            { z:  l * 0.42, yBot: 0.50, yTop: 1.22, wBot: hw * 0.98, wBelt: hw * 1.0, wTop: hw * 0.94 },
-            { z:  l * 0.50, yBot: 0.56, yTop: 1.14, wBot: hw * 0.94, wBelt: hw * 0.96, wTop: hw * 0.90 }
-          ]), paint);
-          addTaperedCabin(bodyGroup, paint, { zRear: -l * 0.46, zRoofRear: -l * 0.42, zRoofFront: l * 0.10, zFront: l * 0.19, yBase: 1.18, yRoof: 1.82, wBase: hw * 0.93, wRoof: hw * 0.83 });
-          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.88, 0.36, 0.1), MAT_DARK, 0, 0.92, l * 0.495);
+          // Tank 300: брутальный ретро-внедорожник с круглыми фарами с LED-перемычкой, широкими арками и запаской!
+          const sh = new THREE.Shape();
+          sh.moveTo(-l * 0.48, 0.52);
+          sh.lineTo(-l * 0.49, 1.80);
+          sh.lineTo( l * 0.10, 1.84);
+          sh.lineTo( l * 0.21, 1.24);
+          sh.lineTo( l * 0.49, 1.20);
+          sh.lineTo( l * 0.50, 0.56);
+          sh.closePath();
+          addPart(bodyGroup, makeProfileBody(sh, w * 0.94, { bevel: 0.12, bevelSize: 0.06, yBelt: 1.22, topTaper: 0.12, noseTaper: 0.06, tailTaper: 0.04 }), paint);
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.80, 0.54, 0.09), MAT_GLASS, 0, 1.54, l * 0.17, -0.22, 0, 0, false);
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.78, 0.50, 0.09), MAT_GLASS, 0, 1.52, -l * 0.485, 0, 0, 0, false);
           for (const s of [-1, 1]) {
-            addPart(bodyGroup, new THREE.CylinderGeometry(0.15, 0.15, 0.09, 14).rotateX(Math.PI / 2), MAT_HEADLIGHT, s * (w * 0.35), 0.93, l * 0.505, 0, 0, 0, false);
-            addPart(bodyGroup, new THREE.BoxGeometry(0.28, 0.045, 0.11), MAT_DRL, s * (w * 0.42), 0.93, l * 0.515, 0, 0, 0, false);
-            addPart(bodyGroup, new THREE.BoxGeometry(0.16, 0.42, 0.09), MAT_TAILLIGHT, s * (w * 0.42), 1.02, -l * 0.485, 0, 0, 0, false);
+            addPart(bodyGroup, new THREE.BoxGeometry(0.08, 0.46, l * 0.58), MAT_GLASS, s * (hw * 0.88), 1.52, -l * 0.16, 0, 0, s * 0.08, false);
+            // Roof rails
+            addPart(bodyGroup, new THREE.BoxGeometry(0.07, 0.10, l * 0.56), MAT_DARK, s * (hw * 0.74), 1.89, -l * 0.18);
           }
-          const spare = createWheel(0.47, 0.28, accentHex, 'offroad');
-          spare.rotation.y = Math.PI / 2;
-          spare.position.set(0, 1.08, -l * 0.5 - 0.16);
-          bodyGroup.add(spare);
-          zones.rear.push(spare);
-          wheelRad = 0.50; wheelWidth = 0.38; wheelStyle = 'offroad'; spoilerY = 1.84; turretY = 1.84;
+          // Signature 3-bar grille + round headlights bisected by horizontal LED DRL bar!
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.88, 0.40, 0.10), MAT_DARK, 0, 0.96, l * 0.50);
+          for (let bar = -1; bar <= 1; bar++) addPart(bodyGroup, new THREE.BoxGeometry(w * 0.52, 0.045, 0.12), MAT_STEEL, 0, 0.96 + bar * 0.11, l * 0.51);
+          for (const s of [-1, 1]) {
+            addPart(bodyGroup, new THREE.CylinderGeometry(0.16, 0.16, 0.10, 16).rotateX(Math.PI / 2), MAT_HEADLIGHT, s * (w * 0.35), 0.96, l * 0.508, 0, 0, 0, false);
+            addPart(bodyGroup, new THREE.BoxGeometry(0.32, 0.05, 0.12), MAT_DRL, s * (w * 0.40), 0.96, l * 0.52, 0, 0, 0, false);
+            // Vertical LED taillights
+            addPart(bodyGroup, new THREE.BoxGeometry(0.17, 0.48, 0.10), MAT_TAILLIGHT, s * (w * 0.41), 1.04, -l * 0.495, 0, 0, 0, false);
+            addLightHalo(bodyGroup, 0.36, 0.62, s * (w * 0.41), 1.04, -l * 0.55, 0xff1e42, 0.48);
+          }
+          addSideMirrors(bodyGroup, hw * 0.96, 1.32, l * 0.16, MAT_DARK);
+
+          // Full-size exposed off-road spare tire on tailgate
+          customRearSpoiler = createWheel(0.49, 0.30, accentHex, 'offroad');
+          customRearSpoiler.rotation.y = Math.PI / 2;
+          customRearSpoiler.position.set(0, 1.12, -l * 0.52 - 0.14);
+          bodyGroup.add(customRearSpoiler);
+
+          wheelRadF = wheelRadR = 0.52; wheelWidthF = wheelWidthR = 0.40; wheelStyle = 'offroad';
+          wZ = [l * 0.32, -l * 0.30]; turretY = 1.88;
+
+        } else if (spec.id === 'bydu8') {
+          // BYD Yangwang U8: футуристичный люкс-внедорожник с «парящей» крышей, 3 LiDAR-подами, С-образными ДХО и кофром запаски!
+          const sh = new THREE.Shape();
+          sh.moveTo(-l * 0.48, 0.50);
+          sh.lineTo(-l * 0.50, 1.24);
+          sh.lineTo(-l * 0.44, 1.88);
+          sh.lineTo( l * 0.10, 1.90);
+          sh.lineTo( l * 0.24, 1.28);
+          sh.lineTo( l * 0.50, 1.20);
+          sh.lineTo( l * 0.51, 0.54);
+          sh.closePath();
+          addPart(bodyGroup, makeProfileBody(sh, w * 0.98, { bevel: 0.14, bevelSize: 0.07, yBelt: 1.25, topTaper: 0.15, noseTaper: 0.09, tailTaper: 0.06 }), paint);
+          // Floating blacked-out greenhouse & panoramic roof + 3 LiDAR pods above windshield!
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.80, 0.09, l * 0.52), MAT_DARK, 0, 1.91, -l * 0.17);
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.82, 0.56, 0.09), MAT_GLASS, 0, 1.58, l * 0.18, -0.26, 0, 0, false);
+          for (const lx of [-0.54, 0, 0.54]) {
+            addPart(bodyGroup, new THREE.BoxGeometry(lx === 0 ? 0.34 : 0.22, 0.13, 0.28), MAT_DARK, lx, 1.96, l * 0.12);
+            addPart(bodyGroup, new THREE.BoxGeometry(lx === 0 ? 0.26 : 0.14, 0.05, 0.06), MAT_DRL, lx, 1.96, l * 0.26, 0, 0, 0, false);
+          }
+          for (const s of [-1, 1]) {
+            addPart(bodyGroup, new THREE.BoxGeometry(0.08, 0.48, l * 0.60), MAT_GLASS, s * (hw * 0.90), 1.56, -l * 0.16, 0, 0, s * 0.10, false);
+            // Glowing cyan C-shaped DRL brackets + cyan rocker trim
+            addPart(bodyGroup, new THREE.BoxGeometry(0.32, 0.40, 0.10), MAT_DRL, s * (w * 0.36), 0.96, l * 0.515, 0, 0, 0, false);
+            addPart(bodyGroup, new THREE.BoxGeometry(0.06, 0.06, l * 0.62), MAT_DRL, s * (hw * 1.0), 0.48, 0, 0, 0, 0, false);
+            addPart(bodyGroup, new THREE.BoxGeometry(0.18, 0.52, 0.10), MAT_TAILLIGHT, s * (w * 0.42), 1.06, -l * 0.495, 0, 0, 0, false);
+            addLightHalo(bodyGroup, 0.38, 0.68, s * (w * 0.42), 1.06, -l * 0.55, 0xff1e42, 0.52);
+          }
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.88, 0.44, 0.09), MAT_DARK, 0, 0.94, l * 0.51);
+          addSideMirrors(bodyGroup, hw * 0.96, 1.36, l * 0.16, MAT_DARK);
+
+          // Signature Octagonal Body-Colored Spare Wheel Case with cyan LED trim
+          customRearSpoiler = new THREE.Group();
+          addPart(customRearSpoiler, new THREE.CylinderGeometry(0.52, 0.52, 0.32, 8).rotateX(Math.PI / 2), paint, 0, 1.14, -l * 0.52 - 0.12);
+          addPart(customRearSpoiler, new THREE.TorusGeometry(0.46, 0.035, 6, 8), MAT_DRL, 0, 1.14, -l * 0.52 - 0.28, 0, 0, 0, false);
+          bodyGroup.add(customRearSpoiler);
+
+          wheelRadF = wheelRadR = 0.52; wheelWidthF = wheelWidthR = 0.40; wheelStyle = 'luxury';
+          wZ = [l * 0.32, -l * 0.31]; turretY = 1.94;
+
         } else if (spec.id === 'sweetpaz' || isSweetBoss) {
-          // ПАЗ «Сладкоежка»: культовый психоделический фургон с ГОРЯЩЕЙ ГОЛОВОЙ КЛОУНА на крыше!
+          // ПАЗ «Сладкоежка»: округлый советский автобус-мороженщик с витриной, неоновой вывеской и ГОРЯЩИМ КЛОУНОМ!
           const vanH = isSweetBoss ? 2.75 : 2.15;
-          addPart(bodyGroup, makeSculptedHull([
-            { z: -l * 0.49, yBot: 0.52, yTop: vanH, wBot: hw * 0.96, wBelt: hw * 1.0, wTop: hw * 0.90 },
-            { z:  l * 0.40, yBot: 0.52, yTop: vanH, wBot: hw * 0.98, wBelt: hw * 1.02, wTop: hw * 0.90 },
-            { z:  l * 0.50, yBot: 0.56, yTop: vanH * 0.88, wBot: hw * 0.92, wBelt: hw * 0.95, wTop: hw * 0.85 }
-          ]), paint);
-          // Полосы мороженщика (красно-розовые + жёлтые)
+          const sh = new THREE.Shape();
+          sh.moveTo(-l * 0.48, 0.52);
+          sh.quadraticCurveTo(-l * 0.51, vanH * 0.55, -l * 0.47, vanH * 0.92);
+          sh.quadraticCurveTo(-l * 0.42, vanH, -l * 0.28, vanH);
+          sh.lineTo( l * 0.34, vanH);
+          sh.quadraticCurveTo( l * 0.48, vanH * 0.96, l * 0.50, vanH * 0.65);
+          sh.lineTo( l * 0.51, 0.56);
+          sh.closePath();
+          addPart(bodyGroup, makeProfileBody(sh, w * 0.96, { bevel: 0.18, bevelSize: 0.09, yBelt: vanH * 0.58, topTaper: 0.12, noseTaper: 0.10, tailTaper: 0.09 }), paint);
+
           const stripeMat = new THREE.MeshBasicMaterial({ color: 0xf43f5e });
           for (const s of [-1, 1]) {
-            addPart(bodyGroup, new THREE.BoxGeometry(0.1, 0.36, l * 0.92), stripeMat, s * (hw + 0.01), vanH * 0.54, 0, 0, 0, 0, false);
-            addPart(bodyGroup, new THREE.BoxGeometry(0.1, 0.2, l * 0.92), MAT_AMBER, s * (hw + 0.015), vanH * 0.38, 0, 0, 0, 0, false);
+            addPart(bodyGroup, new THREE.BoxGeometry(0.08, 0.36, l * 0.88), stripeMat, s * (hw + 0.01), vanH * 0.52, 0, 0, 0, 0, false);
+            addPart(bodyGroup, new THREE.BoxGeometry(0.08, 0.18, l * 0.88), MAT_AMBER, s * (hw + 0.015), vanH * 0.36, 0, 0, 0, 0, false);
+            // Side ice-cream serving shutter window
+            addPart(bodyGroup, new THREE.BoxGeometry(0.09, 0.58, l * 0.36), MAT_GLASS, s * (hw * 0.94), vanH * 0.72, -l * 0.06, 0, 0, 0, false);
+            addPart(bodyGroup, new THREE.CylinderGeometry(0.18, 0.18, 0.10, 14).rotateX(Math.PI / 2), MAT_HEADLIGHT, s * (w * 0.34), 0.98, l * 0.51, 0, 0, 0, false);
+            addPart(bodyGroup, new THREE.BoxGeometry(0.24, 0.46, 0.10), MAT_TAILLIGHT, s * (w * 0.38), 1.08, -l * 0.495, 0, 0, 0, false);
+            addLightHalo(bodyGroup, 0.52, 0.68, s * (w * 0.38), 1.08, -l * 0.56, 0xf43f5e, 0.58);
           }
-          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.82, 0.65, 0.12), MAT_GLASS, 0, vanH * 0.72, l * 0.50, -0.06, 0, 0, false);
-          for (const s of [-1, 1]) {
-            addPart(bodyGroup, new THREE.CylinderGeometry(0.18, 0.18, 0.1, 14).rotateX(Math.PI / 2), MAT_HEADLIGHT, s * (w * 0.34), 0.98, l * 0.505, 0, 0, 0, false);
-            addPart(bodyGroup, new THREE.BoxGeometry(0.22, 0.42, 0.1), MAT_TAILLIGHT, s * (w * 0.38), 1.08, -l * 0.495, 0, 0, 0, false);
-          }
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.82, 0.66, 0.12), MAT_GLASS, 0, vanH * 0.72, l * 0.50, -0.08, 0, 0, false);
+
           // ОГРОМНАЯ ГОРЯЩАЯ ГОЛОВА КЛОУНА НА КРЫШЕ!
           const clownG = new THREE.Group();
-          const cScale = isSweetBoss ? 1.45 : 1.0;
-          clownG.position.set(0, vanH + 0.65 * cScale, l * 0.18);
+          const cScale = isSweetBoss ? 1.5 : 1.05;
+          clownG.position.set(0, vanH + 0.68 * cScale, l * 0.18);
           clownG.scale.setScalar(cScale);
-          const faceMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.35 });
-          addPart(clownG, new THREE.SphereGeometry(0.68, 16, 14), faceMat, 0, 0, 0);
-          // Красный нос и злобные горящие глаза
-          addPart(clownG, new THREE.SphereGeometry(0.18, 12, 10), MAT_CRIMSON, 0, -0.04, 0.66, 0, 0, 0, false);
+          const faceMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.32 });
+          addPart(clownG, new THREE.SphereGeometry(0.68, 18, 14), faceMat, 0, 0, 0);
+          addPart(clownG, new THREE.SphereGeometry(0.19, 12, 10), MAT_CRIMSON, 0, -0.04, 0.66, 0, 0, 0, false);
           for (const s of [-1, 1]) {
-            addPart(clownG, new THREE.BoxGeometry(0.24, 0.12, 0.12), MAT_AMBER, s * 0.24, 0.18, 0.6, 0, 0, s * 0.28, false);
-            addPart(clownG, new THREE.SphereGeometry(0.28, 10, 8), new THREE.MeshBasicMaterial({ color: 0xec4899 }), s * 0.64, 0.26, -0.05, 0, 0, 0, false);
+            addPart(clownG, new THREE.BoxGeometry(0.25, 0.13, 0.12), MAT_AMBER, s * 0.24, 0.18, 0.60, 0, 0, s * 0.30, false);
+            addPart(clownG, new THREE.SphereGeometry(0.29, 10, 8), new THREE.MeshBasicMaterial({ color: 0xec4899 }), s * 0.65, 0.26, -0.05, 0, 0, 0, false);
+            addPart(clownG, new THREE.SphereGeometry(0.22, 10, 8), new THREE.MeshBasicMaterial({ color: 0xf43f5e }), s * 0.58, 0.02, -0.18, 0, 0, 0, false);
           }
-          // Зубастая ухмылка
-          addPart(clownG, new THREE.BoxGeometry(0.62, 0.16, 0.14), MAT_CRIMSON, 0, -0.32, 0.56, 0, 0, 0, false);
-          // Языки пламени на макушке клоуна
-          const flameMat = new THREE.MeshBasicMaterial({ color: 0xff6b00, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending });
-          for (let i = 0; i < 5; i++) {
-            const ang = (i / 5) * Math.PI * 2;
-            addPart(clownG, new THREE.ConeGeometry(0.24, 0.95, 7), flameMat, Math.cos(ang) * 0.26, 0.78, Math.sin(ang) * 0.26, 0, 0, 0, false);
+          addPart(clownG, new THREE.BoxGeometry(0.64, 0.17, 0.14), MAT_CRIMSON, 0, -0.32, 0.56, 0, 0, 0, false);
+          const flameMat = new THREE.MeshBasicMaterial({ color: 0xff6b00, transparent: true, opacity: 0.92, blending: THREE.AdditiveBlending });
+          const innerFlameMat = new THREE.MeshBasicMaterial({ color: 0xfef08a, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending });
+          for (let i = 0; i < 6; i++) {
+            const ang = (i / 6) * Math.PI * 2;
+            addPart(clownG, new THREE.ConeGeometry(0.25, 1.05, 7), flameMat, Math.cos(ang) * 0.26, 0.82, Math.sin(ang) * 0.26, 0, 0, 0, false);
           }
+          addPart(clownG, new THREE.ConeGeometry(0.28, 1.25, 7), innerFlameMat, 0, 0.94, 0, 0, 0, 0, false);
           bodyGroup.add(clownG);
-          wheelRad = isSweetBoss ? 0.72 : 0.52; wheelWidth = isSweetBoss ? 0.48 : 0.38; wheelStyle = 'offroad';
-          spoilerY = vanH + 0.05; turretY = vanH + 0.15;
+
+          // Spiked clown ram bumper
+          customFrontBumper = new THREE.Group();
+          addPart(customFrontBumper, new THREE.BoxGeometry(w * 1.06, 0.36, 0.30), MAT_DARK, 0, 0.62, l * 0.54);
+          for (let i = -2; i <= 2; i++) addPart(customFrontBumper, new THREE.ConeGeometry(0.09, 0.42, 6).rotateX(Math.PI / 2), MAT_CRIMSON, i * (w * 0.22), 0.62, l * 0.64);
+          bodyGroup.add(customFrontBumper);
+
+          wheelRadF = wheelRadR = isSweetBoss ? 0.72 : 0.52; wheelWidthF = wheelWidthR = isSweetBoss ? 0.48 : 0.38;
+          wheelStyle = 'offroad'; spoilerY = vanH + 0.05; turretY = vanH + 0.16;
+
         } else {
-          // Dodge Charger R/T
-          addPart(bodyGroup, makeSculptedHull([
-            { z: -l * 0.5, yBot: 0.4, yTop: 0.92, wBot: hw * 0.96, wBelt: hw * 1.0, wTop: hw * 0.92 },
-            { z: -l * 0.24, yBot: 0.35, yTop: 0.98, wBot: hw * 1.02, wBelt: hw * 1.06, wTop: hw * 0.96 },
-            { z:  l * 0.44, yBot: 0.36, yTop: 0.93, wBot: hw * 0.98, wBelt: hw * 1.02, wTop: hw * 0.94 },
-            { z:  l * 0.51, yBot: 0.42, yTop: 0.86, wBot: hw * 0.94, wBelt: hw * 0.96, wTop: hw * 0.9 }
-          ]), paint);
-          addTaperedCabin(bodyGroup, paint, { zRear: -l * 0.32, zRoofRear: -l * 0.16, zRoofFront: l * 0.08, zFront: l * 0.20, yBase: 0.94, yRoof: 1.40, wBase: hw * 0.94, wRoof: hw * 0.77 });
-          addPart(bodyGroup, new THREE.BoxGeometry(0.48, 0.24, 0.58), MAT_CHROME, 0, 1.06, l * 0.29);
-          addPart(bodyGroup, new THREE.BoxGeometry(0.54, 0.16, 0.36), MAT_CHROME, 0, 1.24, l * 0.31);
-          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.9, 0.24, 0.1), MAT_DARK, 0, 0.70, l * 0.508);
-          for (const s of [-1, 1]) {
-            addPart(bodyGroup, new THREE.BoxGeometry(0.28, 0.11, 0.12), MAT_HEADLIGHT, s * (w * 0.32), 0.70, l * 0.512, 0, 0, 0, false);
-            addPart(bodyGroup, new THREE.BoxGeometry(w * 0.36, 0.12, 0.095), MAT_TAILLIGHT, s * (w * 0.24), 0.72, -l * 0.505, 0, 0, 0, false);
+          // Dodge Charger R/T: длинный капот, приземистый фастбэк «бутылка колы», огромные задние драг-колёса и хром-нагнетатель V8!
+          const sh = new THREE.Shape();
+          sh.moveTo(-l * 0.50, 0.42);
+          sh.lineTo(-l * 0.51, 0.94);
+          sh.quadraticCurveTo(-l * 0.36, 1.02, -l * 0.28, 1.02); // Raised muscle rear haunch!
+          sh.lineTo(-l * 0.12, 1.38); // Fastback flying buttress C-pillar!
+          sh.lineTo( l * 0.08, 1.38);
+          sh.lineTo( l * 0.22, 0.96);
+          sh.lineTo( l * 0.50, 0.88);
+          sh.lineTo( l * 0.51, 0.38);
+          sh.closePath();
+          addPart(bodyGroup, makeProfileBody(sh, w * 1.02, { bevel: 0.13, bevelSize: 0.06, yBelt: 0.96, topTaper: 0.22, noseTaper: 0.08, tailTaper: 0.07, cokeWaist: 0.12 }), paint);
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.76, 0.46, 0.08), MAT_GLASS, 0, 1.18, l * 0.16, -0.52, 0, 0, false);
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.72, 0.42, 0.08), MAT_GLASS, 0, 1.18, -l * 0.22, 0.56, 0, 0, false);
+          for (const s of [-1, 1]) addPart(bodyGroup, new THREE.BoxGeometry(0.08, 0.34, l * 0.34), MAT_GLASS, s * (hw * 0.84), 1.16, -l * 0.02, 0, 0, s * 0.20, false);
+
+          // High-contrast twin white R/T racing stripes + rear Bumblebee tail stripe!
+          for (const sx of [-0.24, 0.24]) {
+            addPart(bodyGroup, new THREE.BoxGeometry(0.16, 0.03, l * 0.26), MAT_CHROME, sx, 0.96, l * 0.36, 0.06, 0, 0, false);
+            addPart(bodyGroup, new THREE.BoxGeometry(0.16, 0.03, l * 0.22), MAT_CHROME, sx, 1.40, -l * 0.02, 0, 0, 0, false);
+            addPart(bodyGroup, new THREE.BoxGeometry(0.16, 0.03, l * 0.22), MAT_CHROME, sx, 1.00, -l * 0.38, -0.04, 0, 0, false);
           }
-          archMat = paint; frontBumperMat = MAT_CHROME; wheelRad = 0.44; wheelWidth = 0.40; wheelStyle = 'deep'; turretY = 1.42;
+          // MASSIVE Chrome V8 Blower Supercharger bursting through the hood with 3 red intake valves!
+          addPart(bodyGroup, new THREE.BoxGeometry(0.56, 0.28, 0.68), MAT_CHROME, 0, 1.08, l * 0.30);
+          addPart(bodyGroup, new THREE.BoxGeometry(0.62, 0.18, 0.44), MAT_CHROME, 0, 1.28, l * 0.32);
+          for (const vx of [-0.18, 0, 0.18]) addPart(bodyGroup, new THREE.CylinderGeometry(0.065, 0.065, 0.08, 10).rotateX(Math.PI / 2), MAT_CRIMSON, vx, 1.28, l * 0.32 + 0.23, 0, 0, 0, false);
+
+          // Full-width recessed grille + full-width iconic Charger red taillight bar + twin chrome exhausts
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.92, 0.26, 0.10), MAT_DARK, 0, 0.68, l * 0.508);
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.96, 0.04, 0.11), MAT_CHROME, 0, 0.82, l * 0.506);
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.96, 0.04, 0.11), MAT_CHROME, 0, 0.54, l * 0.506);
+          for (const s of [-1, 1]) {
+            addPart(bodyGroup, new THREE.BoxGeometry(0.28, 0.12, 0.12), MAT_HEADLIGHT, s * (w * 0.32), 0.68, l * 0.514, 0, 0, 0, false);
+            addPart(bodyGroup, new THREE.CylinderGeometry(0.06, 0.06, 0.42, 10).rotateX(Math.PI / 2), MAT_CHROME, s * 0.52, 0.36, -l * 0.53);
+            addPart(bodyGroup, new THREE.CylinderGeometry(0.06, 0.06, 0.42, 10).rotateX(Math.PI / 2), MAT_CHROME, s * 0.68, 0.36, -l * 0.53);
+          }
+          addPart(bodyGroup, new THREE.BoxGeometry(w * 0.90, 0.15, 0.10), MAT_TAILLIGHT, 0, 0.72, -l * 0.506, 0, 0, 0, false);
+          addLightHalo(bodyGroup, w * 1.08, 0.34, 0, 0.72, -l * 0.56, 0xff1e42, 0.62);
+          addSideMirrors(bodyGroup, hw * 0.95, 1.00, l * 0.14, MAT_CHROME);
+
+          // Classic drag-racer stance: bigger, wider rear wheels than front!
+          archMat = paint; frontBumperMat = MAT_CHROME;
+          wheelRadF = 0.41; wheelRadR = 0.50; wheelWidthF = 0.34; wheelWidthR = 0.48; wheelStyle = 'deep';
+          wZ = [l * 0.32, -l * 0.31]; spoilerY = 1.04; turretY = 1.40;
         }
 
         const wX = w * 0.5 + 0.03;
-        addWheelArches(bodyGroup, wX, wZ, wheelRad, archMat, wheelWidth);
+        addWheelArches(bodyGroup, wX, wZ, [wheelRadF, wheelRadR], archMat, Math.max(wheelWidthF, wheelWidthR), angularArch);
 
-        // Detachable parts mapped to 4 armor zones
-        const frontBumper = addPart(bodyGroup, new THREE.BoxGeometry(w * 1.04, spec.id === 'kamaz' ? 0.52 : 0.2, 0.26), spec.id === 'kamaz' ? MAT_STEEL : frontBumperMat, 0, spec.id === 'kamaz' ? 0.65 : 0.46, l * 0.52);
-        const rearSpoiler = addPart(bodyGroup, new THREE.BoxGeometry(w * 0.92, 0.09, 0.32), spec.id === 'zeekr001' ? MAT_CARBON : MAT_DARK, 0, spoilerY, -l * 0.46);
-        const sideL = addPart(bodyGroup, new THREE.BoxGeometry(0.14, 0.16, l * 0.52), MAT_DARK, -w * 0.52, 0.42, 0);
-        const sideR = addPart(bodyGroup, new THREE.BoxGeometry(0.14, 0.16, l * 0.52), MAT_DARK, w * 0.52, 0.42, 0);
+        // Detachable parts mapped to 4 armor zones (using vehicle-specific parts when crafted above)
+        const frontBumper = customFrontBumper || addPart(bodyGroup, new THREE.BoxGeometry(w * 1.04, 0.20, 0.26), frontBumperMat, 0, 0.46, l * 0.52);
+        const rearSpoiler = customRearSpoiler || addPart(bodyGroup, new THREE.BoxGeometry(w * 0.92, 0.09, 0.30), MAT_DARK, 0, spoilerY, -l * 0.46);
+        const sideL = addPart(bodyGroup, new THREE.BoxGeometry(0.14, 0.15, l * 0.50), MAT_DARK, -w * 0.52, 0.42, 0);
+        const sideR = addPart(bodyGroup, new THREE.BoxGeometry(0.14, 0.15, l * 0.50), MAT_DARK, w * 0.52, 0.42, 0);
         zones.front.push(frontBumper);
         zones.rear.push(rearSpoiler);
         zones.left.push(sideL);
@@ -1676,8 +2250,8 @@
 
         // 3D License plates front & rear
         if (custom?.plate) {
-          const plF = makePlateMesh(custom.plate, false); plF.position.set(0, spec.id === 'kamaz' ? 0.72 : 0.48, l * 0.52 + 0.14); bodyGroup.add(plF);
-          const plR = makePlateMesh(custom.plate, false); plR.position.set(0, spec.id === 'kamaz' ? 0.85 : 0.56, -l * 0.515); plR.rotation.y = Math.PI; bodyGroup.add(plR);
+          const plF = makePlateMesh(custom.plate, false); plF.position.set(0, spec.id === 'kamaz' ? 0.74 : 0.48, l * 0.52 + 0.14); bodyGroup.add(plF);
+          const plR = makePlateMesh(custom.plate, false); plR.position.set(0, spec.id === 'kamaz' ? 0.86 : 0.56, -l * 0.52); plR.rotation.y = Math.PI; bodyGroup.add(plR);
         }
 
         // Volumetric Headlight Cones (Player)
@@ -1692,18 +2266,26 @@
           }
         }
 
-        // 4 Wheels
-        for (const sz of wZ) {
+        // 4 Wheels (supports staggered drag-racer wheel sizes!)
+        for (let zi = 0; zi < wZ.length; zi++) {
+          const sz = wZ[zi];
+          const wRad = zi === 0 ? wheelRadF : wheelRadR;
+          const wWid = zi === 0 ? wheelWidthF : wheelWidthR;
           for (const sx of [-wX, wX]) {
             const pivot = new THREE.Group();
-            pivot.position.set(sx, wheelRad, sz);
-            const wh = createWheel(wheelRad, wheelWidth, accentHex, wheelStyle);
+            pivot.position.set(sx, wRad, sz);
+            const wh = createWheel(wRad, wWid, accentHex, wheelStyle);
             pivot.add(wh);
             root.add(pivot);
             wheels.push(wh);
             if (sz > 0) frontWheelPivots.push(pivot);
           }
         }
+      }
+
+      // Enemy tactical identification strip on roof/turret base so enemies pop against dark asphalt!
+      if (isEnemy && !isColossus && !isSweetBoss) {
+        addPart(bodyGroup, new THREE.BoxGeometry(w * 0.46, 0.09, 0.18), MAT_AMBER, 0, turretY + 0.04, -0.38, 0, 0, 0, false);
       }
 
       // Visual Armor Upgrade Bullbar
@@ -1745,23 +2327,23 @@
       iceBlock.visible = false;
       root.add(iceBlock);
 
-        // Контактная тень под машиной (усиливает ощущение веса и высоты прыжка)
+      // Soft Ground Contact Shadow (scales & fades dynamically during jumps)
       const contactShadow = new THREE.Mesh(
-        new THREE.PlaneGeometry(w * 1.45, l * 1.32).rotateX(-Math.PI / 2),
-        new THREE.MeshBasicMaterial({ map: getContactShadowTex(), transparent: true, opacity: 0.85, depthWrite: false })
+        new THREE.PlaneGeometry(w * 1.45, l * 1.34).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ map: CONTACT_SHADOW_TEX, transparent: true, opacity: 0.85, depthWrite: false })
       );
       contactShadow.position.y = 0.05;
       root.add(contactShadow);
 
-      // Динамические стоп-сигналы (светящийся ореол сзади при торможении/дрифте)
+      // Dynamic Rear Brake / Drift Taillight Halo
       const brakeGlowMat = new THREE.MeshBasicMaterial({ color: 0xff1e42, transparent: true, opacity: 0.0, blending: THREE.AdditiveBlending, depthWrite: false });
       const brakeGlow = new THREE.Mesh(new THREE.BoxGeometry(w * 0.88, 0.28, 0.2), brakeGlowMat);
       brakeGlow.position.set(0, 0.78, -l * 0.53);
       bodyGroup.add(brakeGlow);
 
-      // Гибкая 3D-антенна
+      // Springy Flexible 3D Radio Antenna
       const antennaPivot = new THREE.Group();
-      antennaPivot.position.set(-w * 0.36, turretY * 0.85, -l * 0.32);
+      antennaPivot.position.set(-w * 0.36, turretY * 0.86, -l * 0.32);
       addPart(antennaPivot, new THREE.CylinderGeometry(0.015, 0.025, 1.45, 5), MAT_STEEL, 0, 0.72, 0, 0, 0, 0, false);
       addPart(antennaPivot, new THREE.SphereGeometry(0.055, 6, 6), MAT_CRIMSON, 0, 1.46, 0, 0, 0, 0, false);
       bodyGroup.add(antennaPivot);
@@ -1803,10 +2385,7 @@
     let dragStartX = 0, dragStartY = 0;
 
     function rebuildGaragePreview() {
-      if (previewMesh) {
-        scene.remove(previewMesh.root);
-        disposeObject3D(previewMesh.root);
-      }
+      if (previewMesh) { scene.remove(previewMesh.root); disposeObject3D(previewMesh.root); }
       const spec = VEHICLES.find(v => v.id === profile.selectedVehicle) || VEHICLES[0];
       const cust = getCustom(spec.id);
       previewMesh = buildVehicleMesh(spec, cust, { isEnemy: false });
@@ -1838,6 +2417,7 @@
     let hazards = [];
     let hazardTimer = 11;
     let lightningTimer = 5;
+    let animatedChevronTex = null;
 
     function clearArena() {
       while (arenaGroup.children.length) {
@@ -1845,6 +2425,7 @@
         arenaGroup.remove(ch);
         disposeObject3D(ch);
       }
+      if (animatedChevronTex) { animatedChevronTex.dispose(); animatedChevronTex = null; }
       covers = [];
       ramps = [];
       boostPads = [];
@@ -1905,29 +2486,24 @@
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, 512, 256);
 
-      // Звёзды в Шанхае или дымовые облака на Уралмаше/Гоби
       if (mapId === 'shanghai') {
         ctx.fillStyle = 'rgba(255,255,255,0.75)';
         for (let i = 0; i < 160; i++) ctx.fillRect(Math.random() * 512, Math.random() * 115, 1.5, 1.5);
       } else {
         for (let i = 0; i < 45; i++) {
-          ctx.fillStyle = mapId === 'uralmash' ? 'rgba(255,140,60,0.08)' : 'rgba(255,240,200,0.12)';
+          ctx.fillStyle = mapId === 'uralmash' ? 'rgba(255,140,60,0.09)' : 'rgba(255,240,200,0.13)';
           ctx.beginPath();
           ctx.ellipse(Math.random() * 512, 90 + Math.random() * 75, 28 + Math.random() * 45, 7 + Math.random() * 10, 0, 0, Math.PI * 2);
           ctx.fill();
         }
       }
-
-      // Диск солнца в Гоби
       if (mapId === 'gobi') {
         const sg = ctx.createRadialGradient(360, 128, 4, 360, 128, 44);
         sg.addColorStop(0, 'rgba(255,255,230,1)');
         sg.addColorStop(0.3, 'rgba(253,224,71,0.75)');
         sg.addColorStop(1, 'rgba(253,224,71,0)');
         ctx.fillStyle = sg;
-        ctx.beginPath();
-        ctx.arc(360, 128, 44, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(360, 128, 44, 0, Math.PI * 2); ctx.fill();
       }
 
       const tex = new THREE.CanvasTexture(c);
@@ -1949,8 +2525,7 @@
         ctx.fillStyle = `rgb(${v},${v},${v})`;
         ctx.fillRect(Math.random() * 256, Math.random() * 256, mapId === 'gobi' ? 14 : 3, 2);
       }
-      ctx.strokeStyle = '#303030';
-      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#303030'; ctx.lineWidth = 3;
       ctx.strokeRect(2, 2, 252, 252);
       const tex = new THREE.CanvasTexture(c);
       tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
@@ -1958,7 +2533,6 @@
       return tex;
     }
 
-    let animatedChevronTex = null;
     function makeChevronTexture() {
       const c = document.createElement('canvas');
       c.width = 128; c.height = 128;
@@ -1966,15 +2540,14 @@
       ctx.clearRect(0, 0, 128, 128);
       ctx.strokeStyle = '#38bdf8';
       ctx.lineWidth = 14;
-      for (const y of [44, 96]) {
-        ctx.beginPath();
-        ctx.moveTo(22, y + 20);
-        ctx.lineTo(64, y - 16);
-        ctx.lineTo(106, y + 20);
-        ctx.stroke();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      for (const y of [44, 98]) {
+        ctx.beginPath(); ctx.moveTo(22, y + 18); ctx.lineTo(64, y - 16); ctx.lineTo(106, y + 18); ctx.stroke();
       }
       const tex = new THREE.CanvasTexture(c);
       tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.userData = { shared: true };
       return tex;
     }
 
@@ -2060,9 +2633,6 @@
 
     function buildArena(mapId, forBattle = true) {
       clearArena();
-      arenaGroup.add(createSkyDome(mapId));
-      animatedChevronTex = makeChevronTexture();
-
       const m = MAPS.find(x => x.id === mapId) || MAPS[0];
       scene.background.setHex(m.sky);
       scene.fog.color.setHex(m.fog);
@@ -2070,6 +2640,8 @@
       scene.fog.far = mapId === 'gobi' ? 145 : 210;
       sunLight.color.setHex(mapId === 'shanghai' ? 0x93c5fd : mapId === 'gobi' ? 0xffe4a0 : 0xffcfa0);
       sunLight.intensity = mapId === 'shanghai' ? 1.1 : 1.9;
+
+      arenaGroup.add(createSkyDome(mapId));
 
       const ground = new THREE.Mesh(
         new THREE.PlaneGeometry(ARENA_HALF * 2.5, ARENA_HALF * 2.5).rotateX(-Math.PI / 2),
@@ -2184,14 +2756,15 @@
         ramps.push({ x: rx, z: rz, r: 4.0 });
       }
 
-      // 4 Turbo Boost Pads
+      // 4 Turbo Boost Pads with animated neon chevrons
+      animatedChevronTex = makeChevronTexture();
       const padSpots = [[-26, -26], [26, -26], [-26, 26], [26, 26]];
       for (const [px, pz] of padSpots) {
         const pad = new THREE.Mesh(
-          new THREE.PlaneGeometry(5.4, 5.4).rotateX(-Math.PI / 2),
-          new THREE.MeshBasicMaterial({ map: animatedChevronTex, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
+          new THREE.PlaneGeometry(5.8, 5.8).rotateX(-Math.PI / 2),
+          new THREE.MeshBasicMaterial({ map: animatedChevronTex, color: 0x38bdf8, transparent: true, opacity: 0.88, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
         );
-        pad.position.set(px, 0.08, pz);
+        pad.position.set(px, 0.09, pz);
         arenaGroup.add(pad);
         boostPads.push({ x: px, z: pz, r: 3.2 });
       }
@@ -2336,13 +2909,14 @@
     [SPHERE_GEO, BOX_GEO, TRACER_GEO, SHELL_GEO, MAT_BRASS].forEach(r => { r.userData.shared = true; });
 
     function spawnParticles(x, y, z, color, count = 10, speed = 10, life = 0.55, size = 1.0, grav = 14) {
+      const mat = getParticleMat(color);
       for (let i = 0; i < count; i++) {
         if (particles.length > 260) {
           const old = particles.shift();
           fxGroup.remove(old.mesh);
           disposeObject3D(old.mesh);
         }
-        const m = new THREE.Mesh(SPHERE_GEO, getParticleMat(color));
+        const m = new THREE.Mesh(SPHERE_GEO, mat);
         const baseScale = size * (0.55 + Math.random() * 0.75);
         m.position.set(x, y, z);
         m.scale.setScalar(baseScale);
@@ -2367,6 +2941,7 @@
         if (debris.length > 90) {
           const old = debris.shift();
           fxGroup.remove(old.mesh);
+          disposeObject3D(old.mesh);
         }
         const m = new THREE.Mesh(BOX_GEO, new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.35 }));
         m.position.set(x, y, z);
@@ -2390,6 +2965,7 @@
       if (skidMarks.length > 140) {
         const old = skidMarks.shift();
         fxGroup.remove(old.mesh);
+        disposeObject3D(old.mesh);
       }
       const m = new THREE.Mesh(
         new THREE.PlaneGeometry(0.45, 1.35).rotateX(-Math.PI / 2),
@@ -2469,6 +3045,7 @@
       if (shells.length > 48) {
         const old = shells.shift();
         fxGroup.remove(old.mesh);
+        disposeObject3D(old.mesh);
       }
       const m = new THREE.Mesh(SHELL_GEO, MAT_BRASS);
       m.position.set(x, y, z);
@@ -2645,7 +3222,6 @@
       const actor = {
         id: Math.random().toString(36).slice(2),
         spec, custom, isEnemy, isColossus, isSweetBoss, isBoss,
-        bossPhase: 1,
         meshObj,
         x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, speed: 0,
         airborne: false,
@@ -2681,6 +3257,7 @@
         turretBaseZ: meshObj.turret.position.z,
         hpTagEl: null,
         hpFillEl: null,
+        bossPhase: 1,
         aiStrafe: Math.random() < 0.5 ? -1 : 1,
         aiTimer: 1.5 + Math.random() * 2.0
       };
@@ -2718,21 +3295,11 @@
     }
 
     function clearBattleEntities() {
-      if (player) {
-        scene.remove(player.meshObj.root);
-        disposeObject3D(player.meshObj.root);
-        player = null;
-      }
-      for (const e of enemies) {
-        scene.remove(e.meshObj.root);
-        disposeObject3D(e.meshObj.root);
-      }
+      if (player) { scene.remove(player.meshObj.root); disposeObject3D(player.meshObj.root); player = null; }
+      for (const e of enemies) { scene.remove(e.meshObj.root); disposeObject3D(e.meshObj.root); }
       enemies = [];
       for (const arr of [projectiles, particles, debris, skidMarks, beams, shells, wrecks]) {
-        for (const item of arr) {
-          fxGroup.remove(item.mesh);
-          disposeObject3D(item.mesh);
-        }
+        for (const item of arr) { fxGroup.remove(item.mesh); disposeObject3D(item.mesh); }
         arr.length = 0;
       }
       for (const f of floatTexts) f.el.remove();
@@ -2805,9 +3372,7 @@
       ringEl.style.transform = `rotate(${relDeg}deg)`;
       wrapEl.style.opacity = '1';
       clearTimeout(dmgDirTimer);
-      dmgDirTimer = setTimeout(() => {
-        wrapEl.style.opacity = '0';
-      }, 380);
+      dmgDirTimer = setTimeout(() => { wrapEl.style.opacity = '0'; }, 380);
     }
 
     function applyDamage(target, rawDmg, hitDirX, hitDirZ, dmgType, attacker) {
@@ -2924,6 +3489,7 @@
 
         // Enemy destroyed
         scene.remove(target.meshObj.root);
+        disposeObject3D(target.meshObj.root);
         if (target.hpTagEl) target.hpTagEl.remove();
         const idx = enemies.indexOf(target);
         if (idx !== -1) enemies.splice(idx, 1);
@@ -2988,6 +3554,7 @@
       audio.unlock();
       document.getElementById('garage-ui').classList.add('hidden');
       document.getElementById('result-modal').classList.add('hidden');
+      document.getElementById('pause-modal').classList.add('hidden');
       document.getElementById('battle-hud').classList.remove('hidden');
       document.getElementById('touch-joy').classList.remove('hidden');
       document.getElementById('hazard-banner').classList.add('hidden');
@@ -2997,14 +3564,13 @@
       if (previewMesh) previewMesh.root.visible = false;
       garageSpotL.intensity = 0;
       garageSpotR.intensity = 0;
-      garageRim.intensity = 0;
+      garageRim.intensity = 0.85;
 
       clearBattleEntities();
       buildArena(profile.selectedMap, true);
 
       game.screen = 'battle';
       game.paused = false;
-      document.getElementById('pause-modal')?.classList.add('hidden');
       game.frags = 0;
       game.lives = 3;
       game.combo = 0;
@@ -3061,7 +3627,7 @@
     function returnToGarage() {
       game.screen = 'garage';
       game.paused = false;
-      document.getElementById('pause-modal')?.classList.add('hidden');
+      document.getElementById('pause-modal').classList.add('hidden');
       audio.updateDrive(0, false, false, false);
       clearBattleEntities();
       document.getElementById('battle-hud').classList.add('hidden');
@@ -3081,8 +3647,6 @@
     function endMatch(won, subtitle) {
       if (game.screen === 'over') return;
       game.screen = 'over';
-      game.paused = false;
-      document.getElementById('pause-modal')?.classList.add('hidden');
       audio.updateDrive(0, false, false, false);
       if (won) audio.playVictoryFanfare();
       else audio.playDefeatSound();
@@ -3175,9 +3739,6 @@
         const a = ang + spread;
         const px = actor.x + Math.cos(ang) * offX + Math.sin(ang) * muzzleDist;
         const pz = actor.z - Math.sin(ang) * offX + Math.cos(ang) * muzzleDist;
-        const targetY = target && target.alive ? (target.y + (target.isBoss ? 2.2 : 1.3)) : sy;
-        const horizDist = Math.max(4, target && target.alive ? Math.hypot(target.x - px, target.z - pz) : 45);
-        const vy = Math.max(-22, Math.min(22, ((targetY - sy) / horizDist) * spd));
         let m;
         if (isRocket) {
           m = new THREE.Group();
@@ -3200,6 +3761,9 @@
         m.position.set(px, sy, pz);
         m.rotation.y = a;
         fxGroup.add(m);
+        const targetY = target && target.alive ? (target.y + (target.isBoss ? 2.2 : 1.35)) : sy;
+        const horizDist = Math.max(4, target && target.alive ? Math.hypot(target.x - px, target.z - pz) : 45);
+        const vy = Math.max(-22, Math.min(22, ((targetY - sy) / horizDist) * spd));
         projectiles.push({
           mesh: m, owner: actor, isEnemy: actor.isEnemy,
           x: px, y: sy, z: pz, vx: Math.sin(a) * spd, vy, vz: Math.cos(a) * spd,
@@ -3595,16 +4159,15 @@
         }
       }
 
-      // Arena walls bounce
+      // Arena walls bounce + scrape sparks
       const lim = ARENA_HALF - a.radius - 1.5;
-      if (a.x < -lim) { a.x = -lim; a.vx = Math.abs(a.vx) * 0.45; }
-      if (a.x > lim) { a.x = lim; a.vx = -Math.abs(a.vx) * 0.45; }
-      if (a.z < -lim) { a.z = -lim; a.vz = Math.abs(a.vz) * 0.45; }
-      if (a.z > lim) { a.z = lim; a.vz = -Math.abs(a.vz) * 0.45; }
-      if (Math.abs(a.x) >= lim - 0.05 || Math.abs(a.z) >= lim - 0.05) {
-        if (a.speed > 10 && Math.random() < 0.65) {
-          spawnParticles(a.x, a.y + 0.8, a.z, 0xfef08a, 4, 12, 0.3, 0.65);
-        }
+      let hitWall = false;
+      if (a.x < -lim) { a.x = -lim; a.vx = Math.abs(a.vx) * 0.45; hitWall = true; }
+      if (a.x > lim) { a.x = lim; a.vx = -Math.abs(a.vx) * 0.45; hitWall = true; }
+      if (a.z < -lim) { a.z = -lim; a.vz = Math.abs(a.vz) * 0.45; hitWall = true; }
+      if (a.z > lim) { a.z = lim; a.vz = -Math.abs(a.vz) * 0.45; hitWall = true; }
+      if (hitWall && a.speed > 10 && Math.random() < 0.7) {
+        spawnParticles(a.x, a.y + 0.85, a.z, 0xfef08a, 5, 12, 0.32, 0.7);
       }
 
       // Destructible cover collisions (48-ton tanks & heavy trucks smash right through!)
@@ -3627,19 +4190,6 @@
       }
 
       // Visual chassis updates: suspension lean, wheels, nitro flames & smoke
-      if (a.meshObj.contactShadow) {
-        const airH = Math.max(0, a.y - floorH);
-        a.meshObj.contactShadow.position.y = -airH + 0.05;
-        a.meshObj.contactShadow.scale.setScalar(Math.max(0.45, 1 - airH * 0.05));
-        a.meshObj.contactShadow.material.opacity = Math.max(0.15, 0.85 - airH * 0.07);
-      }
-      if (a.meshObj.brakeGlowMat) {
-        a.meshObj.brakeGlowMat.opacity = (throttle < 0 || a.drifting) ? 0.85 : 0.0;
-      }
-      if (a.meshObj.antennaPivot) {
-        a.meshObj.antennaPivot.rotation.x += (Math.max(-0.55, Math.min(0.55, -vFwd * 0.014)) - a.meshObj.antennaPivot.rotation.x) * Math.min(1, dt * 10);
-        a.meshObj.antennaPivot.rotation.z += (Math.max(-0.55, Math.min(0.55, vLat * 0.025)) - a.meshObj.antennaPivot.rotation.z) * Math.min(1, dt * 10);
-      }
       a.meshObj.root.position.set(a.x, a.y, a.z);
       a.meshObj.root.rotation.y = a.yaw;
       a.meshObj.bodyGroup.rotation.z = Math.max(-0.18, Math.min(0.18, -vLat * 0.012));
@@ -3658,6 +4208,16 @@
         a.meshObj.turret.position.x = 0;
         a.meshObj.turret.position.z = a.turretBaseZ;
       }
+      // Contact shadow clings to ground & fades when airborne
+      const airH = Math.max(0, a.y - floorH);
+      a.meshObj.contactShadow.position.y = -airH + 0.05;
+      a.meshObj.contactShadow.scale.setScalar(Math.max(0.45, 1 - airH * 0.05));
+      a.meshObj.contactShadow.material.opacity = Math.max(0.15, 0.85 - airH * 0.07);
+      // Dynamic brake/drift taillights & springy antenna sway
+      a.meshObj.brakeGlowMat.opacity = (throttle < 0 || a.drifting) ? 0.85 : 0.0;
+      a.meshObj.antennaPivot.rotation.x += (Math.max(-0.55, Math.min(0.55, -vFwd * 0.014)) - a.meshObj.antennaPivot.rotation.x) * Math.min(1, dt * 10);
+      a.meshObj.antennaPivot.rotation.z += (Math.max(-0.55, Math.min(0.55, vLat * 0.025)) - a.meshObj.antennaPivot.rotation.z) * Math.min(1, dt * 10);
+
       a.meshObj.shieldMesh.visible = a.shieldTimer > 0 || a.invulnTimer > 0;
       for (const fl of a.meshObj.exhaustFlames) {
         fl.visible = nitroActive;
@@ -3708,7 +4268,7 @@
           }
         }
       } else {
-        audio.playSpatialExplosion(c.x, c.z, false);
+        audio.playExplosion(false);
         spawnParticles(c.x, 1.4, c.z, c.color, 12, 10, 0.5, 1.1);
         // 42% chance to drop bonus repair / ammo / turbo pickup!
         if (Math.random() < 0.42 && game.screen === 'battle') {
@@ -3751,7 +4311,9 @@
       explosionLight.intensity = Math.max(0, explosionLight.intensity - rawDt * 24);
       const dt = rawDt * (game.slowMo > 0 ? 0.28 : 1.0);
 
-      // Match timer countdown
+      if (animatedChevronTex) animatedChevronTex.offset.y -= dt * 2.2;
+
+      // Match timer countdown (all 4 modes handled cleanly)
       game.timer = Math.max(0, game.timer - dt);
       if (game.timer <= 0) {
         if (profile.selectedMode === 'arena') endMatch(game.frags >= 3, `Время вышло! Вы сделали ${game.frags} фрагов.`);
@@ -3767,24 +4329,24 @@
       const drift = Boolean(keys['Space']) || touchDrift;
       const nitro = Boolean(keys['ShiftLeft'] || keys['ShiftRight']) || touchNitro;
 
-      if (player.ultTimer > 0) player.ultTimer = Math.max(0, player.ultTimer - dt);
       if (player.ultTimer > 0) {
-        if ((player.spec.id === 'vaz2107' || player.spec.id === 'charger') && Math.random() < dt * 3.5) {
+        player.ultTimer = Math.max(0, player.ultTimer - dt);
+        // Active Ultimate Effects: Fire Trail (VAZ-2107 / Charger) & Bulldozer Plow (KAMAZ)
+        if ((player.spec.id === 'vaz2107' || player.spec.id === 'charger') && Math.random() < dt * 3.8) {
           const fy = getGroundHeight(player.x, player.z);
           const pool = new THREE.Mesh(
-            new THREE.CircleGeometry(4.2, 16).rotateX(-Math.PI / 2),
+            new THREE.CircleGeometry(4.4, 16).rotateX(-Math.PI / 2),
             new THREE.MeshBasicMaterial({ color: 0xff4500, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
           );
           pool.position.set(player.x, fy + 0.1, player.z);
           arenaGroup.add(pool);
-          firePools.push({ mesh: pool, x: player.x, z: player.z, r: 4.2, life: 3.5, owner: player });
+          firePools.push({ mesh: pool, x: player.x, z: player.z, r: 4.4, life: 3.6, owner: player });
         }
         if (player.spec.id === 'kamaz') {
           for (const e of enemies) {
-            if (e.alive && Math.hypot(e.x - player.x, e.z - player.z) < player.radius + e.radius + 3.5) {
-              e.vy = 14;
-              e.airborne = true;
-              applyDamage(e, 90 * dt, Math.sin(player.yaw), Math.cos(player.yaw), 'ram', player);
+            if (e.alive && Math.hypot(e.x - player.x, e.z - player.z) < player.radius + e.radius + 3.6) {
+              if (!e.airborne) { e.vy = 13.5; e.airborne = true; }
+              applyDamage(e, 95 * dt, Math.sin(player.yaw), Math.cos(player.yaw), 'ram', player);
             }
           }
         }
@@ -3798,9 +4360,10 @@
       player.ultCharge = Math.min(100, player.ultCharge + dt * 4.5);
 
       updateActorPhysics(player, throttle, steer, drift, nitro, dt);
-      const engType = ['cybertruck', 'zeekr001', 'bydu8'].includes(player.spec.id) ? 'ev' : ['charger', 'vaz2107'].includes(player.spec.id) ? 'v8' : (player.mass >= 3.0 || player.meshObj.isTank) ? 'heavy' : 'gas';
+      const engType = ['cybertruck', 'zeekr001', 'bydu8'].includes(player.spec.id) ? 'ev'
+        : ['charger', 'vaz2107'].includes(player.spec.id) ? 'v8'
+        : (player.mass >= 3.0 || player.meshObj.isTank) ? 'heavy' : 'gas';
       audio.updateDrive(player.speed / player.topSpeed, player.drifting, profile.selectedMap === 'gobi', true, engType);
-      if (animatedChevronTex) animatedChevronTex.offset.y -= dt * 2.2;
 
       // Find nearest enemy for auto-aim turret & ATGM lock-on
       let nearest = null, bestD = 68;
@@ -3831,44 +4394,6 @@
       const isFFA = profile.selectedMode !== 'colossus' && profile.selectedMode !== 'sweettooth';
       for (const e of enemies) {
         if (!e.alive) continue;
-
-        // 3 фазы боссов («Сладкоежка» с телепортом и бомбами, «Колосс-Х» со щитом)
-        if (e.isBoss) {
-          const hpRatio = e.hp / e.maxHp;
-          const nextPhase = hpRatio < 0.35 ? 3 : hpRatio < 0.68 ? 2 : 1;
-          if (nextPhase > e.bossPhase) {
-            e.bossPhase = nextPhase;
-            if (e.isSweetBoss) {
-              audio.playClownLaugh();
-              audio.playTeleport();
-              spawnParticles(e.x, e.y + 2, e.z, 0xf43f5e, 30, 16, 0.8, 1.5);
-              const ang = Math.random() * Math.PI * 2;
-              e.x = Math.cos(ang) * 52;
-              e.z = Math.sin(ang) * 52;
-              e.y = getGroundHeight(e.x, e.z);
-              spawnRingWave(e.x, e.z, 0xf43f5e, 18);
-              showArcadeBanner(`🤡 ФАЗА ${nextPhase}: ЦИРКОВОЙ ДОЖДЬ!`, 'Уходи из красных зон!', '#f43f5e');
-              for (let k = 0; k < 4 + nextPhase; k++) {
-                const bx = player.x + (Math.random() - 0.5) * 34;
-                const bz = player.z + (Math.random() - 0.5) * 34;
-                const hm = new THREE.Mesh(
-                  new THREE.CircleGeometry(7.5, 24).rotateX(-Math.PI / 2),
-                  new THREE.MeshBasicMaterial({ color: 0xf43f5e, transparent: true, opacity: 0.42, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false })
-                );
-                hm.position.set(bx, 0.12, bz);
-                arenaGroup.add(hm);
-                hazards.push({ mesh: hm, x: bx, z: bz, r: 7.5, col: 0xf43f5e, timer: 2.1 + k * 0.25 });
-              }
-            } else if (e.isColossus) {
-              audio.playUlt();
-              e.shieldTimer = 4.0;
-              e.kazReady = 3;
-              spawnRingWave(e.x, e.z, 0xff1f4b, 26);
-              showArcadeBanner(`☠ КОЛОСС-Х: ФАЗА ${nextPhase}!`, 'Активирован энергощит — заходи в корму!', '#ff1f4b');
-            }
-          }
-        }
-
         e.aiTimer -= dt;
         if (e.aiTimer <= 0) {
           e.aiTimer = 1.6 + Math.random() * 2.2;
@@ -3886,35 +4411,66 @@
         }
         const tx = tgt.x - e.x, tz = tgt.z - e.z;
         let desiredYaw = Math.atan2(tx, tz);
+        // Boss 3-Phase Mechanics (Sweet Tooth teleports + bomb rain; Colossus-X shield + KAZ)
+        if (e.isBoss) {
+          const hpRatio = e.hp / e.maxHp;
+          const nextPhase = hpRatio < 0.35 ? 3 : hpRatio < 0.68 ? 2 : 1;
+          if (nextPhase > e.bossPhase) {
+            e.bossPhase = nextPhase;
+            if (e.isSweetBoss) {
+              audio.playClownLaugh();
+              audio.playTeleport();
+              spawnParticles(e.x, e.y + 2, e.z, 0xf43f5e, 30, 16, 0.8, 1.5);
+              const tpAng = Math.random() * Math.PI * 2;
+              e.x = Math.cos(tpAng) * 52;
+              e.z = Math.sin(tpAng) * 52;
+              e.y = getGroundHeight(e.x, e.z);
+              spawnRingWave(e.x, e.z, 0xf43f5e, 18);
+              showArcadeBanner(`🤡 ФАЗА ${nextPhase}: ЦИРКОВОЙ ДОЖДЬ!`, 'Уходи из красных зон!', '#f43f5e');
+              for (let k = 0; k < 4 + nextPhase; k++) {
+                const bx = Math.max(-ARENA_HALF + 10, Math.min(ARENA_HALF - 10, player.x + (Math.random() - 0.5) * 34));
+                const bz = Math.max(-ARENA_HALF + 10, Math.min(ARENA_HALF - 10, player.z + (Math.random() - 0.5) * 34));
+                const hm = new THREE.Mesh(
+                  new THREE.CircleGeometry(7.5, 24).rotateX(-Math.PI / 2),
+                  new THREE.MeshBasicMaterial({ color: 0xf43f5e, transparent: true, opacity: 0.42, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false })
+                );
+                hm.position.set(bx, 0.12, bz);
+                arenaGroup.add(hm);
+                hazards.push({ mesh: hm, x: bx, z: bz, r: 7.5, col: 0xf43f5e, timer: 2.1 + k * 0.25 });
+              }
+            } else if (e.isColossus) {
+              audio.playUlt();
+              e.shieldTimer = 4.0;
+              e.kazReady = 3;
+              spawnRingWave(e.x, e.z, 0xff1f4b, 26);
+              showArcadeBanner(`☠ КОЛОСС-Х: ФАЗА ${nextPhase}!`, 'Активирован энергощит + перезарядка КАЗ!', '#ff1f4b');
+            }
+          }
+        }
+
         // Stay inside shrinking Battle Royale ring
         if (fireRingMesh && Math.hypot(e.x, e.z) > fireRingRadius - 10) {
           desiredYaw = Math.atan2(-e.x, -e.z);
         } else if (tgtD < 18) {
           desiredYaw += e.aiStrafe * 0.95;
         }
-
-        // Умный ИИ: 1. Поиск аптечки при низком HP
+        // Smart AI: seek heal pickup at low HP, evade hazards & avoid obstacles
         if (!e.isBoss && e.hp < e.maxHp * 0.38) {
           let bestHeal = null, hdMin = 55;
           for (const pk of pickups) {
             if (pk.active && pk.type === 'heal') {
               const d = Math.hypot(pk.x - e.x, pk.z - e.z);
-              if (d < hdMin) {
-                hdMin = d;
-                bestHeal = pk;
-              }
+              if (d < hdMin) { hdMin = d; bestHeal = pk; }
             }
           }
           if (bestHeal) desiredYaw = Math.atan2(bestHeal.x - e.x, bestHeal.z - e.z);
         }
-        // 2. Уход из активных зон опасности
         for (const h of hazards) {
           if (Math.hypot(e.x - h.x, e.z - h.z) < h.r + 3) {
             desiredYaw = Math.atan2(e.x - h.x, e.z - h.z);
             break;
           }
         }
-        // 3. Объезд контейнеров и центрального монумента для лёгких/средних машин
         if (e.mass < 4.0) {
           const lookX = e.x + Math.sin(e.yaw) * 8, lookZ = e.z + Math.cos(e.yaw) * 8;
           for (const c of covers) {
@@ -3927,7 +4483,6 @@
             desiredYaw += e.aiStrafe * 1.25;
           }
         }
-
         let diff = desiredYaw - e.yaw;
         while (diff > Math.PI) diff -= Math.PI * 2;
         while (diff < -Math.PI) diff += Math.PI * 2;
@@ -4060,6 +4615,7 @@
         if (Math.hypot(player.x - secretStash.x, player.z - secretStash.z) < player.radius + 2.5) {
           secretStash.active = false;
           arenaGroup.remove(secretStash.group);
+          disposeObject3D(secretStash.group);
           audio.playUlt();
           player.hp = player.maxHp;
           player.mines = Math.min(9, player.mines + 4);
@@ -4088,8 +4644,7 @@
             if (Math.abs(t.y - mn.y) > 2.4) continue;
             if (Math.hypot(t.x - mn.x, t.z - mn.z) < t.radius + 1.5) {
               detonate = true;
-              t.vy = 13.5;
-              t.airborne = true;
+              t.vy = 13.5; t.airborne = true;
               applyDamage(t, t === player ? 55 : 115, 0, 1, 'splash', mn.owner);
               spawnFloatText(new THREE.Vector3(t.x, t.y + 3.2, t.z), '💣 ПОЛЕТЕЛ!', '#fb7185', 17);
               break;
@@ -4161,7 +4716,7 @@
         p.life -= dt;
         let remove = p.life <= 0;
 
-        // Homing rocket steering
+        // Homing rocket steering (3D including height)
         if (!remove && p.homing && p.homing.alive) {
           const hdx = p.homing.x - p.x, hdz = p.homing.z - p.z;
           const hd = Math.hypot(hdx, hdz) || 1;
@@ -4171,16 +4726,20 @@
           const curS = Math.hypot(p.vx, p.vz) || 1;
           p.vx = (p.vx / curS) * p.speed;
           p.vz = (p.vz / curS) * p.speed;
-          p.mesh.rotation.y = Math.atan2(p.vx, p.vz);
           const hdy = (p.homing.y + 1.4) - p.y;
-          p.vy = (p.vy || 0) + (Math.max(-20, Math.min(20, hdy * 3)) - (p.vy || 0)) * Math.min(1, dt * 6);
+          p.vy = (p.vy || 0) + (Math.max(-20, Math.min(20, hdy * 3)) - (p.vy || 0)) * steerK;
+          p.mesh.rotation.y = Math.atan2(p.vx, p.vz);
         }
 
         if (!remove) {
           p.x += p.vx * dt;
-          p.y += (p.vy || 0) * dt;
           p.z += p.vz * dt;
-          if (p.y < getGroundHeight(p.x, p.z) + 0.15) remove = true;
+          if (p.type === 'saw') {
+            p.y = getGroundHeight(p.x, p.z) + 1.1;
+          } else {
+            p.y += (p.vy || 0) * dt;
+            if (p.y < getGroundHeight(p.x, p.z) + 0.12) remove = true;
+          }
           p.mesh.position.set(p.x, p.y, p.z);
           if (p.type === 'saw') {
             p.mesh.rotation.y += dt * 28;
@@ -4218,11 +4777,11 @@
           remove = true;
         }
 
-        // Check cover hits
+        // Check cover hits (respecting elevation so overpass shots clear ground crates)
         if (!remove) {
           for (let ci = covers.length - 1; ci >= 0; ci--) {
             const c = covers[ci];
-            if (Math.hypot(p.x - c.x, p.z - c.z) < c.radius + 0.5) {
+            if (Math.abs(p.y - 1.4) < 2.8 && Math.hypot(p.x - c.x, p.z - c.z) < c.radius + 0.5) {
               c.hp -= p.dmg;
               spawnParticles(p.x, p.y, p.z, 0xfbbf24, 5, 8, 0.3, 0.7);
               if (c.hp <= 0) destroyCover(ci, p.owner);
@@ -4250,7 +4809,7 @@
               remove = true;
               break;
             }
-            if (d < t.radius + 0.75 && Math.abs(p.y - (t.y + 1.4)) < (t.isBoss ? 3.5 : 2.3)) {
+            if (d < t.radius + 0.75 && Math.abs(p.y - (t.y + 1.4)) < (t.isBoss ? 3.8 : 2.5)) {
               const spd = Math.hypot(p.vx, p.vz) || 1;
               applyDamage(t, p.dmg, p.vx / spd, p.vz / spd, p.type, p.owner);
               const heavyHit = p.isRocket || p.style === 'shell' || p.type === 'fire';
@@ -4321,7 +4880,8 @@
               applyDamage(a, 42, 0, 1, 'splash', null);
             }
           }
-          arenaGroup.remove(h.mesh); disposeObject3D(h.mesh);
+          arenaGroup.remove(h.mesh);
+          disposeObject3D(h.mesh);
           hazards.splice(i, 1);
         }
       }
@@ -4481,37 +5041,28 @@
         lockBox.classList.add('hidden');
       }
 
-      // Draw 2D Tactical Radar (with Battle Royale Fire Ring!)
+      // Draw Rotating 2D Tactical Radar (UP = player's forward heading!)
       const rc = document.getElementById('radar-canvas');
       const rctx = rc.getContext('2d');
       const R = rc.width / 2;
       rctx.clearRect(0, 0, rc.width, rc.height);
       rctx.save();
-      rctx.beginPath();
-      rctx.arc(R, R, R - 2, 0, Math.PI * 2);
-      rctx.clip();
+      rctx.beginPath(); rctx.arc(R, R, R - 2, 0, Math.PI * 2); rctx.clip();
       rctx.fillStyle = 'rgba(7, 13, 28, 0.88)';
       rctx.fillRect(0, 0, rc.width, rc.height);
 
-      // Сектор обзора камеры (всегда направлен вверх)
+      // Camera FOV cone facing up
       rctx.fillStyle = 'rgba(56, 189, 248, 0.14)';
-      rctx.beginPath();
-      rctx.moveTo(R, R);
-      rctx.arc(R, R, R - 2, -Math.PI * 0.72, -Math.PI * 0.28);
-      rctx.closePath();
-      rctx.fill();
+      rctx.beginPath(); rctx.moveTo(R, R); rctx.arc(R, R, R - 2, -Math.PI * 0.72, -Math.PI * 0.28); rctx.closePath(); rctx.fill();
 
-      rctx.strokeStyle = 'rgba(56, 189, 248, 0.22)';
+      rctx.strokeStyle = 'rgba(56, 189, 248, 0.24)';
       rctx.lineWidth = 1;
-      rctx.beginPath();
-      rctx.arc(R, R, R * 0.48, 0, Math.PI * 2);
-      rctx.stroke();
+      rctx.beginPath(); rctx.arc(R, R, R * 0.48, 0, Math.PI * 2); rctx.stroke();
 
       const scale = (R - 6) / (ARENA_HALF * 0.85);
       const cosY = Math.cos(player.yaw), sinY = Math.sin(player.yaw);
       const toRadar = (wx, wz) => {
         const dx = wx - player.x, dz = wz - player.z;
-        // Проекция в локальные координаты игрока (вперёд = -Y на canvas)
         const fwd = dx * sinY + dz * cosY;
         const right = -dx * cosY + dz * sinY;
         return [R + right * scale, R - fwd * scale];
@@ -4521,16 +5072,12 @@
         const [cx, cy] = toRadar(0, 0);
         rctx.strokeStyle = '#ff4500';
         rctx.lineWidth = 2.5;
-        rctx.beginPath();
-        rctx.arc(cx, cy, fireRingRadius * scale, 0, Math.PI * 2);
-        rctx.stroke();
+        rctx.beginPath(); rctx.arc(cx, cy, fireRingRadius * scale, 0, Math.PI * 2); rctx.stroke();
       }
       for (const h of hazards) {
         const [hx, hy] = toRadar(h.x, h.z);
         rctx.fillStyle = 'rgba(244, 63, 94, 0.45)';
-        rctx.beginPath();
-        rctx.arc(hx, hy, h.r * scale, 0, Math.PI * 2);
-        rctx.fill();
+        rctx.beginPath(); rctx.arc(hx, hy, h.r * scale, 0, Math.PI * 2); rctx.fill();
       }
       for (const pk of pickups) {
         if (!pk.active) continue;
@@ -4538,29 +5085,19 @@
         rctx.fillStyle = pk.type === 'heal' ? '#4ade80' : '#38bdf8';
         rctx.fillRect(px - 2, py - 2, 4, 4);
       }
+      for (const pt of portals) {
+        const [tx, ty] = toRadar(pt.x, pt.z);
+        rctx.strokeStyle = '#38bdf8'; rctx.lineWidth = 1.5;
+        rctx.beginPath(); rctx.arc(tx, ty, 3.5, 0, Math.PI * 2); rctx.stroke();
+      }
       for (const e of enemies) {
         const [ex, ey] = toRadar(e.x, e.z);
         rctx.fillStyle = e.isBoss ? '#f43f5e' : '#fbbf24';
-        rctx.beginPath();
-        rctx.arc(ex, ey, e.isBoss ? 5 : 3.2, 0, Math.PI * 2);
-        rctx.fill();
+        rctx.beginPath(); rctx.arc(ex, ey, e.isBoss ? 5 : 3.2, 0, Math.PI * 2); rctx.fill();
       }
-      for (const pt of portals) {
-        const [ptx, pty] = toRadar(pt.x, pt.z);
-        rctx.strokeStyle = '#38bdf8';
-        rctx.lineWidth = 1.5;
-        rctx.beginPath();
-        rctx.arc(ptx, pty, 3.5, 0, Math.PI * 2);
-        rctx.stroke();
-      }
-      // Игрок в центре в виде стрелки вперёд
+      // Player directional arrow at center
       rctx.fillStyle = '#4ade80';
-      rctx.beginPath();
-      rctx.moveTo(R, R - 5.5);
-      rctx.lineTo(R - 4, R + 4);
-      rctx.lineTo(R + 4, R + 4);
-      rctx.closePath();
-      rctx.fill();
+      rctx.beginPath(); rctx.moveTo(R, R - 5.5); rctx.lineTo(R - 4, R + 4); rctx.lineTo(R + 4, R + 4); rctx.closePath(); rctx.fill();
       rctx.restore();
     }
 
@@ -4587,7 +5124,7 @@
       for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
         p.life -= dt;
-        if (p.life <= 0) { fxGroup.remove(p.mesh); particles.splice(i, 1); continue; }
+        if (p.life <= 0) { fxGroup.remove(p.mesh); disposeObject3D(p.mesh); particles.splice(i, 1); continue; }
         const t = 1 - p.life / p.maxLife;
         if (p.ring) {
           p.mesh.scale.setScalar(0.5 + t * p.maxR);
@@ -4891,11 +5428,9 @@
       keys[e.code] = true;
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code)) e.preventDefault();
       if (e.repeat) return;
+      if (e.code === 'Escape' && game.screen === 'battle') { togglePause(); return; }
       if (e.code === 'KeyN') syncMusicButtons(audio.toggleMusic());
-      if (e.code === 'Escape' && game.screen === 'battle') {
-        togglePause();
-        return;
-      }
+      if (game.paused) return;
       if ((e.code === 'KeyE' || e.code === 'KeyQ') && game.screen === 'battle') triggerUltimate();
       if (e.code === 'KeyF' && game.screen === 'battle') triggerSpecial();
       if (e.code === 'KeyX' && game.screen === 'battle') dropMine();
@@ -4918,8 +5453,46 @@
     });
 
     // Garage Camera Orbit Drag (Mouse + Touch) & LMB Special Fire in Battle
+    let renderQuality = 2;
+    function togglePause(forceState) {
+      if (game.screen !== 'battle') return;
+      game.paused = typeof forceState === 'boolean' ? forceState : !game.paused;
+      document.getElementById('pause-modal').classList.toggle('hidden', !game.paused);
+      if (game.paused) audio.updateDrive(0, false, false, false);
+    }
+
+    document.getElementById('btn-pause-hud').addEventListener('click', () => togglePause());
+    document.getElementById('btn-resume').addEventListener('click', () => togglePause(false));
+    document.getElementById('btn-pause-retry').addEventListener('click', () => { togglePause(false); startBattle(); });
+    document.getElementById('btn-pause-garage').addEventListener('click', () => { togglePause(false); returnToGarage(); });
+
+    document.getElementById('set-sfx').addEventListener('input', e => {
+      const v = Number(e.target.value);
+      document.getElementById('set-sfx-val').textContent = v + '%';
+      audio.userVolume = v / 100;
+      if (audio.master) audio.master.gain.value = 0.34 * audio.userVolume;
+    });
+    document.getElementById('set-shadows').addEventListener('click', e => {
+      renderer.shadowMap.enabled = !renderer.shadowMap.enabled;
+      sunLight.castShadow = renderer.shadowMap.enabled;
+      e.target.textContent = renderer.shadowMap.enabled ? 'ВКЛ' : 'ВЫКЛ';
+      e.target.className = 'px-3 py-1 rounded-lg font-black text-white ' + (renderer.shadowMap.enabled ? 'bg-emerald-600' : 'bg-slate-700');
+    });
+    document.getElementById('set-quality').addEventListener('click', e => {
+      renderQuality = (renderQuality + 2) % 3;
+      const ratios = [0.75, 1.25, Math.min(window.devicePixelRatio || 1, 2)];
+      const names = ['НИЗКОЕ', 'СРЕДНЕЕ', 'ВЫСОКОЕ'];
+      renderer.setPixelRatio(ratios[renderQuality]);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      e.target.textContent = names[renderQuality];
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && game.screen === 'battle') togglePause(true);
+    });
+
     renderer.domElement.addEventListener('mousedown', e => {
-      if (game.screen === 'battle' && e.button === 0) {
+      if (game.screen === 'battle' && !game.paused && e.button === 0) {
         triggerSpecial();
         return;
       }
@@ -4934,7 +5507,7 @@
     });
     window.addEventListener('mouseup', () => { isDraggingGarage = false; });
 
-    // Touch orbit drag for garage
+    // Mobile Touch Orbit in Garage
     renderer.domElement.addEventListener('touchstart', e => {
       if (game.screen !== 'garage' || e.touches.length !== 1) return;
       isDraggingGarage = true;
@@ -5035,48 +5608,6 @@
 
       renderer.render(scene, camera);
     }
-
-    let renderQuality = 2; // 2 = высокое, 1 = среднее, 0 = производительность
-    function togglePause(forceState) {
-      if (game.screen !== 'battle') return;
-      game.paused = typeof forceState === 'boolean' ? forceState : !game.paused;
-      const modal = document.getElementById('pause-modal');
-      if (modal) modal.classList.toggle('hidden', !game.paused);
-      if (game.paused) audio.updateDrive(0, false, false, false);
-    }
-    document.getElementById('btn-resume')?.addEventListener('click', () => togglePause(false));
-    document.getElementById('btn-pause-retry')?.addEventListener('click', () => {
-      togglePause(false);
-      startBattle();
-    });
-    document.getElementById('btn-pause-garage')?.addEventListener('click', () => {
-      togglePause(false);
-      returnToGarage();
-    });
-    document.getElementById('btn-pause-hud')?.addEventListener('click', () => togglePause());
-    document.getElementById('set-sfx')?.addEventListener('input', e => {
-      const v = Number(e.target.value);
-      const valEl = document.getElementById('set-sfx-val');
-      if (valEl) valEl.textContent = v + '%';
-      if (audio.master) audio.master.gain.value = 0.34 * (v / 100);
-    });
-    document.getElementById('set-shadows')?.addEventListener('click', e => {
-      renderer.shadowMap.enabled = !renderer.shadowMap.enabled;
-      sunLight.castShadow = renderer.shadowMap.enabled;
-      e.target.textContent = renderer.shadowMap.enabled ? 'ВКЛ' : 'ВЫКЛ';
-      e.target.className = 'px-3 py-1 rounded-lg font-black text-white ' + (renderer.shadowMap.enabled ? 'bg-emerald-600' : 'bg-slate-700');
-    });
-    document.getElementById('set-quality')?.addEventListener('click', e => {
-      renderQuality = (renderQuality + 2) % 3;
-      const ratios = [0.75, 1.25, Math.min(window.devicePixelRatio || 1, 2)];
-      const names = ['НИЗКОЕ', 'СРЕДНЕЕ', 'ВЫСОКОЕ'];
-      renderer.setPixelRatio(ratios[renderQuality]);
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      e.target.textContent = names[renderQuality];
-    });
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden && game.screen === 'battle') togglePause(true);
-    });
 
     window.onload = function () {
       buildArena(profile.selectedMap, false);
