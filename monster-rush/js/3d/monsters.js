@@ -1,6 +1,6 @@
 // Монстры: мультяшные, без крови. В каждом мире свой окрас, у каждого босса свой облик. Смотрят в +Z, на героя.
-import * as T from '../../vendor/three/three.module.min.js?v=d3800c69';
-import { Kit, group, part, toyMaterial, glowMaterial, flat, place } from './kit.js?v=d3800c69';
+import * as T from '../../vendor/three/three.module.min.js?v=77cf01fd';
+import { Kit, group, part, toyMaterial, glowMaterial, flat, place } from './kit.js?v=77cf01fd';
 
 const glow = glowMaterial();
 const DARK = 0x2a1a2c;
@@ -12,6 +12,8 @@ const SKINS = {
   grunt: [[0x9ee03c, 0xd9f58c, 0x5fa828], [0xff7ac6, 0xffc2e6, 0xc94f9b], [0xff9a3d, 0xffd38c, 0xc7632a]],
   spitter: [[0xff8a3d, 0xffc98c, 0xc9601f], [0x45e0ff, 0xb5f5ff, 0x1f9dc9], [0xc9e04a, 0xeef59a, 0x8aa32a]],
   brute: [[0xa66cf2, 0xd5b5ff, 0x7240bf], [0x5a7bff, 0xb2c2ff, 0x3550c9], [0x8a4a6f, 0xc98aa8, 0x5a2d48]],
+  shielder: [[0x5378e6, 0x9ec0ff, 0x2e4ba8], [0x9e59ff, 0xd9b8ff, 0x5d2ab8], [0xb8463e, 0xff9a8a, 0x6e2323]],
+  runner: [[0xffd23c, 0xfff3a8, 0xc98a12], [0x4dffa6, 0xbfffdf, 0x1fb36b], [0xff5a26, 0xffb38a, 0xa82812]],
 };
 
 function fangs(k, x, y, z, n, width, h, up = true) {
@@ -56,6 +58,19 @@ function leg(c, shade, length, r, foot) {
   return k.build();
 }
 
+function addWorldAccent(k, g, level, y = 1.45, z = -0.2) {
+  if (level === 0) {
+    // Коралловый гребень
+    for (let i = -1; i <= 1; i++) k.cone(0xff5fa2, i * 0.14, y + 0.14 - Math.abs(i) * 0.05, z, 0.07, 0.28, -0.35, 0, -i * 0.25, 5);
+  } else if (level === 1) {
+    // Светящиеся кристаллы на плечах
+    for (const s of [-1, 1]) g.add(flat(place(new T.ConeGeometry(0.08, 0.36, 5), s * 0.38, y, z, 1, 1, 1, -0.2, 0, s * -0.55)), 0x8ff5ff, 2.2);
+  } else {
+    // Лавовая жила на спине/груди
+    g.add(place(new T.BoxGeometry(0.08, 0.38, 0.08), 0, y - 0.32, 0.42, 1, 1, 1, 0, 0, 0.3), 0xff7a1f, 3.0);
+  }
+}
+
 function buildGrunt(level) {
   const [c, light, shade] = SKINS.grunt[level];
   const k = new Kit();
@@ -79,6 +94,7 @@ function buildGrunt(level) {
     k.cone(BONE, s * 0.27, 1.56, 0.02, 0.07, 0.3, 0.1, 0, s * -0.42, 7);
     k.ball(light, s * 0.52, 1.24, -0.02, 0.1, 0.05, 0.12, 0, 0, s * 0.3);
   }
+  addWorldAccent(k, g, level, 1.45, -0.18);
   return {
     body: k.build({ y0: 0.3, y1: 1.2, low: 0.82, high: 1.04 }), light: g,
     arm: limb(c, shade, 0.34, 0.12, 0.15, 3), leg: leg(c, shade, 0.26, 0.13, 0.15),
@@ -112,6 +128,7 @@ function buildSpitter(level) {
     g.add(new T.SphereGeometry(r * 0.82, 10, 8).translate(x, y, z - r * 0.46), 0xfff27a, 2.5);
   }
   for (const s of [-1, 1]) k.cone(BONE, s * 0.2, 1.97, -0.02, 0.05, 0.2, 0, 0, s * -0.3, 6);
+  addWorldAccent(k, g, level, 1.82, -0.15);
   return {
     body: k.build({ y0: 0.3, y1: 1.2, low: 0.84, high: 1.03 }), light: g,
     arm: limb(c, shade, 0.3, 0.085, 0.11, 3), leg: leg(c, shade, 0.26, 0.11, 0.13),
@@ -152,10 +169,55 @@ function buildBrute(level) {
     k.add(place(new T.SphereGeometry(1, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), s * 0.86, 1.58, 0, 0.38, 0.28, 0.4, 0, 0, s * -0.3), STEEL);
     for (let i = 0; i < 3; i++) k.cone(BONE, s * (0.72 + i * 0.16), 1.82 - i * 0.07, -0.12 + i * 0.12, 0.05, 0.26, 0, 0, s * (-0.25 - i * 0.14), 6);
   }
+  addWorldAccent(k, g, level, 1.9, -0.1);
   return {
     body: k.build({ y0: 0.4, y1: 1.4, low: 0.82, high: 1.03 }), light: g,
     arm: limb(c, shade, 0.62, 0.17, 0.27, 3), leg: leg(c, shade, 0.34, 0.19, 0.22),
     armAt: [0.95, 1.36, 0.02], legAt: [0.36, 0.5, 0], bodyY: 0, scale: 1.05,
+  };
+}
+
+function buildShielder(level) {
+  const [c, light, shade] = SKINS.shielder[level];
+  const k = new Kit();
+  const g = new Kit();
+  k.loft(c, [
+    { y: 0.4, rx: 0.38, rz: 0.34 },
+    { y: 0.72, rx: 0.56, rz: 0.46 },
+    { y: 1.24, rx: 0.66, rz: 0.5, p: 2.4 },
+    { y: 1.56, rx: 0.44, rz: 0.38 },
+  ], { seg: 16 });
+  k.box(STEEL, 0, 1.16, 0.44, 0.7, 0.48, 0.14, 0, 0, 0, 0.04);
+  k.smooth(c, 0, 1.66, 0.14, 0.32, 0.28, 0.28);
+  eyes(k, 0.12, 1.68, 0.4, 0.06, 0.05, 0x45f0ff);
+  g.add(new T.BoxGeometry(0.24, 0.08, 0.04).translate(0, 1.18, 0.52), 0x62f2ff, 2.8);
+  addWorldAccent(k, g, level, 1.72, -0.14);
+  return {
+    body: k.build({ y0: 0.35, y1: 1.3, low: 0.82, high: 1.03 }), light: g,
+    arm: limb(c, shade, 0.42, 0.14, 0.18, 3), leg: leg(c, shade, 0.3, 0.15, 0.17),
+    armAt: [0.68, 1.14, 0.08], legAt: [0.28, 0.42, 0], bodyY: 0, scale: 1.05,
+  };
+}
+
+function buildRunner(level) {
+  const [c, light, shade] = SKINS.runner[level];
+  const k = new Kit();
+  const g = new Kit();
+  // Приземистый хищный силуэт
+  k.loft(c, [
+    { y: 0.32, rx: 0.26, rz: 0.34 },
+    { y: 0.68, rx: 0.36, rz: 0.46 },
+    { y: 1.02, rx: 0.34, rz: 0.38 },
+    { y: 1.24, rx: 0.22, rz: 0.24 },
+  ], { seg: 14 });
+  k.ball(light, 0, 0.68, 0.32, 0.24, 0.26, 0.16);
+  eyes(k, 0.14, 1.02, 0.34, 0.085, 0.075, 0xff2f4a);
+  for (const s of [-1, 1]) k.cone(shade, s * 0.24, 1.18, -0.22, 0.07, 0.38, -0.75, 0, s * -0.35, 6);
+  g.add(new T.BoxGeometry(0.06, 0.06, 0.32).translate(0, 1.12, -0.32), 0xffe14d, 2.6);
+  return {
+    body: k.build({ y0: 0.28, y1: 1.05, low: 0.84, high: 1.04 }), light: g,
+    arm: limb(c, shade, 0.28, 0.09, 0.11, 3), leg: leg(c, shade, 0.3, 0.11, 0.13),
+    armAt: [0.38, 0.84, 0.12], legAt: [0.2, 0.36, 0], bodyY: 0, scale: 0.94,
   };
 }
 
@@ -342,6 +404,8 @@ function geometry(type, level) {
   if (type === 'grunt') g = buildGrunt(level);
   else if (type === 'spitter') g = buildSpitter(level);
   else if (type === 'brute') g = buildBrute(level);
+  else if (type === 'shielder') g = buildShielder(level);
+  else if (type === 'runner') g = buildRunner(level);
   else if (type === 'barrel') g = buildBarrel();
   else if (type === 'wall') g = buildWall();
   else g = [buildCrusher, buildQueen, buildTitan][level]();
@@ -354,6 +418,8 @@ export const CHUNK_COLORS = {
   grunt: (l) => SKINS.grunt[l].slice(0, 3),
   spitter: (l) => SKINS.spitter[l].slice(0, 3),
   brute: (l) => [...SKINS.brute[l].slice(0, 2), STEEL],
+  shielder: (l) => [...SKINS.shielder[l].slice(0, 2), 0x62f2ff],
+  runner: (l) => SKINS.runner[l].slice(0, 3),
   barrel: () => [0xe53935, 0xffc531, 0x3a3148],
   wall: () => [0xa768ff, 0x81efff, 0x52328f],
   boss: (l) => [[0xe0533f, 0x8c4a3f, 0xffd24a], [0x2fbfae, 0xff5fc0, 0x8ff5ff], [0x362436, 0x4e3148, 0xff7a1f]][l],
@@ -394,9 +460,27 @@ export class MonsterView {
     }
     if (type === 'spitter') {
       this.charge = new T.Mesh(new T.SphereGeometry(0.19, 12, 8), new T.MeshBasicMaterial({ color: 0xffc762 }));
-      this.charge.position.set(0, 0.98, 0.64);
+      // ИСПРАВЛЕНО: раньше было (0, 0.98, 0.64) — в районе живота; теперь прямо в пасти
+      this.charge.position.set(0, 1.5, 0.52);
       this.body.add(this.charge);
       this.charge.visible = false;
+    }
+    if (type === 'shielder') {
+      this.frontShield = new T.Mesh(
+        new T.BoxGeometry(1.55, 1.6, 0.12),
+        new T.MeshBasicMaterial({ color: 0x56eeff, transparent: true, opacity: 0.48, depthWrite: false, blending: T.AdditiveBlending })
+      );
+      this.frontShield.position.set(0, 1.05, 0.96);
+      this.frontShield.renderOrder = 6;
+      this.root.add(this.frontShield);
+    }
+    if (type === 'brute' || type === 'wall' || type === 'shielder') {
+      this.hpBar = group(this.root, 0, type === 'brute' ? 2.45 : type === 'wall' ? 2.55 : 2.25, 0);
+      const back = new T.Mesh(new T.PlaneGeometry(1.24, 0.16), new T.MeshBasicMaterial({ color: 0x1b1642, depthWrite: false, fog: false }));
+      this.hpFill = new T.Mesh(new T.PlaneGeometry(1.16, 0.1), new T.MeshBasicMaterial({ color: 0xff5a3c, depthWrite: false, fog: false }));
+      this.hpFill.position.z = 0.01;
+      this.hpBar.add(back, this.hpFill);
+      this.hpBar.visible = false;
     }
     this.punch = 0;
   }
@@ -413,10 +497,27 @@ export class MonsterView {
 
   update(dt, item) {
     const age = item.age;
+    if (this.frontShield) {
+      this.frontShield.visible = item.frontShield > 0;
+      if (this.frontShield.visible) this.frontShield.scale.setScalar(1 + (item.hit > 0.06 ? 0.08 : 0));
+    }
+    if (this.hpBar) {
+      const show = item.hp < item.maxHp && item.hp > 0;
+      this.hpBar.visible = show;
+      if (show) {
+        const f = Math.max(0.001, item.hp / item.maxHp);
+        this.hpFill.scale.x = f;
+        this.hpFill.position.x = -0.58 * (1 - f);
+        this.hpFill.material.color.setHex(item.frontShield > 0 ? 0x56eeff : 0xff5a3c);
+      }
+    }
     if (this.band) this.band.material.color.setHex(item.barrelKind === 'cryo' ? 0x77ebff : item.barrelKind === 'pulse' ? 0xd99aff : item.barrelKind === 'blast' ? 0xff5136 : 0xffca58);
     if (this.charge) {
       this.charge.visible = Boolean(item.charge);
       this.charge.scale.setScalar(1 + Math.max(0, 0.4 - item.shot) * 3);
+    }
+    if (this.type === 'runner' && item.dashTelegraph > 0) {
+      this.body.rotation.z = Math.sin(age * 45) * 0.25;
     }
     const big = this.type === 'boss' || this.type === 'brute';
     const pace = big ? 6.2 : this.type === 'spitter' ? 8.5 : 10.5;

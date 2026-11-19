@@ -1,6 +1,6 @@
 // Эффекты: искры, огонь, дым, обломки, ударные волны, снаряды, молнии и луч.
-import * as T from '../../vendor/three/three.module.min.js?v=ccdbda82';
-import { Kit, rbox, toyMaterial, BEND_GLSL, hdr } from './kit.js?v=ccdbda82';
+import * as T from '../../vendor/three/three.module.min.js?v=a7d90eee';
+import { Kit, rbox, toyMaterial, BEND_GLSL, hdr } from './kit.js?v=a7d90eee';
 
 const POINT_VERT = `
 attribute float aSize; attribute vec4 aColor; varying vec4 vColor; uniform float uScale;
@@ -178,6 +178,8 @@ export class FX {
     this.orbCount = 0;
     this.rocketCount = 0;
     this.time = 0;
+    this.flyGems = [];
+    this.ambientTimer = 0;
   }
 
   setScale(height, fovDeg) {
@@ -335,7 +337,42 @@ export class FX {
     this.beam = from ? { from: from.clone(), to: to.clone(), color, width } : null;
   }
 
-  update(dt, carry) {
+  // Фоновые частицы биома: пыль в каньоне, споры в разломе, угли в вулкане
+  ambient(dt, world, carry, heroX) {
+    this.ambientTimer += dt;
+    const rate = world === 2 ? 0.045 : 0.065;
+    if (this.ambientTimer < rate) return;
+    this.ambientTimer = 0;
+    const x = heroX + (Math.random() - 0.5) * 26;
+    const z = -12 - Math.random() * 38;
+    if (world === 0) {
+      C.set(0xffe7a8).multiplyScalar(1.3);
+      this.glow.add({ x, y: 0.4 + Math.random() * 4.5, z, vx: 0.6, vy: 0.15, vz: 2, g: 0, drag: 0.2, life: 2.2, max: 2.2, size: 0.16, r: C.r, g2: C.g, b: C.b, a: 0.55, carry: 1, fade: true });
+    } else if (world === 1) {
+      C.set(Math.random() < 0.5 ? 0x7ffff0 : 0xff7be0).multiplyScalar(1.9);
+      this.glow.add({ x, y: 0.6 + Math.random() * 5.2, z, vx: (Math.random() - 0.5) * 0.9, vy: 0.4, vz: 0, g: -0.2, drag: 0.3, life: 2.4, max: 2.4, size: 0.24, r: C.r, g2: C.g, b: C.b, a: 0.8, carry: 0.9, fade: true });
+    } else {
+      C.set(Math.random() < 0.4 ? 0xffd24a : 0xff6222).multiplyScalar(2.6);
+      this.glow.add({ x, y: 0.2 + Math.random() * 1.4, z, vx: (Math.random() - 0.5) * 2.2, vy: 2.4 + Math.random() * 2.2, vz: 1, g: -0.9, drag: 0.4, life: 1.8, max: 1.8, size: 0.22, r: C.r, g2: C.g, b: C.b, a: 0.95, carry: 0.85, fade: true });
+    }
+  }
+
+  // Физические кристаллы, вылетающие из столбов/сундука и втягивающиеся в героя
+  spawnFlyGems(x, y, z, count = 6, color = 0x62d6ff) {
+    const n = Math.min(count, 24);
+    for (let i = 0; i < n; i++) {
+      if (this.flyGems.length >= 60) this.flyGems.shift();
+      const a = Math.random() * Math.PI * 2;
+      const spd = 2.5 + Math.random() * 4.5;
+      this.flyGems.push({
+        x, y, z,
+        vx: Math.cos(a) * spd, vy: 4 + Math.random() * 4, vz: Math.sin(a) * spd,
+        age: 0, delay: 0.18 + Math.random() * 0.22, color,
+      });
+    }
+  }
+
+  update(dt, carry, heroX = 0, heroZ = 5) {
     this.time += dt;
     this.glow.update(dt, carry);
     this.smoke.update(dt, carry);
@@ -424,6 +461,31 @@ export class FX {
     this.boltMesh.instanceMatrix.needsUpdate = true;
     if (this.boltMesh.instanceColor) this.boltMesh.instanceColor.needsUpdate = true;
     this.boltCount = 0;
+
+    let gn = 0;
+    for (let i = 0; i < this.flyGems.length; i++) {
+      const g = this.flyGems[i];
+      g.age += dt;
+      if (g.age < g.delay) {
+        g.vy -= 18 * dt;
+        g.x += g.vx * dt;
+        g.y = Math.max(0.3, g.y + g.vy * dt);
+        g.z += (g.vz + carry * 0.3) * dt;
+      } else {
+        const pull = Math.min(1, dt * (8 + (g.age - g.delay) * 18));
+        g.x += (heroX - g.x) * pull;
+        g.y += (1.35 - g.y) * pull;
+        g.z += (heroZ - g.z) * pull;
+      }
+      if (g.age > 1.4 || (g.age >= g.delay && Math.hypot(g.x - heroX, g.z - heroZ) < 0.7)) {
+        this.spark(heroX, 1.35, heroZ, g.color, 2, 3, 0.16, 0.22, 2.2);
+        continue;
+      }
+      this.orb(g.x, g.y, g.z, 0.17, g.color, 2.6);
+      this.flyGems[gn++] = g;
+    }
+    this.flyGems.length = gn;
+
     this.orbMesh.count = this.orbCount;
     this.orbMesh.instanceMatrix.needsUpdate = true;
     if (this.orbMesh.instanceColor) this.orbMesh.instanceColor.needsUpdate = true;

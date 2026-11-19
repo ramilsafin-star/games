@@ -1,4 +1,4 @@
-import { WORLDS, clamp } from './game.js?v=d3800c69';
+import { WORLDS, clamp } from './game.js?v=77cf01fd';
 
 export const UPGRADES = {
   health: { name: 'Здоровье', step: '+15 к максимуму', costs: [60, 140, 260] },

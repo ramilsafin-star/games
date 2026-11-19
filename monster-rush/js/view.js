@@ -1,14 +1,14 @@
 // Сцена: связывает правила игры с графикой. Сама ничего не решает, только показывает.
-import * as T from '../vendor/three/three.module.min.js?v=d3800c69';
-import { BONUS_ROWS, HERO_Z, WEAPONS } from './game.js?v=d3800c69';
-import { BEND_GLSL, damp, group } from './3d/kit.js?v=d3800c69';
-import { World } from './3d/world.js?v=d3800c69';
-import { Hero } from './3d/hero.js?v=d3800c69';
-import { MonsterView, CHUNK_COLORS } from './3d/monsters.js?v=d3800c69';
-import { CageView, ColumnView, FinishView, ChestView, PickupView } from './3d/cage.js?v=d3800c69';
-import { makeGun } from './3d/guns.js?v=d3800c69';
-import { FX } from './3d/fx.js?v=d3800c69';
-import { Post } from './3d/post.js?v=d3800c69';
+import * as T from '../vendor/three/three.module.min.js?v=77cf01fd';
+import { BONUS_ROWS, HERO_Z, WEAPONS } from './game.js?v=77cf01fd';
+import { BEND_GLSL, damp, group, hdr } from './3d/kit.js?v=77cf01fd';
+import { World } from './3d/world.js?v=77cf01fd';
+import { Hero } from './3d/hero.js?v=77cf01fd';
+import { MonsterView, CHUNK_COLORS } from './3d/monsters.js?v=77cf01fd';
+import { CageView, ColumnView, FinishView, ChestView, PickupView, GateView } from './3d/cage.js?v=77cf01fd';
+import { makeGun } from './3d/guns.js?v=77cf01fd';
+import { FX } from './3d/fx.js?v=77cf01fd';
+import { Post } from './3d/post.js?v=77cf01fd';
 
 const SHOT_Y = 1.42;
 const FRAME_LIMIT = 27;
@@ -55,6 +55,8 @@ export class View {
     this.frames = 0;
     this.frameTotal = 0;
     this.rocketTrail = 0;
+    this.aberration = 0;
+    this.fovKick = 0;
 
     this.renderer = new T.WebGLRenderer({ antialias: false, alpha: false, stencil: false, powerPreference: 'high-performance' });
     this.renderer.outputColorSpace = T.SRGBColorSpace;
@@ -89,16 +91,41 @@ export class View {
 
     this.muzzleAt = new T.Vector3();
     this.beamTo = new T.Vector3();
-    this.warning = new T.Mesh(new T.PlaneGeometry(1, 1), new T.MeshBasicMaterial({ color: 0xff314c, transparent: true, opacity: 0, depthWrite: false, side: T.DoubleSide }));
+    // ИСПРАВЛЕНО: 20 сегментов по длине, чтобы красная полоса прилегала к изогнутой трассе
+    this.warning = new T.Mesh(new T.PlaneGeometry(1, 1, 1, 20), new T.MeshBasicMaterial({ color: 0xff314c, transparent: true, opacity: 0, depthWrite: false, side: T.DoubleSide }));
     this.warning.rotation.x = -Math.PI / 2;
     this.warning.renderOrder = 3;
     this.warning.visible = false;
     this.scene.add(this.warning);
-    this.sweepBeam = new T.Mesh(new T.CylinderGeometry(0.44, 0.66, 1, 12), new T.MeshBasicMaterial({ color: 0xff7628, transparent: true, opacity: 0.86, depthWrite: false }));
+
+    // Двухслойный HDR-луч Титана пепла
+    this.sweepBeam = new T.Group();
+    this.sweepCore = new T.Mesh(new T.CylinderGeometry(0.18, 0.26, 1, 10, 16, true), new T.MeshBasicMaterial({ color: hdr(0xffffff, 3.2), depthWrite: false }));
+    this.sweepGlow = new T.Mesh(new T.CylinderGeometry(0.46, 0.68, 1, 12, 16, true), new T.MeshBasicMaterial({ color: hdr(0xff6b24, 1.8), transparent: true, opacity: 0.72, depthWrite: false, blending: T.AdditiveBlending }));
+    this.sweepBeam.add(this.sweepCore, this.sweepGlow);
     this.sweepBeam.visible = false;
     this.sweepFrom = new T.Vector3();
     this.sweepDir = new T.Vector3();
     this.scene.add(this.sweepBeam);
+
+    // Золотая аура Овердрайва под героем
+    this.overdriveRing = new T.Mesh(
+      new T.RingGeometry(0.95, 1.25, 32).rotateX(-Math.PI / 2),
+      new T.MeshBasicMaterial({ color: hdr(0xffd23c, 2.2), transparent: true, opacity: 0.85, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide })
+    );
+    this.overdriveRing.position.y = 0.08;
+    this.overdriveRing.visible = false;
+    this.hero.root.add(this.overdriveRing);
+
+    // 3D Боевой дрон
+    this.drone = new T.Group();
+    const dBody = new T.Mesh(new T.OctahedronGeometry(0.28, 1), new T.MeshStandardMaterial({ color: 0x35d4ff, roughness: 0.3, metalness: 0.6 }));
+    const dEye = new T.Mesh(new T.SphereGeometry(0.12, 10, 8), new T.MeshBasicMaterial({ color: hdr(0xffffff, 3) }));
+    dEye.position.z = -0.22;
+    const dRing = new T.Mesh(new T.TorusGeometry(0.36, 0.035, 8, 20).rotateX(Math.PI / 2), new T.MeshBasicMaterial({ color: hdr(0x70ffef, 2) }));
+    this.drone.add(dBody, dEye, dRing);
+    this.drone.visible = false;
+    this.scene.add(this.drone);
     this.makeDemo();
     this.resize();
     this.observer = new ResizeObserver(() => this.resize());
@@ -120,7 +147,7 @@ export class View {
   // Заранее собирает модели всех монстров и пушек
   prewarm() {
     for (let level = 0; level < 3; level++) {
-      for (const type of ['grunt', 'spitter', 'brute', 'barrel', 'boss']) {
+      for (const type of ['grunt', 'spitter', 'brute', 'shielder', 'runner', 'barrel', 'boss']) {
         const key = `${type}:${level}`;
         const view = new MonsterView(type, level);
         view.key = key;
@@ -237,6 +264,7 @@ export class View {
         fx.chunks.length = 0;
         fx.glow.items.length = 0;
         fx.smoke.items.length = 0;
+        fx.flyGems.length = 0;
         fx.setBeam(null);
         break;
       case 'shot':
@@ -266,6 +294,7 @@ export class View {
         this.onCageBreak(e, 0xffb21f);
         break;
       case 'weapon': {
+        this.fovKick = Math.max(this.fovKick, 3.2);
         this.hero.setGun(e.weapon, true);
         const color = WEAPONS[e.weapon].color;
         fx.ring(game.x, HERO_Z, color, 5, 0.5);
@@ -295,6 +324,7 @@ export class View {
       case 'hurt':
         this.hero.hurt();
         this.shake = Math.max(this.shake, 0.48);
+        this.aberration = Math.max(this.aberration, 0.014);
         fx.spark(game.x, 1.3, HERO_Z, 0xff4d5e, 12, 6, 0.24, 0.42);
         break;
       case 'shield':
@@ -303,6 +333,8 @@ export class View {
         this.shake = Math.max(this.shake, 0.18);
         break;
       case 'nova':
+        this.aberration = 0.022;
+        this.fovKick = 5.5;
         fx.ring(e.x, e.z, 0x7ffff1, 26, 0.75);
         fx.ring(e.x, e.z, 0xffffff, 14, 0.5);
         fx.flash(e.x, 1.4, e.z, 0xbffff5, 9, 0.3, 2.2, 0);
@@ -312,9 +344,10 @@ export class View {
         break;
       case 'barrelBurst':
         if (e.kind !== 'gem') {
-          const color = e.kind === 'cryo' ? 0x74e7ff : 0xd589ff;
+          const color = e.kind === 'cryo' ? 0x74e7ff : e.kind === 'blast' ? 0xff5a2a : 0xd589ff;
           fx.ring(e.x, e.z, color, 7, 0.55);
           fx.spark(e.x, 1.1, e.z, color, 18, 6, 0.22, 0.5);
+          if (e.kind === 'blast') this.aberration = Math.max(this.aberration, 0.01);
         }
         break;
       case 'bossShot':
@@ -329,6 +362,7 @@ export class View {
         fx.spark(e.x, 2.2, e.z, 0x62d6ff, 16, 6, 0.26, 0.5);
         fx.flash(e.x, 1.4, e.z, 0xffffff, 2.8, 0.14, 2.4, 0);
         fx.puff(e.x, 0.6, e.z, 0xb4bcd6, 4, 0.9, 0.6, 0.5);
+        fx.spawnFlyGems(e.x, 2.2, e.z, Math.min(8, 3 + e.row), 0x62d6ff);
         this.shake = Math.max(this.shake, 0.1);
         break;
       }
@@ -338,7 +372,38 @@ export class View {
         fx.spark(0, 2.6, e.z, 0xffd24a, 70, 13, 0.32, 1.1, 3);
         fx.spark(0, 2.6, e.z, 0x62d6ff, 40, 11, 0.3, 1.1, 3);
         fx.lamp(0, 4, e.z + 2, 0xffd24a, 120);
+        fx.spawnFlyGems(0, 2.6, e.z, 22, 0xffd24a);
         this.shake = Math.max(this.shake, 0.22);
+        break;
+      case 'shockShield':
+        fx.ring(e.x, e.z, 0x70ffef, 15, 0.55);
+        fx.spark(e.x, 1.2, e.z, 0x70ffef, 32, 11, 0.26, 0.55);
+        this.aberration = Math.max(this.aberration, 0.016);
+        this.shake = Math.max(this.shake, 0.42);
+        break;
+      case 'crit':
+        fx.flash(e.x, 1.4, e.z, 0xffe14d, 2.4, 0.12, 3.0, 1);
+        fx.spark(e.x, 1.4, e.z, 0xffd23c, 10, 7, 0.24, 0.35);
+        break;
+      case 'shieldBlock':
+        fx.spark(e.x, 1.2, e.z + 0.9, 0x62f2ff, 6, 6, 0.2, 0.28);
+        break;
+      case 'gateHit':
+        fx.spark(e.x, 1.5, e.z + 0.2, 0x8ff5ff, 4, 5, 0.18, 0.24);
+        break;
+      case 'gate':
+        fx.ring(e.x, HERO_Z, e.value >= 0 ? 0x45e0ff : 0xff4664, 4.2, 0.4);
+        fx.spark(e.x, 1.4, HERO_Z, e.value >= 0 ? 0x45e0ff : 0xff4664, 18, 6.5, 0.24, 0.45);
+        if (e.kind === 'gems') fx.spawnFlyGems(e.x, 1.5, e.z, 8, 0x62d6ff);
+        break;
+      case 'overdrive':
+        if (e.active) {
+          fx.ring(game.x, HERO_Z, 0xffd23c, 6, 0.45);
+          this.fovKick = Math.max(this.fovKick, 3.5);
+        }
+        break;
+      case 'droneShot':
+        fx.flash(e.x, 2.15, e.z - 0.2, 0x70ffef, 0.65, 0.06, 2.5);
         break;
       default:
         break;
@@ -361,6 +426,7 @@ export class View {
     }
     if (weapon === 'spread') {
       fx.spark(m.x, m.y, m.z, 0xffc97a, 4, 5, 0.16, 0.2);
+      fx.puff(m.x, m.y, m.z - 0.15, 0xddd6e6, 2, 0.42, 0.35, 0.38);
       this.shake = Math.max(this.shake, 0.08);
     }
     if (weapon === 'minigun') fx.spark(m.x + 0.1, m.y, m.z + 0.9, 0xffd27a, 1, 3, 0.12, 0.26);
@@ -553,14 +619,16 @@ export class View {
     this.sweepBeam.visible = Boolean(game.sweep && boss);
     if (this.sweepBeam.visible) {
       this.sweepFrom.set(boss.x, 2.1, boss.z + 1.5);
-      this.sweepDir.set(game.sweep.x, 0.85, HERO_Z);
+      this.sweepDir.set(game.sweep.x, 0.45, HERO_Z);
       this.sweepBeam.position.copy(this.sweepFrom).lerp(this.sweepDir, 0.5);
       this.sweepDir.sub(this.sweepFrom);
-      this.sweepBeam.scale.y = this.sweepDir.length();
+      this.sweepBeam.scale.set(1, this.sweepDir.length(), 1);
       this.sweepBeam.quaternion.setFromUnitVectors(this.sweepBeam.up, this.sweepDir.normalize());
+      if (Math.random() < dt * 45) fx.spark(game.sweep.x, 0.18, HERO_Z, 0xffa63c, 2, 6, 0.24, 0.26);
     }
     if (game.ram && boss) {
-      fx.flash(boss.x, 0.12, boss.z - 2, 0xff5538, 2.5, 6.5, 2.3, 0);
+      // ИСПРАВЛЕНО: life = 0.18 вместо 6.5 (раньше шары висели 6.5 секунд)
+      fx.flash(boss.x, 0.25, boss.z - 1.6, 0xff5538, 2.4, 0.18, 2.2, 1);
     }
     for (const h of game.hazards) {
       fx.orb(h.x, 1.25, h.z, h.radius * 1.15, 0xff2f4a, 2);
@@ -574,6 +642,18 @@ export class View {
       fx.lamp(this.muzzleAt.x, this.muzzleAt.y + 0.3, this.muzzleAt.z - 1, WEAPONS.laser.color, 22);
     } else {
       fx.setBeam(null);
+    }
+  }
+
+  syncGates(dt, seen, time) {
+    for (const g of this.game.gates) {
+      seen.add(g.id);
+      let entry = this.entities.get(g.id);
+      if (!entry) {
+        entry = { view: this.acquire('gate', () => new GateView()), item: g };
+        this.entities.set(g.id, entry);
+      }
+      entry.view.update(dt, g, time);
     }
   }
 
@@ -625,6 +705,8 @@ export class View {
       p.set(game.x * 0.55, h, HERO_Z + d * 0.92);
       l.set(game.x * 0.5, 0.75, HERO_Z - d * 0.9);
       speed = 3.6;
+      this.fovKick = Math.max(0, this.fovKick - dt * 14);
+      fov = this.playFov + (game.overdrive ? 3.2 : WEAPONS[game.weapon].time ? 1.8 : 0) + this.fovKick;
       // После остановки на финише чуть приближаемся
       if (game.phase === 'bonus' && game.bonusState !== 'wait') {
         p.y = h * 0.92;
@@ -670,6 +752,22 @@ export class View {
     this.bubble.visible = game.shield > 0 && mode === 'playing';
     hero.root.updateMatrixWorld(true);
     hero.muzzle.getWorldPosition(this.muzzleAt);
+    this.overdriveRing.visible = game.overdrive && mode === 'playing';
+    if (this.overdriveRing.visible) {
+      this.overdriveRing.rotation.z = time * 4;
+      const s = 1 + Math.sin(time * 12) * 0.08;
+      this.overdriveRing.scale.set(s, s, 1);
+      if (Math.random() < vdt * 14) this.fx.spark(game.x + (Math.random() - 0.5) * 0.8, 0.4, HERO_Z, 0xffd23c, 1, 2.5, 0.16, 0.3);
+    }
+    const droneOn = (game.perks.drone > 0 || game.tempDrone > 0) && mode === 'playing';
+    this.drone.visible = droneOn;
+    if (droneOn) {
+      this.drone.position.set(game.x - 0.92, 2.12 + Math.sin(time * 5.2) * 0.12, HERO_Z - 0.22);
+      this.drone.rotation.y = time * 2.5;
+    }
+    if (mode === 'playing' && game.weapon === 'tesla' && Math.random() < vdt * 14) {
+      this.fx.spark(this.muzzleAt.x, this.muzzleAt.y, this.muzzleAt.z, 0x9fe0ff, 1, 2.4, 0.14, 0.16);
+    }
     for (const side of hero.stepEvents) {
       this.fx.puff(game.x + side * 0.12, 0.06, HERO_Z + 0.1, 0xe6dcf0, 1, 0.22, 0.34, 0.26);
     }
@@ -691,6 +789,7 @@ export class View {
     if (!menu) {
       this.syncEnemies(vdt, seen, time);
       this.syncPickups(vdt, seen, time);
+      this.syncGates(vdt, seen, time);
       this.drawShots(vdt);
     }
     for (const [id, entry] of this.entities) {
@@ -701,13 +800,16 @@ export class View {
     }
     this.updateBonus(vdt);
 
-    this.fx.update(vdt, carry);
+    if (!frozen) this.fx.ambient(vdt, game.level, carry, menu ? 0 : game.x);
+    this.fx.update(vdt, carry, menu ? 0 : game.x, HERO_Z);
     this.world.update(vdt, game.scroll, this.camera, time);
     this.updateCamera(dt);
     // Большая вспышка неба при гибели босса
     this.flashSky = Math.max(0, this.flashSky - dt * 2.2);
+    this.aberration = Math.max(0, this.aberration - dt * 0.065);
     if (this.post.enabled && this.quality > 0) {
       this.post.final.uniforms.uExposure.value = 1.06 + this.flashSky * 1.2;
+      this.post.final.uniforms.uAberration.value = this.aberration;
       this.post.render(this.scene, this.camera);
     } else {
       this.renderer.render(this.scene, this.camera);

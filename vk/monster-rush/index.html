@@ -8,9 +8,9 @@
   <meta name="description" content="Monster Rush — яркий 3D-шутер: герой бежит сквозь три мира, разбивает клетки с супероружием и побеждает гигантских боссов.">
   <title>Monster Rush</title>
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
-  <script src="./vendor/vk/vk-bridge.min.js?v=ccdbda82"></script>
-    <script src="./js/vk-host.js?v=ccdbda82" data-keys="monster-rush-profile-v1,monster-rush-best,monster-rush-effects,monster-rush-music" data-ad-gap="120"></script>
-    <link rel="stylesheet" href="./style.css?v=ccdbda82">
+  <script src="./vendor/vk/vk-bridge.min.js?v=a7d90eee"></script>
+    <script src="./js/vk-host.js?v=a7d90eee" data-keys="monster-rush-profile-v1,monster-rush-best,monster-rush-effects,monster-rush-music" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=a7d90eee">
 </head>
 <body class="menu-mode">
   <svg class="svg-defs" aria-hidden="true"><defs>
@@ -98,6 +98,7 @@
           <label><input id="sound-effects" type="checkbox"> Эффекты</label>
           <label><input id="music-enabled" type="checkbox"> Музыка</label>
         </div>
+        <button id="endless" class="primary hidden"><svg><use href="#i-bolt"/></svg><span>БЕСКОНЕЧНЫЙ РЕЖИМ</span></button>
         <button id="continue" class="primary"><svg><use href="#i-arrow"/></svg><span id="continue-text">ПРОДОЛЖИТЬ</span></button>
         <button id="back-menu" class="text-button">В главное меню</button>
       </div>
@@ -109,7 +110,7 @@
     </dialog>
     <div id="error" class="error hidden" role="alert"><h2>Нужна поддержка WebGL 2</h2><p>Открой игру в современном Chrome, Safari или Firefox с включённым аппаратным ускорением.</p><p id="error-detail"></p></div>
   </main>
-  <script type="module" src="./js/main.js?v=ccdbda82"></script>
-    <script src="./js/juice.js?v=ccdbda82"></script>
+  <script type="module" src="./js/main.js?v=a7d90eee"></script>
+    <script src="./js/juice.js?v=a7d90eee"></script>
 </body>
 </html>

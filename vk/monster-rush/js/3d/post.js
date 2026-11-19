@@ -1,5 +1,5 @@
 // Финальная обработка кадра: свечение ярких мест, мягкое ограничение яркости без потери цвета и лёгкая виньетка.
-import * as T from '../../vendor/three/three.module.min.js?v=ccdbda82';
+import * as T from '../../vendor/three/three.module.min.js?v=a7d90eee';
 
 const VERT = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }';
 
@@ -44,17 +44,21 @@ void main(){
 }`;
 
 const FINAL = `
-uniform sampler2D tex; uniform sampler2D bloom; uniform float uBloom; uniform float uExposure; uniform float uSaturation; uniform float uTime;
+uniform sampler2D tex; uniform sampler2D bloom; uniform float uBloom; uniform float uExposure; uniform float uSaturation; uniform float uTime; uniform float uAberration;
 varying vec2 vUv;
 vec3 shoulder(vec3 x){ vec3 a = vec3(0.72); return mix(x, a + (1.0 - a) * (1.0 - exp(-(x - a) / (1.0 - a))), step(a, x)); }
 vec3 toSrgb(vec3 c){ return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
 float dither(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453) - 0.5; }
 void main(){
-  vec3 c = texture2D(tex, vUv).rgb + texture2D(bloom, vUv).rgb * uBloom;
+  vec2 d = vUv - 0.5;
+  vec2 off = d * uAberration;
+  vec3 base = uAberration > 0.0001
+    ? vec3(texture2D(tex, vUv + off).r, texture2D(tex, vUv).g, texture2D(tex, vUv - off).b)
+    : texture2D(tex, vUv).rgb;
+  vec3 c = base + texture2D(bloom, vUv).rgb * uBloom;
   c = shoulder(c * uExposure);
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   c = mix(vec3(l), c, uSaturation);
-  vec2 d = vUv - 0.5;
   c *= 1.0 - dot(d, d) * 0.17;
   c = toSrgb(clamp(c, 0.0, 1.0));
   gl_FragColor = vec4(c + dither(gl_FragCoord.xy) / 255.0, 1.0);
@@ -74,7 +78,8 @@ export class Post {
     this.down = pass(DOWN, { tex: { value: null }, uTexel: { value: new T.Vector2() } });
     this.up = pass(UP, { tex: { value: null }, uTexel: { value: new T.Vector2() } }, { blending: T.AdditiveBlending, transparent: true });
     this.final = pass(FINAL, {
-      tex: { value: null }, bloom: { value: null }, uBloom: { value: 0.55 }, uExposure: { value: 1 }, uSaturation: { value: 1.14 }, uTime: { value: 0 }
+      tex: { value: null }, bloom: { value: null }, uBloom: { value: 0.55 },
+      uExposure: { value: 1 }, uSaturation: { value: 1.14 }, uTime: { value: 0 }, uAberration: { value: 0 }
     });
     this.hdr = null;
     this.mips = [];

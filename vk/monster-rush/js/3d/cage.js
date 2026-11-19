@@ -1,8 +1,8 @@
 // Клетки с супероружием, числа прочности, столбы бонусной зоны, сундук и подбираемые предметы.
-import * as T from '../../vendor/three/three.module.min.js?v=ccdbda82';
-import { Kit, group, part, toyMaterial, metalMaterial, glowMaterial, canvasTexture, flat, place, hdr } from './kit.js?v=ccdbda82';
-import { makeGun } from './guns.js?v=ccdbda82';
-import { WEAPONS, BONUS_ROWS } from '../game.js?v=ccdbda82';
+import * as T from '../../vendor/three/three.module.min.js?v=a7d90eee';
+import { Kit, group, part, toyMaterial, metalMaterial, glowMaterial, canvasTexture, flat, place, hdr } from './kit.js?v=a7d90eee';
+import { makeGun } from './guns.js?v=a7d90eee';
+import { WEAPONS, BONUS_ROWS } from '../game.js?v=a7d90eee';
 
 const toy = toyMaterial({ roughness: 0.5 });
 const metal = metalMaterial();
@@ -514,6 +514,114 @@ export class PickupView {
     if (this.gun?.spin) this.gun.spin.rotation.z = time * 6;
     const s = 1 + Math.sin(time * 5 + item.id) * 0.1;
     this.ring.scale.set(s * (this.type === 'weapon' ? 1.2 : 0.8), 1, s * (this.type === 'weapon' ? 1.2 : 0.8));
+  }
+}
+
+// ---------- Энерго-ворота выбора ----------
+let gatePostGeo = null;
+function gatePosts() {
+  if (gatePostGeo) return gatePostGeo;
+  const k = new Kit();
+  for (const s of [-1, 1]) {
+    k.box(0x2d2846, s * 1.18, 1.35, 0, 0.24, 2.7, 0.28, 0, 0, 0, 0.05);
+    k.box(0xffc531, s * 1.18, 0.16, 0, 0.36, 0.32, 0.4, 0, 0, 0, 0.04);
+    k.box(0xffc531, s * 1.18, 2.55, 0, 0.34, 0.24, 0.34, 0, 0, 0, 0.04);
+  }
+  k.box(0x2d2846, 0, 2.75, 0, 2.72, 0.24, 0.3, 0, 0, 0, 0.05);
+  gatePostGeo = k.build({ y0: 0, y1: 1.5, low: 0.82, high: 1 });
+  return gatePostGeo;
+}
+
+const GATE_LABEL = {
+  power: 'УРОН',
+  rate: 'ТЕМП',
+  heal: 'ЛЕЧЕНИЕ',
+  drone: 'ДРОН',
+  shield: 'ЩИТ',
+  gems: 'КРИСТАЛЛЫ',
+};
+
+export class GateView {
+  constructor() {
+    this.root = new T.Group();
+    part(this.root, gatePosts(), toy);
+    this.curtain = new T.Mesh(
+      new T.PlaneGeometry(2.14, 2.48),
+      new T.MeshBasicMaterial({ color: 0x34d6ff, transparent: true, opacity: 0.34, depthWrite: false, side: T.DoubleSide, blending: T.AdditiveBlending })
+    );
+    this.curtain.position.set(0, 1.38, 0);
+    this.curtain.renderOrder = 6;
+    this.root.add(this.curtain);
+
+    this.canvas = document.createElement('canvas');
+    this.canvas.width = 320;
+    this.canvas.height = 190;
+    this.ctx = this.canvas.getContext('2d');
+    this.tex = new T.CanvasTexture(this.canvas);
+    this.tex.colorSpace = T.SRGBColorSpace;
+    this.sign = new T.Mesh(
+      new T.PlaneGeometry(2.1, 1.24),
+      new T.MeshBasicMaterial({ map: this.tex, transparent: true, depthWrite: false, fog: false, toneMapped: false })
+    );
+    this.sign.position.set(0, 1.52, 0.04);
+    this.sign.renderOrder = 11;
+    this.root.add(this.sign);
+    this.lastKey = '';
+    this.pulse = 0;
+  }
+
+  reset() {
+    this.root.visible = true;
+    this.lastKey = '';
+    this.pulse = 0;
+    this.sign.scale.setScalar(1);
+  }
+
+  redraw(item) {
+    const key = `${item.kind}:${item.value}:${item.shootable}`;
+    if (key === this.lastKey) return;
+    this.lastKey = key;
+    const good = item.value >= 0;
+    const tone = !good ? '#ff4664' : item.kind === 'gems' || item.kind === 'drone' ? '#ffd24a' : item.kind === 'heal' ? '#4fdc5c' : '#45e0ff';
+    this.curtain.material.color.set(tone);
+
+    const c = this.ctx, W = this.canvas.width, H = this.canvas.height;
+    c.clearRect(0, 0, W, H);
+    c.fillStyle = 'rgba(22, 18, 46, 0.86)';
+    c.strokeStyle = tone;
+    c.lineWidth = 10;
+    c.beginPath();
+    c.roundRect(8, 8, W - 16, H - 16, 26);
+    c.fill();
+    c.stroke();
+
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillStyle = '#ffffff';
+    c.font = '900 32px "Arial Black", Arial, sans-serif';
+    c.fillText(GATE_LABEL[item.kind] || '', W / 2, 46);
+
+    const suffix = item.kind === 'power' || item.kind === 'rate' ? '%' : item.kind === 'drone' ? 'с' : item.kind === 'gems' ? '💎' : '';
+    const text = `${item.value > 0 ? '+' : ''}${item.value}${suffix}`;
+    c.fillStyle = tone;
+    c.font = '900 72px "Arial Black", Arial, sans-serif';
+    c.fillText(text, W / 2, 118);
+
+    if (item.shootable) {
+      c.fillStyle = '#fff3b0';
+      c.font = '800 20px Arial, sans-serif';
+      c.fillText('СТРЕЛЯЙ ДЛЯ УСИЛЕНИЯ', W / 2, 166);
+    }
+    this.tex.needsUpdate = true;
+  }
+
+  update(dt, item, time) {
+    this.root.position.set(item.x, 0, item.z);
+    this.redraw(item);
+    if (item.hit > 0.07) this.pulse = 1;
+    this.pulse = Math.max(0, this.pulse - dt * 7);
+    this.sign.scale.setScalar(1 + this.pulse * 0.14);
+    this.curtain.material.opacity = (item.taken ? 0.06 : 0.34) + Math.sin(time * 7 + item.id) * 0.05;
   }
 }
 

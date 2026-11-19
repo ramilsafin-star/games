@@ -1,7 +1,7 @@
-import { Game, WORLDS, WEAPONS, clamp } from './game.js?v=ccdbda82';
-import { View } from './view.js?v=ccdbda82';
-import { Audio } from './audio.js?v=ccdbda82';
-import { loadProfile, UPGRADES, MAX_RANK, price } from './profile.js?v=ccdbda82';
+import { Game, WORLDS, WEAPONS, PERKS, clamp } from './game.js?v=a7d90eee';
+import { View } from './view.js?v=a7d90eee';
+import { Audio } from './audio.js?v=a7d90eee';
+import { loadProfile, UPGRADES, MAX_RANK, price } from './profile.js?v=a7d90eee';
 
 const $ = (id) => document.getElementById(id);
 await window.vkGameHost?.ready;
@@ -198,6 +198,19 @@ function onEvent(e) {
       $('damage-flash').classList.add('show');
       flashTimer = setTimeout(() => $('damage-flash').classList.remove('show'), 220);
       break;
+    case 'overdrive':
+      if (e.active) banner('ОВЕРДРАЙВ!', 'Темп огня +25%', '#ffd23c');
+      break;
+    case 'shockShield':
+      vibrate(32);
+      toast('Шоковый щит смел всех вокруг!', 1400);
+      break;
+    case 'gate': {
+      const sign = e.value > 0 ? `+${e.value}` : `${e.value}`;
+      const label = { power: `Урон ${sign}%`, rate: `Темп ${sign}%`, heal: `Здоровье +${e.value}`, drone: `Дрон на ${e.value} с`, shield: 'Энергощит +1', gems: `Кристаллы +${e.value}` }[e.kind];
+      toast(label, 1400);
+      break;
+    }
     default:
       break;
   }
@@ -219,6 +232,13 @@ function showMode() {
   const modal = ['paused', 'upgrade', 'gameover', 'victory'].includes(mode);
   $('overlay').classList.toggle('hidden', !modal);
   $('upgrades').classList.toggle('hidden', mode !== 'upgrade');
+  $('endless').classList.toggle('hidden', mode !== 'victory');
+  if (mode === 'upgrade') {
+    $('upgrades').innerHTML = game.upgradeChoices.map((key) => {
+      const p = PERKS[key];
+      return `<button data-upgrade="${key}" class="tone-${p.tone}"><svg><use href="#${p.icon}"/></svg><b>${p.name}</b><span>${p.desc}</span></button>`;
+    }).join('');
+  }
   $('pause-audio').classList.toggle('hidden', mode !== 'paused');
   if (mode !== 'playing') $('attack-warning').classList.add('hidden');
   $('continue').classList.toggle('hidden', mode === 'upgrade');
@@ -249,7 +269,7 @@ function hud() {
   $('hp-fill').style.width = `${100 * game.hp / game.maxHp}%`;
   $('hp-fill').classList.toggle('low', game.hp < game.maxHp * 0.3);
   $('shield-count').textContent = game.shield ? `🛡 ${game.shield}` : '';
-  $('stage-label').textContent = `ЭТАП ${game.level + 1} / 3`;
+  $('stage-label').textContent = game.endless ? `КРУГ ${game.loop + 1} · ЭТАП ${game.level + 1} / 3` : `ЭТАП ${game.level + 1} / 3`;
   $('world-name').textContent = WORLDS[game.level].name;
   $('stage-fill').style.width = `${Math.min(100, (game.time / game.stageTime) * 100)}%`;
   $('score').textContent = game.score.toLocaleString('ru');
@@ -281,7 +301,12 @@ function hud() {
   const warning = game.attack ? warnings[game.level] : game.sweep ? 'Держись у края!' : '';
   $('attack-warning').classList.toggle('hidden', !warning || game.mode !== 'playing');
   if ($('attack-warning').textContent !== warning) $('attack-warning').textContent = warning;
-  $('combo').innerHTML = game.combo >= 5 ? `×${Math.min(4, 1 + Math.floor(game.combo / 5))}<small>серия ${game.combo}</small>` : '';
+  const comboEl = $('combo');
+  comboEl.classList.toggle('overdrive', game.overdrive);
+  comboEl.innerHTML = game.combo >= 5
+    ? `×${Math.min(4, 1 + Math.floor(game.combo / 5))}<small>${game.overdrive ? 'ОВЕРДРАЙВ' : `серия ${game.combo}`}</small>`
+    : '';
+  audio.setState({ world: game.level, boss: Boolean(game.boss), overdrive: game.overdrive });
   $('touch-hint').style.opacity = game.mode === 'playing' && game.runTime < 5 ? '1' : '0';
 }
 
@@ -312,12 +337,19 @@ $('back-menu').addEventListener('click', () => {
   showMode();
   $('start').focus();
 });
-document.querySelectorAll('[data-upgrade]').forEach((el) => el.addEventListener('click', () => {
+$('upgrades').addEventListener('click', (e) => {
+  const el = e.target.closest('[data-upgrade]');
+  if (!el) return;
   audio.unlock();
   game.next(el.dataset.upgrade);
   showMode();
   el.blur();
-}));
+});
+$('endless').addEventListener('click', () => {
+  audio.unlock();
+  game.startEndless();
+  showMode();
+});
 $('world-select').addEventListener('change', (e) => {
   selectedWorld = Number(e.target.value);
   view.setWorld(selectedWorld);

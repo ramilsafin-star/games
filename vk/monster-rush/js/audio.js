@@ -8,6 +8,10 @@ export class Audio {
     this.timer = null;
     this.last = {};
     this.beamOn = false;
+    this.world = 0;
+    this.bossMode = false;
+    this.overdrive = false;
+    this.intervalMs = 170;
   }
 
   unlock() {
@@ -43,9 +47,24 @@ export class Audio {
     if (!active) this.beam(false);
   }
 
+  setState({ world = 0, boss = false, overdrive = false }) {
+    const nextMs = boss && overdrive ? 128 : boss || overdrive ? 144 : 170;
+    this.world = world;
+    this.bossMode = boss;
+    this.overdrive = overdrive;
+    if (nextMs !== this.intervalMs) {
+      this.intervalMs = nextMs;
+      if (this.timer) {
+        clearInterval(this.timer);
+        this.timer = null;
+        this.syncMusic();
+      }
+    }
+  }
+
   syncMusic() {
     const play = this.ctx && this.active && this.musicEnabled;
-    if (play && !this.timer) this.timer = setInterval(() => this.music(), 170);
+    if (play && !this.timer) this.timer = setInterval(() => this.music(), this.intervalMs);
     if (!play && this.timer) {
       clearInterval(this.timer);
       this.timer = null;
@@ -179,6 +198,32 @@ export class Audio {
       this.noise(0.5, 0.1, 9000, 3000);
     } else if (type === 'clear') this.fanfare([659, 784, 1047], 0.13, 0.13);
     else if (type === 'end' && !e.won) this.tone(330, 0.8, 'triangle', 0.14, 90);
+    else if (type === 'shield') {
+      this.tone(720, 0.18, 'sine', 0.18, 260);
+      this.noise(0.14, 0.12, 4200, 900);
+    } else if (type === 'shockShield') {
+      this.tone(180, 0.42, 'sawtooth', 0.2, 680);
+      this.noise(0.32, 0.2, 5000, 500);
+    } else if (type === 'spit') {
+      this.tone(520, 0.11, 'sine', 0.08, 220);
+    } else if (type === 'drop') {
+      this.tone(240, 0.09, 'triangle', 0.09, 120);
+    } else if (type === 'bonusArmed') {
+      this.fanfare([523, 659, 784, 1047], 0.06, 0.12);
+    } else if (type === 'gateHit' && this.every('gate', 0.06)) {
+      this.tone(860 + Math.random() * 180, 0.05, 'triangle', 0.06, 1180);
+    } else if (type === 'gate') {
+      if (e.value >= 0) this.fanfare([587, 784, 1047], 0.055, 0.12);
+      else this.tone(260, 0.22, 'sawtooth', 0.11, 120);
+    } else if (type === 'overdrive' && e.active) {
+      this.fanfare([440, 554, 659, 880], 0.055, 0.14);
+    } else if (type === 'crit' && this.every('crit', 0.09)) {
+      this.tone(1420, 0.08, 'triangle', 0.09, 2100);
+    } else if (type === 'shieldBlock' && this.every('sblock', 0.07)) {
+      this.tone(980, 0.06, 'square', 0.04, 520);
+    } else if (type === 'droneShot' && this.every('drone', 0.12)) {
+      this.tone(880, 0.055, 'sine', 0.045, 420);
+    }
   }
 
   // Лазер гудит, пока луч включён
@@ -214,12 +259,24 @@ export class Audio {
 
   music() {
     if (!this.active || !this.musicEnabled) return;
-    const bass = [73.42, 73.42, 87.31, 65.41][Math.floor(this.beat / 16) % 4];
-    if (this.beat % 4 === 0) this.tone(130, 0.15, 'sine', 0.2, 35, 0, true);
-    if (this.beat % 2 === 0) this.tone(bass, 0.25, 'triangle', 0.12, bass, 0, true);
-    const melody = [4, 6, 8, 6, 3, 4, 6, 3];
-    const note = bass * melody[this.beat % 8];
-    this.tone(note, 0.13, 'sine', 0.035, note, 0, true);
+    const bar = Math.floor(this.beat / 16) % 4;
+    const bases = [
+      [73.42, 73.42, 87.31, 65.41],  // Каньон: бодрый мажор
+      [65.41, 77.78, 58.27, 65.41],  // Разлом: космический синт
+      [55.0, 58.27, 55.0, 49.0],     // Вулкан: тяжёлый фригийский лад
+    ][this.world] || [73.42, 73.42, 87.31, 65.41];
+    const bass = bases[bar];
+    const step = this.beat % 8;
+    if (this.beat % 4 === 0) this.tone(this.bossMode ? 150 : 130, 0.14, 'sine', 0.21, 32, 0, true);
+    if (this.beat % 2 === 0) this.tone(bass, 0.22, this.world === 2 ? 'sawtooth' : 'triangle', 0.11, bass, 0, true);
+    if ((this.bossMode || this.overdrive) && this.beat % 2 === 1) this.noise(0.035, 0.045, 7000, 3500);
+    const melodies = [
+      [4, 6, 8, 6, 3, 4, 6, 3],
+      [4, 5, 7, 8, 6, 5, 4, 3],
+      [4, 4.5, 6, 4.5, 4, 3, 4.5, 3],
+    ][this.world] || [4, 6, 8, 6, 3, 4, 6, 3];
+    const note = bass * melodies[step] * (this.overdrive ? 1.5 : 1);
+    this.tone(note, 0.12, this.world === 1 ? 'triangle' : 'sine', 0.035, note, 0, true);
     this.beat++;
   }
 

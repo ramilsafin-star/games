@@ -243,3 +243,9 @@ h1 em { color: var(--yellow); margin-top: -0.02em; font-size: 1.28em; text-shado
   .shop-head h2 { font-size: 22px; }
   .shop-item { padding: 4px 7px; }
 }
+
+.combo.overdrive { color: #ffe866; text-shadow: 0 0 22px #ff9a26; transform: scale(1.1); }
+.upgrades button.tone-gold { background: linear-gradient(#ffe67a, #ffc531); color: #4a2a00; box-shadow: 0 6px 0 #c98a12; }
+.upgrades button.tone-cyan { background: linear-gradient(#a7ecff, #45c6ff); color: #063a55; box-shadow: 0 6px 0 #1b86c2; }
+.upgrades button.tone-green { background: linear-gradient(#b5ffd0, #4fdc8c); color: #0a4a2a; box-shadow: 0 6px 0 #1fa665; }
+#endless { background: linear-gradient(#ffbe4a, #ff7426 55%, #e5472a); text-shadow: 0 3px 0 #8a2010; box-shadow: 0 8px 0 #8a2010, 0 14px 26px #0005, inset 0 3px 0 #ffffff80; }

@@ -20,6 +20,17 @@ export const WEAPONS = {
   tesla: { name: 'Молния', hint: 'Разряд перескакивает на соседей', color: 0x7fd4ff, rate: 0.3, damage: 3, chain: 4, hop: 8, time: SUPER_TIME },
   laser: { name: 'Лазер', hint: 'Луч жжёт всё на полосе', color: 0xff4fa8, tick: 0.07, damage: 0.75, beam: true, time: SUPER_TIME },
 };
+export const PERKS = {
+  power: { name: 'Мощный заряд', desc: '+50% к урону', icon: 'i-target', tone: 'gold' },
+  speed: { name: 'Быстрый огонь', desc: '+25% к темпу огня', icon: 'i-bolt', tone: 'cyan' },
+  shield: { name: 'Энергощит', desc: 'Защита от 2 ударов', icon: 'i-shield', tone: 'green', cap: 'shield' },
+  drone: { name: 'Боевой дрон', desc: 'Сам добивает монстров рядом', icon: 'i-target', tone: 'cyan', max: 2 },
+  ricochet: { name: 'Рикошет', desc: 'Снаряды отскакивают в соседей', icon: 'i-bolt', tone: 'gold', max: 1 },
+  shock: { name: 'Шоковый щит', desc: 'Мини-Нова при потере щита', icon: 'i-shield', tone: 'cyan', max: 1 },
+  crit: { name: 'Крит-заряд', desc: '+20% шанс на урон ×2.5', icon: 'i-target', tone: 'gold', max: 2 },
+  vampiric: { name: 'Охотник за клетками', desc: '+15 HP за разбитую клетку', icon: 'i-heart', tone: 'green', max: 2 },
+};
+
 // Какие пушки лежат в клетках в каждом мире
 const BAGS = [
   ['spread', 'minigun', 'rocket'],
@@ -31,6 +42,8 @@ const MONSTERS = {
   brute: { hp: 7, speed: 1.6, radius: 1.05, hurt: 27 },
   spitter: { hp: 3, speed: 1.8, radius: 0.75, hurt: 16 },
   barrel: { hp: 1.5, speed: 0, radius: 0.65, hurt: 16 },
+  shielder: { hp: 5, speed: 1.7, radius: 0.86, hurt: 20, shieldHp: 6 },
+  runner: { hp: 2.2, speed: 3.9, radius: 0.62, hurt: 14 },
 };
 export const BONUS_ROWS = [2, 4, 6, 9, 12];
 const BONUS_GAP = 4.6;
@@ -50,6 +63,8 @@ export class Game {
   reset(level = 0, ranks = {}) {
     this.mode = 'menu';
     this.level = level;
+    this.loop = 0;
+    this.endless = false;
     this.ranks = ranks;
     this.maxHp = 100 + (ranks.health || 0) * 15;
     this.hp = this.maxHp;
@@ -62,9 +77,15 @@ export class Game {
     this.targetX = 0;
     this.vx = 0;
     this.steerSpeed = 0;
-    this.power = 1 + level * 0.25;
-    this.rate = 1;
-    this.shield = 0;
+    // Баланс при старте сразу со 2-го или 3-го мира
+    this.power = 1 + level * 0.45;
+    this.rate = 1 + level * 0.18;
+    this.shield = Math.min(2, level);
+    this.perks = { drone: 0, ricochet: 0, shock: 0, crit: 0, vampiric: 0 };
+    this.tempDrone = 0;
+    this.droneShot = 0;
+    this.upgradeChoices = [];
+    this.overdrive = false;
     this.invincible = 0;
     this.novaCharge = 100;
     this.weapon = 'blaster';
@@ -102,6 +123,8 @@ export class Game {
     this.bullets = [];
     this.pickups = [];
     this.hazards = [];
+    this.gates = [];
+    this.gateTimer = 9.5;
     this.boss = null;
     this.bossDefeated = false;
     this.finish = null;
@@ -112,6 +135,40 @@ export class Game {
     this.clearTime = 0;
     this.beamOn = false;
     this.beamTick = 0;
+  }
+
+  effectiveRate() {
+    return this.rate * (this.overdrive ? 1.25 : 1);
+  }
+
+  syncOverdrive() {
+    const active = this.combo >= 15;
+    if (active !== this.overdrive) {
+      this.overdrive = active;
+      this.emit('overdrive', { active });
+    }
+  }
+
+  rollUpgrades() {
+    const pool = Object.keys(PERKS).filter((key) => {
+      const p = PERKS[key];
+      if (p.cap === 'shield' && this.shield >= 3) return false;
+      if (p.max && (this.perks[key] || 0) >= p.max) return false;
+      return true;
+    });
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(this.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    this.upgradeChoices = pool.slice(0, 3);
+  }
+
+  startEndless() {
+    if (this.mode !== 'victory') return;
+    this.endless = true;
+    this.rollUpgrades();
+    this.mode = 'upgrade';
+    this.emit('endless');
   }
 
   emit(type, data = {}) {
@@ -141,14 +198,21 @@ export class Game {
   next(upgrade) {
     if (this.mode !== 'upgrade') return;
     if (upgrade === 'power') this.power += 0.5;
-    if (upgrade === 'speed') this.rate += 0.25;
-    if (upgrade === 'shield') this.shield = Math.min(3, this.shield + 2);
-    this.level++;
+    else if (upgrade === 'speed') this.rate += 0.25;
+    else if (upgrade === 'shield') this.shield = Math.min(3, this.shield + 2);
+    else if (Object.hasOwn(this.perks, upgrade)) this.perks[upgrade]++;
+
+    if (this.level === 2) {
+      this.level = 0;
+      this.loop++;
+    } else {
+      this.level++;
+    }
     this.hp = Math.min(this.maxHp, this.hp + 45);
     this.novaCharge = 100;
     this.resetStage();
     this.mode = 'playing';
-    this.emit('stage', { level: this.level });
+    this.emit('stage', { level: this.level, loop: this.loop });
   }
 
   earn(amount) {
@@ -158,11 +222,20 @@ export class Game {
 
   spawnEnemy(type, x, z = -51) {
     const stats = MONSTERS[type];
-    const hp = stats.hp * (1 + this.level * 0.35);
+    const scale = 1 + this.level * 0.35 + this.loop * 0.65;
+    const hp = stats.hp * scale;
     const enemy = { id: ++this.serial, type, x, z, hp, maxHp: hp, speed: stats.speed, radius: stats.radius, hurt: stats.hurt, age: 0, shot: 1.5 + this.random() * 2, hit: 0 };
     if (type === 'barrel') {
-      const roll = this.level > 0 ? this.random() : 1;
+      // Крио и импульс бочки появляются уже со второй половины 1-го мира
+      const roll = (this.level > 0 || this.time > 16 || this.loop > 0) ? this.random() : 1;
       enemy.barrelKind = roll < 0.24 ? 'cryo' : roll < 0.48 ? 'pulse' : 'gem';
+    } else if (type === 'shielder') {
+      enemy.frontShield = stats.shieldHp * scale;
+    } else if (type === 'runner') {
+      enemy.dashed = false;
+      enemy.dashAt = -21 - this.random() * 7;
+      enemy.dashTelegraph = 0;
+      enemy.dashTargetX = x;
     }
     this.enemies.push(enemy);
     return enemy;
@@ -170,16 +243,41 @@ export class Game {
 
   spawnWave() {
     const free = [0, 1, 2].filter((i) => this.laneBlock[i] <= 0);
-    const count = this.time < 8 ? 1 : this.random() < 0.45 ? 2 : 3;
+    const count = this.time < 8 && !this.loop ? 1 : this.random() < 0.45 ? 2 : 3;
     const first = Math.floor(this.random() * 3);
     for (let i = 0; i < count; i++) {
       const lane = (first + i) % 3;
       if (!free.includes(lane)) continue;
       const r = this.random();
-      const type = r < 0.14 ? 'barrel' : r < 0.32 ? 'spitter' : r < 0.5 && this.time > 10 ? 'brute' : 'grunt';
+      let type = 'grunt';
+      if (r < 0.14) type = 'barrel';
+      else if (r < 0.28) type = 'spitter';
+      else if (r < 0.41 && (this.time > 10 || this.loop > 0)) type = 'runner';
+      else if (r < 0.53 && (this.time > 14 || this.level > 0 || this.loop > 0)) type = 'shielder';
+      else if (r < 0.65 && (this.time > 10 || this.loop > 0)) type = 'brute';
       this.spawnEnemy(type, LANES[lane], -47 - i * 2);
     }
-    this.spawnTimer = Math.max(0.85, 2.2 - this.level * 0.28 - this.time * 0.017);
+    this.spawnTimer = Math.max(0.7, 2.15 - this.level * 0.26 - this.loop * 0.15 - this.time * 0.017);
+  }
+
+  spawnGatePair() {
+    const free = [0, 1, 2].filter((i) => this.laneBlock[i] <= 0);
+    if (free.length < 2) return;
+    const l1 = free[Math.floor(this.random() * free.length)];
+    const rest = free.filter((i) => i !== l1);
+    const l2 = rest[Math.floor(this.random() * rest.length)];
+    const pairId = ++this.serial;
+    const shootKind = this.random() < 0.55 ? 'power' : 'rate';
+    const utilChoices = this.hp < this.maxHp * 0.72
+      ? [{ kind: 'heal', value: 25 }, { kind: 'shield', value: 1 }]
+      : [{ kind: 'drone', value: 12 }, { kind: 'gems', value: 15 }, { kind: 'shield', value: 1 }];
+    const util = utilChoices[Math.floor(this.random() * utilChoices.length)];
+    this.gates.push(
+      { id: ++this.serial, pairId, x: LANES[l1], z: -50, kind: shootKind, value: -10, max: 35, shootable: true, hit: 0, taken: false },
+      { id: ++this.serial, pairId, x: LANES[l2], z: -50, kind: util.kind, value: util.value, max: util.value, shootable: false, hit: 0, taken: false },
+    );
+    this.laneBlock[l1] = 2.8;
+    this.laneBlock[l2] = 2.8;
   }
 
   nextWeapon() {
@@ -217,7 +315,7 @@ export class Game {
   }
 
   spawnBoss() {
-    const hp = 130 + this.level * 80;
+    const hp = (130 + this.level * 80) * (1 + this.loop * 0.75);
     this.phase = 'boss';
     this.boss = { id: ++this.serial, type: 'boss', x: 0, z: -38, hp, maxHp: hp, radius: 2.3, speed: 0, age: 0, shot: 2.8, hit: 0, hurt: 40 };
     this.enemies.push(this.boss);
@@ -281,7 +379,7 @@ export class Game {
       seen.add(current.id);
       points.push({ x: current.x, z: current.z });
       const from = current;
-      this.hit(current, damage);
+      this.hit(current, damage, { bypassShield: true });
       damage *= 0.8;
       current = null;
       let near = w.hop;
@@ -303,11 +401,18 @@ export class Game {
     this.beamOn = true;
     this.beamTick -= dt;
     if (this.beamTick > 0) return;
-    this.beamTick += w.tick / this.rate;
+    this.beamTick += w.tick / this.effectiveRate();
     const x = this.x + MUZZLE_X;
     const damage = w.damage * this.weaponPower() * this.fireBoost();
     for (const e of this.enemies.slice()) {
-      if (e.hp > 0 && e.z < HERO_Z && e.z > -46 && Math.abs(e.x - x) < e.radius + 0.3) this.hit(e, damage);
+      if (e.hp > 0 && e.z < HERO_Z && e.z > -46 && Math.abs(e.x - x) < e.radius + 0.3) this.hit(e, damage, { bypassShield: true });
+    }
+    for (const g of this.gates) {
+      if (g.shootable && !g.taken && g.z < HERO_Z && g.z > -46 && Math.abs(g.x - x) < 1.25) {
+        g.value = Math.min(g.max, g.value + 1);
+        g.hit = 0.12;
+        this.emit('gateHit', { x: g.x, z: g.z });
+      }
     }
   }
 
@@ -316,7 +421,7 @@ export class Game {
     for (const e of this.enemies.slice()) {
       if (e.hp <= 0) continue;
       const d = Math.hypot(e.x - x, e.z - z);
-      if (d < radius + e.radius) this.hit(e, d < e.radius + 0.5 ? damage : damage * 0.7);
+      if (d < radius + e.radius) this.hit(e, d < e.radius + 0.5 ? damage : damage * 0.7, { bypassShield: true });
     }
   }
 
@@ -324,13 +429,22 @@ export class Game {
     if (this.invincible > 0 || this.mode !== 'playing' || this.phase === 'bonus') return;
     if (this.shield > 0) {
       this.shield--;
-      this.invincible = 0.7;
-      this.emit('shield');
+      this.invincible = 0.75;
+      if (this.perks.shock > 0) {
+        this.hazards = [];
+        this.emit('shockShield', { x: this.x, z: HERO_Z });
+        for (const e of this.enemies.slice()) {
+          if (e.hp > 0 && e.z > HERO_Z - 16) this.hit(e, 10 * this.weaponPower(), { bypassShield: true });
+        }
+      } else {
+        this.emit('shield');
+      }
       return;
     }
     this.hp = Math.max(0, this.hp - amount);
     this.invincible = 1;
     this.combo = 0;
+    this.syncOverdrive();
     this.emit('hurt');
     if (this.hp <= 0) {
       this.mode = 'gameover';
@@ -340,8 +454,18 @@ export class Game {
     }
   }
 
-  hit(enemy, damage) {
+  hit(enemy, damage, opts = {}) {
     if (enemy.hp <= 0) return;
+    if (enemy.frontShield > 0 && !opts.bypassShield) {
+      enemy.frontShield -= damage;
+      enemy.hit = 0.12;
+      this.emit('shieldBlock', { x: enemy.x, z: enemy.z });
+      if (enemy.frontShield > 0) damage *= 0.25;
+    }
+    if (this.perks.crit > 0 && !opts.noCrit && enemy.type !== 'cage' && enemy.type !== 'column' && this.random() < 0.2 * this.perks.crit) {
+      damage *= 2.5;
+      this.emit('crit', { x: enemy.x, z: enemy.z });
+    }
     enemy.hp -= damage;
     enemy.hit = 0.12;
     this.emit('hit', { id: enemy.id, x: enemy.x, z: enemy.z, enemyType: enemy.type });
@@ -356,10 +480,14 @@ export class Game {
     if (enemy.hp > 0) return;
     if (enemy.type !== 'barrel' && enemy.type !== 'wall') this.kills++;
     this.combo++;
-    this.comboTime = 2.8;
-    this.score += (enemy.type === 'boss' ? 2000 : enemy.type === 'brute' ? 150 : 60) * Math.min(4, 1 + Math.floor(this.combo / 5));
-    this.earn(enemy.type === 'boss' ? 50 : 3);
+    this.comboTime = 3.0;
+    this.syncOverdrive();
+    const mult = Math.min(4, 1 + Math.floor(this.combo / 5)) * (1 + this.loop * 0.5);
+    this.score += Math.round((enemy.type === 'boss' ? 2000 : enemy.type === 'brute' ? 150 : enemy.type === 'shielder' ? 110 : 60) * mult);
+    this.earn(enemy.type === 'boss' ? 50 : enemy.type === 'brute' ? 5 : 3);
     this.novaCharge = Math.min(100, this.novaCharge + 4);
+    // Короткий hit-stop для ощущения веса при убийстве Брута или подрыве бочки
+    if (enemy.type === 'brute' || enemy.type === 'barrel') this.slowTime = Math.max(this.slowTime, 0.045);
     this.emit('explode', { id: enemy.id, x: enemy.x, z: enemy.z, enemyType: enemy.type });
     if (enemy.type === 'barrel') {
       if (enemy.barrelKind === 'gem') this.addPickup('gem', enemy.x, enemy.z);
@@ -368,7 +496,7 @@ export class Game {
       for (const e of this.enemies.slice()) {
         if (e === enemy || e.hp <= 0 || Math.hypot(e.x - enemy.x, e.z - enemy.z) >= 5) continue;
         if (enemy.barrelKind === 'cryo' && e.type !== 'boss') e.frost = 3;
-        this.hit(e, 7);
+        this.hit(e, 7, { bypassShield: true });
       }
     } else if (enemy.type === 'boss') {
       this.startBonus();
@@ -390,6 +518,7 @@ export class Game {
       return;
     }
     this.cagesBroken++;
+    if (this.perks.vampiric > 0) this.hp = Math.min(this.maxHp, this.hp + 15 * this.perks.vampiric);
     this.score += 300;
     this.novaCharge = Math.min(100, this.novaCharge + 10);
     this.slowTime = Math.max(this.slowTime, 0.14);
@@ -413,7 +542,7 @@ export class Game {
     this.invincible = 1.2;
     this.emit('nova', { x: this.x, z: HERO_Z });
     for (const e of this.enemies.slice()) {
-      if (e.z > -40) this.hit(e, e.type === 'boss' ? 14 : e.type === 'cage' ? e.maxHp * 0.34 : 12);
+      if (e.z > -40) this.hit(e, e.type === 'boss' ? 14 : e.type === 'cage' ? e.maxHp * 0.34 : 12, { bypassShield: true });
     }
     return true;
   }
@@ -516,8 +645,9 @@ export class Game {
   }
 
   targetSpeed() {
+    const endlessBoost = 1 + Math.min(0.45, this.loop * 0.12);
     if (this.phase === 'boss') return 2.2;
-    if (this.phase !== 'bonus') return 9;
+    if (this.phase !== 'bonus') return 9 * endlessBoost;
     if (this.bonusState === 'roll') return clamp((BONUS_LINE - this.finish.z) * 2.4, 1.2, 9);
     return this.bonusState === 'wait' ? 6 : 0;
   }
@@ -526,7 +656,12 @@ export class Game {
     if (this.mode === 'clear') {
       this.clearTime -= dt;
       if (this.clearTime <= 0) {
-        this.mode = this.level === 2 ? 'victory' : 'upgrade';
+        if (this.level === 2 && !this.endless) {
+          this.mode = 'victory';
+        } else {
+          this.rollUpgrades();
+          this.mode = 'upgrade';
+        }
         this.emit('end', { won: true });
       }
       return;
@@ -554,7 +689,8 @@ export class Game {
     this.invincible = Math.max(0, this.invincible - dt);
     this.novaCharge = Math.min(100, this.novaCharge + dt * 2.5);
     this.comboTime -= dt;
-    if (this.comboTime <= 0) this.combo = 0;
+    if (this.comboTime <= 0) { this.combo = 0; this.syncOverdrive(); }
+    if (this.tempDrone > 0) this.tempDrone = Math.max(0, this.tempDrone - dt);
     for (let i = 0; i < 3; i++) this.laneBlock[i] -= dt;
 
     this.updateWeapon(dt);
@@ -563,6 +699,9 @@ export class Game {
     if (this.phase === 'bonus') this.updateBonus(dt);
     this.updateEnemies(dt, speed);
     if (this.mode !== 'playing') return;
+    this.updateDrone(dt);
+    this.updateGates(dt, speed);
+    this.gates = this.gates.filter((g) => g.z < 12 && !g.taken);
     this.updateShots(dt);
     this.updatePickups(dt, speed);
 
@@ -598,7 +737,7 @@ export class Game {
     this.shotTimer -= dt;
     if (this.shotTimer <= 0) {
       this.fire(w);
-      this.shotTimer = Math.max(this.shotTimer + (w.rate / this.rate) / (this.phase === 'bonus' ? 1.5 : 1), 0);
+      this.shotTimer = Math.max(this.shotTimer + (w.rate / this.effectiveRate()) / (this.phase === 'bonus' ? 1.5 : 1), 0);
     }
   }
 
@@ -610,6 +749,11 @@ export class Game {
       if (this.time >= this.stageTime) {
         this.spawnBoss();
         return;
+      }
+      this.gateTimer -= dt;
+      if (this.gateTimer <= 0 && this.time < this.stageTime - 8) {
+        this.spawnGatePair();
+        this.gateTimer = 13.5;
       }
       if (this.cageTimer <= 0) {
         const lane = this.firstCage ? 1 : this.cageLane();
@@ -657,6 +801,17 @@ export class Game {
       }
       e.frost = Math.max(0, (e.frost || 0) - dt);
       e.z += (speed + e.speed) * dt * (e.frost ? 0.45 : 1);
+      if (e.type === 'runner') {
+        if (!e.dashed && e.z > e.dashAt) {
+          e.dashed = true;
+          const cur = LANES.reduce((b, l, i) => Math.abs(l - e.x) < Math.abs(LANES[b] - e.x) ? i : b, 0);
+          const choices = cur === 1 ? [0, 2] : [1];
+          e.dashTargetX = LANES[choices[Math.floor(this.random() * choices.length)]];
+          e.dashTelegraph = 0.32;
+        }
+        if (e.dashTelegraph > 0) e.dashTelegraph -= dt;
+        else if (e.dashed) e.x += (e.dashTargetX - e.x) * Math.min(1, dt * 10);
+      }
       if (e.type === 'column') continue;
       if (e.type === 'spitter' && e.z > -32 && e.z < -7) {
         e.shot -= dt;
@@ -687,6 +842,46 @@ export class Game {
       } else if (e.type === 'cage' && e.z > HERO_Z + 2 && !e.passed) {
         e.passed = true;
         this.cagesMissed++;
+      }
+    }
+  }
+
+  updateDrone(dt) {
+    const active = this.perks.drone > 0 || this.tempDrone > 0;
+    const silent = this.phase === 'bonus' && this.bonusState !== 'break';
+    if (!active || silent) return;
+    this.droneShot -= dt;
+    if (this.droneShot > 0) return;
+    let target = null;
+    let near = 42;
+    for (const e of this.enemies) {
+      if (e.hp <= 0 || e.z >= HERO_Z || e.z < -42) continue;
+      const d = Math.hypot(e.x - this.x, e.z - HERO_Z);
+      if (d < near) { near = d; target = e; }
+    }
+    if (!target) return;
+    const ox = this.x - 0.9, oz = HERO_Z - 0.35;
+    const dx = target.x - ox, dz = target.z - oz;
+    const len = Math.max(0.1, Math.hypot(dx, dz));
+    const speed = 52;
+    this.bullets.push({ id: ++this.serial, x: ox, z: oz, vx: (dx / len) * speed, vz: (dz / len) * speed, damage: 1.15 * this.weaponPower() * this.fireBoost(), type: 'blaster', radius: 0.16, splash: 0, pierce: false, seen: null, drone: true });
+    this.droneShot = Math.max(0.2, 0.5 - (this.perks.drone || 0) * 0.11);
+    this.emit('droneShot', { x: ox, z: oz });
+  }
+
+  updateGates(dt, speed) {
+    for (const g of this.gates) {
+      g.z += speed * dt;
+      g.hit = Math.max(0, g.hit - dt);
+      if (!g.taken && Math.abs(g.z - HERO_Z) < 0.9 && Math.abs(g.x - this.x) < 1.35) {
+        for (const other of this.gates) if (other.pairId === g.pairId) other.taken = true;
+        if (g.kind === 'power') this.power = Math.max(0.6, this.power + g.value / 100);
+        else if (g.kind === 'rate') this.rate = Math.max(0.7, this.rate + g.value / 100);
+        else if (g.kind === 'heal') this.hp = Math.min(this.maxHp, this.hp + g.value);
+        else if (g.kind === 'drone') this.tempDrone = Math.max(this.tempDrone, g.value);
+        else if (g.kind === 'shield') this.shield = Math.min(3, this.shield + 1);
+        else if (g.kind === 'gems') this.earn(g.value);
+        this.emit('gate', { kind: g.kind, value: g.value, x: g.x, z: g.z });
       }
     }
   }
@@ -753,7 +948,7 @@ export class Game {
       let closest = null, closestAt = Infinity;
       const hits = b.pierce ? [] : null;
       if (length2 > 0) for (const e of this.enemies) {
-        if (e.hp <= 0 || e.z >= HERO_Z || (b.pierce && b.seen.includes(e.id))) continue;
+        if (e.hp <= 0 || e.z >= HERO_Z || (b.pierce && b.seen.includes(e.id)) || e.id === b.skipId) continue;
         const x = e.x - b.x, z = e.z - b.z;
         const radius = e.radius + b.radius;
         const offset2 = x * x + z * z - radius * radius;
@@ -773,15 +968,45 @@ export class Game {
         for (const { e } of hits) {
           if (e.hp <= 0) continue;
           b.seen.push(e.id);
-          this.hit(e, b.damage);
+          this.hit(e, b.damage, { bypassShield: true });
           if (!this.bullets.length) return;
         }
       } else if (closest) {
         if (b.splash) this.blast(b.x + dx * closestAt, b.z + dz * closestAt, b.splash, b.damage);
         else this.hit(closest, b.damage);
-        b.z = -110;
         if (!this.bullets.length) return;
+        if (this.perks.ricochet > 0 && !b.bounced && !b.splash && (b.type === 'blaster' || b.type === 'minigun')) {
+          let next = null, bestD = 9;
+          for (const e of this.enemies) {
+            if (e.hp <= 0 || e.id === closest.id || e.z >= HERO_Z) continue;
+            const d = Math.hypot(e.x - closest.x, e.z - closest.z);
+            if (d < bestD) { bestD = d; next = e; }
+          }
+          if (next) {
+            const rx = next.x - closest.x, rz = next.z - closest.z;
+            const len = Math.max(0.1, Math.hypot(rx, rz));
+            const spd = Math.hypot(b.vx, b.vz);
+            b.x = closest.x;
+            b.z = closest.z;
+            b.vx = (rx / len) * spd;
+            b.vz = (rz / len) * spd;
+            b.damage *= 0.65;
+            b.bounced = true;
+            b.skipId = closest.id;
+            continue;
+          }
+        }
+        b.z = -110;
         continue;
+      }
+      for (const g of this.gates) {
+        if (!g.shootable || g.taken || g.z >= HERO_Z) continue;
+        if (Math.abs(b.x - g.x) < 1.25 && Math.abs(b.z - g.z) < 0.85) {
+          g.value = Math.min(g.max, g.value + Math.max(1, Math.round(b.damage * 2.5)));
+          g.hit = 0.12;
+          this.emit('gateHit', { x: g.x, z: g.z });
+          if (!b.pierce) { b.z = -110; break; }
+        }
       }
       b.x += dx;
       b.z += dz;

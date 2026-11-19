@@ -1,6 +1,6 @@
 // Мир вокруг дороги: небо, горы, облака, дорога и разные пейзажи для трёх миров.
-import * as T from '../../vendor/three/three.module.min.js?v=d3800c69';
-import { Kit, group, toyMaterial, glowMaterial, canvasTexture, rand, rimColor, rimPower, flat, place, hdr } from './kit.js?v=d3800c69';
+import * as T from '../../vendor/three/three.module.min.js?v=77cf01fd';
+import { Kit, group, toyMaterial, glowMaterial, canvasTexture, rand, rimColor, rimPower, flat, place, hdr } from './kit.js?v=77cf01fd';
 
 export const PALETTES = [
   {
@@ -78,6 +78,25 @@ function roadTexture(p) {
       for (let y = 0; y < h; y += 256) c.fillRect(x - 5, y + 40, 10, 140);
     }
   }, { repeat: true, aniso: 8 });
+}
+
+// Глянцевые участки на дороге отражают небо (PMREM) и вспышки от выстрелов
+function roadRoughnessTexture(world) {
+  return canvasTexture(256, 512, (c, w, h) => {
+    // Чем темнее пиксель, тем сильнее глянец
+    c.fillStyle = world === 0 ? '#d8d8d8' : world === 1 ? '#8a8a8a' : '#a8a8a8';
+    c.fillRect(0, 0, w, h);
+    noisy(c, w, h, ['#ffffff44', '#00000040'], 1600, 6);
+    c.fillStyle = world === 0 ? '#b2b2b2' : world === 1 ? '#3c3c3c' : '#555555';
+    c.globalAlpha = 0.55;
+    for (const x of [w * 0.215, w * 0.5, w * 0.785]) c.fillRect(x - 24, 0, 48, h);
+    if (world === 1) {
+      c.fillStyle = '#222222';
+      c.globalAlpha = 0.7;
+      for (let i = 0; i < 65; i++) c.fillRect(Math.random() * w, Math.random() * h, 4 + Math.random() * 8, 18 + Math.random() * 40);
+    }
+    c.globalAlpha = 1;
+  }, { repeat: true, srgb: false, aniso: 4 });
 }
 
 function groundTexture(p, world) {
@@ -531,12 +550,14 @@ export class World {
 
     const road = roadTexture(p);
     road.repeat.set(1, 13);
+    const roadRough = roadRoughnessTexture(world);
+    roadRough.repeat.set(1, 13);
     const ground = groundTexture(p, world);
     ground.repeat.set(22, 22);
     const curb = curbTexture(p);
     curb.repeat.set(1, 40);
     this.cache[world] = {
-      env, road, ground, curb,
+      env, road, roadRough, ground, curb,
       segments: [buildSegment(world, p, this.L, 10 + world * 100), buildSegment(world, p, this.L, 60 + world * 100)],
       backdrop: buildBackdrop(world, p),
       clouds: buildClouds(p, world),
@@ -571,6 +592,8 @@ export class World {
     rimColor.value.set(p.rim);
     rimPower.value = p.rimK;
     this.roadMat.map = a.road;
+    this.roadMat.roughnessMap = a.roadRough;
+    this.roadMat.roughness = 1;
     this.groundMat.map = a.ground;
     this.curbMat.map = a.curb;
     this.roadMat.needsUpdate = this.groundMat.needsUpdate = this.curbMat.needsUpdate = true;
@@ -588,6 +611,7 @@ export class World {
   update(dt, scroll, camera, time) {
     const a = this.cache[this.index];
     a.road.offset.y = (scroll / 20) % 1;
+    a.roadRough.offset.y = a.road.offset.y;
     a.ground.offset.y = (scroll / (420 / 22)) % 1;
     a.curb.offset.y = (scroll / (260 / 40)) % 1;
     const L = this.L;
