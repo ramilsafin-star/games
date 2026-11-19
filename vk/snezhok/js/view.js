@@ -1,20 +1,20 @@
 // Сцена «Снежного кома». Правила считают трассу прямой (s — вперёд, x — вбок), а здесь она
 // изгибается и идёт под уклон: каждая точка (s, x, y) переводится в мир через «рельсы» path.
 // Правила (rules.js, run.js) ничего не знают о графике; здесь только то, что видно.
-import { T, TAU, GEO, V, clamp, rand, hot, lit, part, at, canvasTexture, labelTexture, glowTexture } from "./kit.js?v=0b3b8087";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=0b3b8087";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=0b3b8087";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=0b3b8087";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=0b3b8087";
-import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=0b3b8087";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=0b3b8087";
-import { createFx, tone, GLOW, PUFF, STAR, RING } from "./fx.js?v=0b3b8087";
-import { firGeometry, spireGeometry, rockGeometry, pileGeometry, rampGeometry, snowTexture, flakeTexture, crackTexture, bricksTexture, signTexture, gateModel, snowmanModel, keepSnowmanMaterial, skinMaterial, skinGeometry, GATE_H } from "./models.js?v=0b3b8087";
-import { Hero } from "./hero.js?v=0b3b8087";
-import { HALF, BRIDGE_HALF, radiusOf, gateLabel, logX, crusherLift, geyserState, rng } from "./rules.js?v=0b3b8087";
-import { FoeView, keepFoeMaterial } from "./foes.js?v=0b3b8087";
-import { heading } from "./levels.js?v=0b3b8087";
-import { SKINS } from "./economy.js?v=0b3b8087";
+import { T, TAU, GEO, V, clamp, rand, hot, lit, part, at, canvasTexture, labelTexture, glowTexture } from "./kit.js?v=9883aac5";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=9883aac5";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=9883aac5";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=9883aac5";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=9883aac5";
+import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=9883aac5";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=9883aac5";
+import { createFx, tone, GLOW, PUFF, STAR, RING } from "./fx.js?v=9883aac5";
+import { firGeometry, spireGeometry, rockGeometry, pileGeometry, rampGeometry, snowTexture, flakeTexture, crackTexture, bricksTexture, signTexture, gateModel, keepGateMaterial, updateGatePanel, snowmanModel, keepSnowmanMaterial, skinMaterial, skinGeometry, GATE_H } from "./models.js?v=9883aac5";
+import { Hero } from "./hero.js?v=9883aac5";
+import { HALF, BRIDGE_HALF, radiusOf, gateLabel, isGood, logX, crusherLift, geyserState, rng } from "./rules.js?v=9883aac5";
+import { FoeView, keepFoeMaterial } from "./foes.js?v=9883aac5";
+import { heading } from "./levels.js?v=9883aac5";
+import { SKINS } from "./economy.js?v=9883aac5";
 
 export const SLOPE = 0.12;
 const PITCH = Math.atan(SLOPE);
@@ -330,6 +330,7 @@ export class SnowView {
     this.dummy = new T.Object3D();
     this.camPos = V(0, 6, 12);
     this.camLook = V(0, 0, -10);
+    this.lookY = 0;
 
     // ---------- Свечение и цветокоррекция ----------
     this.grade = new ShaderPass({
@@ -470,6 +471,7 @@ export class SnowView {
   load(level) {
     this.unload();
     this.level = level;
+    this.lookY = 0;
     const path = (this.path = new Path(level));
     this.paint(level.mountain);
     const world = (this.world = new T.Group());
@@ -506,7 +508,7 @@ export class SnowView {
     this.world.traverse((node) => {
       if (node.isInstancedMesh) node.dispose();
       if (node.isMesh && node.userData.own) node.geometry.dispose();
-      if (node.material && !keep.has(node.material) && !keepFoeMaterial(node.material) && !keepSnowmanMaterial(node.material)) mats.add(node.material);
+      if (node.material && !keep.has(node.material) && !keepFoeMaterial(node.material) && !keepSnowmanMaterial(node.material) && !keepGateMaterial(node.material)) mats.add(node.material);
     });
     for (const w of this.walls || []) w.plaque.material.map?.dispose();
     this.boss?.sign.material.map?.dispose();
@@ -1094,7 +1096,13 @@ export class SnowView {
         g.passed = -1;
         g.fade = 0;
         g.model.visible = true;
-        for (const p of g.model.userData.panels) (p.mat.opacity = 1), (p.label.material.opacity = 1);
+        const ops = run.gateOps?.[g.it.id];
+        g.model.userData.panels.forEach((p, k) => {
+          p.mat.opacity = 1;
+          p.label.material.opacity = 1;
+          p.label.scale.y = p.label.scale.x / 2;
+          if (ops?.[k]) updateGatePanel(p, gateLabel(ops[k]), isGood(ops[k]));
+        });
       }
     }
     this.trail.length = 0;
@@ -1111,6 +1119,36 @@ export class SnowView {
       this.foes.event(e, run);
       if (e.type === "pow" && e.wall !== undefined) this.paintWall(this.walls[e.wall], e.left);
       if (e.type === "kill" && e.how === "bite") fx.puff(RING, bp, null, r, r * 2.6, 0.35, tone("#ff6a7a", 2), 0.8);
+      return;
+    }
+    if (e.type === "gate-pump") {
+      const g = this.items.get(e.id);
+      const panel = g?.model.userData.panels[e.panel];
+      if (panel) {
+        updateGatePanel(panel, gateLabel(e.op), isGood(e.op));
+        const p = this.path.frame(e.s, e.x, e.y, V());
+        this.foes.splat(p, e.flipped ? 1.1 : 0.65);
+        if (e.flipped) {
+          fx.puff(RING, p, null, 0.8, 4.5, 0.45, tone("#7fd0ff", 2.4), 1);
+          fx.burst(p, ["#7fd0ff", "#ffe27a", "#ffffff"], 24, 12, 0.16);
+          this.joy = Math.max(this.joy, 0.6);
+        }
+      }
+      return;
+    }
+    if (e.type === "rush") {
+      this.joy = 1;
+      this.flash = 0.45;
+      this.hero.react(1.1);
+      this.glanceAt("determined", 0.85);
+      fx.puff(RING, bp, null, r, r * 4.5, 0.55, tone("#5fd8ff", 2.6), 1);
+      fx.burst(bp, ["#5fd8ff", "#ffffff", "#ffe27a"], 28, 13, 0.18);
+      return;
+    }
+    if (e.type === "finisher-tap") {
+      this.pop = 0.55;
+      this.hero.react(0.45);
+      fx.burst(bp, ["#ffe27a", "#ffffff", "#7fd0ff"], 10, 9, 0.14);
       return;
     }
     if (e.type === "bite" || e.type === "drain") {
@@ -1504,6 +1542,10 @@ export class SnowView {
       const p = path.frame(s - r * 0.4, x + rand(-r, r), rand(0.2, r * 1.4));
       this.fx.puff(STAR, p, V(rand(-1, 1), rand(1, 2.5), rand(-1, 1)), 0.12, 0.28, 0.6, tone("#dff6ff", 2.2), 0.9);
     }
+    if (!menu && run.rushT > 0 && this.ball.visible && Math.random() < 0.65 * this.q.dust) {
+      const p = path.frame(s - r * 0.2, x + rand(-r, r) * 1.2, rand(0.2, r * 1.8));
+      this.fx.puff(STAR, p, V(rand(-2, 2), rand(1, 3), rand(-2, 2)), 0.22, 0.48, 0.5, tone("#5fd8ff", 2.5), 1);
+    }
     if (level.mountain === 3 && Math.random() < 0.35) {
       const p = path.frame(s + rand(0, 60), rand(-25, 25), rand(-1, 2));
       this.fx.puff(GLOW, p, V(rand(-0.5, 0.5), rand(1.5, 3), rand(-0.5, 0.5)), 0.08, 0.04, 3, tone("#ffb04a", 2.6), 0.9, tone("#ff4a10", 1.4));
@@ -1541,7 +1583,7 @@ export class SnowView {
     const goalPos = path.frame(camS, x * (menu ? 0 : 0.55) + side, up, V());
     if (run.mode === "falling") goalPos.copy(this.camPos);
     const tallMenu = menu && this.aspect <= 1.3;
-    this.lookY += ((this.lookUp || 0) - (this.lookY || 0)) * Math.min(1, dt * 3) || 0;
+    this.lookY += ((this.lookUp || 0) - this.lookY) * Math.min(1, dt * 3);
     const look = path.frame(s + ahead, x * (menu ? 0 : 0.72) + (menu && !tallMenu ? -2.7 : 0), menu ? (tallMenu ? r - 1.6 : r + 0.4) : r * 0.6 + (this.lookY || 0), V());
     if (run.mode === "falling") look.copy(bp);
     // финиш и неудача: камера выходит вперёд и смотрит Снежку в лицо;
@@ -1626,7 +1668,7 @@ export class SnowView {
     } else {
       const F = this.level.finale;
       const smashing = mode === "finale" && run.rest === null && (F.kind === "fortress" ? run.wall < run.walls.length : !run.bossDown);
-      mood = smashing ? "determined" : "happy";
+      mood = smashing || run.rushT > 0 ? "determined" : "happy";
       yaw = clamp(-run.vx * 0.035, -0.45, 0.45); // поглядывает туда, куда рулит
       lean = clamp(-run.vx * 0.016, -0.2, 0.2);
       flow = run.mode === "falling" ? 0 : clamp(run.v / 14, 0, 1);

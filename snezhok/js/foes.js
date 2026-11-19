@@ -2,10 +2,10 @@
 // метельный дух, снежища снеговика, шарики-подборы, снежки пушки, шипы и пушечка на Снежке.
 // Модели — мягкий low-poly в стиле Снежка: простые фигуры, лица нарисованы на холсте.
 // Правила (rules.js, run.js) о графике не знают; здесь только то, что видно.
-import { T, TAU, GEO, V, rand, lit, hot, part, at, canvasTexture, labelTexture, flare } from "./kit.js?v=c359cce9";
-import { tone, GLOW, PUFF, STAR, RING } from "./fx.js?v=c359cce9";
-import { merge } from "./models.js?v=c359cce9";
-import { impX, throwPos, volleyState, isMonster, isPickup } from "./rules.js?v=c359cce9";
+import { T, TAU, GEO, V, rand, lit, hot, part, at, canvasTexture, labelTexture, flare } from "./kit.js?v=27cfaaa2";
+import { tone, GLOW, PUFF, STAR, RING } from "./fx.js?v=27cfaaa2";
+import { merge } from "./models.js?v=27cfaaa2";
+import { impX, throwPos, volleyState, isMonster, isPickup } from "./rules.js?v=27cfaaa2";
 
 // ---------- Общие материалы: живут всю игру, уровень их не освобождает ----------
 const std = (color, o = {}) => new T.MeshStandardMaterial({ color, roughness: 0.75, ...o });
@@ -341,8 +341,16 @@ export function spikeMesh() {
 }
 
 // табличка с числом над монстром: синяя — ком его сомнёт, красная — монстр крупнее кома
+const numTexCache = new Map();
 function numberTexture(value, danger) {
-  return labelTexture(String(value), { color: "#ffffff", stroke: danger ? "#a01428" : "#0c4f9a", size: 92, glow: danger ? "#ff5a6a" : "#5fb8ff" });
+  const key = `${value}|${danger ? 1 : 0}`;
+  if (!numTexCache.has(key)) {
+    numTexCache.set(
+      key,
+      labelTexture(String(value), { color: "#ffffff", stroke: danger ? "#a01428" : "#0c4f9a", size: 92, glow: danger ? "#ff5a6a" : "#5fb8ff" }),
+    );
+  }
+  return numTexCache.get(key);
 }
 function ringTexture(hex) {
   return canvasTexture(128, 128, (g) => {
@@ -405,6 +413,7 @@ export class FoeView {
   }
 
   build(level, path, world) {
+    this.lines = null;
     this.level = level;
     this.path = path;
     this.recs = [];
@@ -471,7 +480,7 @@ export class FoeView {
     }
   }
   disposeLabels() {
-    for (const rec of this.labels || []) rec.label.material.map?.dispose(), rec.label.material.dispose();
+    for (const rec of this.labels || []) rec.label.material.dispose();
     this.labels = [];
   }
   // после «Продолжить» всё возвращается к контрольной точке
@@ -540,7 +549,7 @@ export class FoeView {
         legs[0].position.z = Math.sin(ph) * 0.14;
         legs[1].position.z = -Math.sin(ph) * 0.14;
         tail.rotation.z = Math.sin(ph * 0.5) * 0.5;
-      } else if (rec.kind === "thrower") this.animThrower(rec, run, t);
+      } else if (rec.kind === "thrower") this.animThrower(rec, run, t, dt);
       else if (rec.kind === "snowball") {
         const owner = !menu && run.used[it.owner];
         const p = owner ? null : throwPos(it, time);
@@ -550,7 +559,7 @@ export class FoeView {
           rec.ball.rotation.x += dt * 9;
           if (Math.random() < 0.5 * quality.dust) fx.puff(PUFF, rec.group.position, V(rand(-0.3, 0.3), rand(0, 0.5), rand(-0.3, 0.3)), 0.18, 0.5, 0.4, tone("#ffffff", 1), 0.6);
         }
-      } else if (rec.kind === "volley") this.animVolley(rec, run, t);
+      } else if (rec.kind === "volley") this.animVolley(rec, run, t, dt);
       else if (rec.kind === "pickup") {
         rec.group.position.y = rec.base + Math.sin(t * 2.6 + it.id) * 0.18;
         rec.inner.rotation.y = t * 1.8;
@@ -607,7 +616,7 @@ export class FoeView {
     rec.model.scale.y = rec.model.scale.x * (1 + rec.flash * 0.18);
     if (rec.stun && Math.random() < 0.3) this.fx.puff(STAR, this.path.frame(rec.it.s, rec.it.x, rec.top + Math.sin(t * 8) * 0.2, V()).add(V(Math.cos(t * 7) * 0.7, 0, Math.sin(t * 7) * 0.7)), null, 0.3, 0.5, 0.35, tone("#ffd84a", 2), 1);
   }
-  animThrower(rec, run, t) {
+  animThrower(rec, run, t, dt) {
     const it = rec.it;
     const { body, head, arms, held } = rec.model.userData;
     // замах перед броском, бросок, отдых; рука и снежок в руке по фазе снежка
@@ -623,8 +632,8 @@ export class FoeView {
     held.visible = alive && (u > 0.4 || u < 0.02);
     body.rotation.y = wind * 0.3 - throwK * 0.4;
     head.rotation.z = 0.12 + Math.sin(t * 2 + rec.seed) * 0.08;
-    rec.flash = Math.max(0, rec.flash - 0.05);
-    rec.model.scale.y = 1 + rec.flash * 0.15;
+    rec.flash = Math.max(0, rec.flash - dt * 4);
+    rec.model.scale.y = rec.model.scale.x * (1 + rec.flash * 0.15);
   }
   lineOf(owner) {
     if (!this.lines) {
@@ -633,7 +642,7 @@ export class FoeView {
     }
     return this.lines.get(owner.id);
   }
-  animVolley(rec, run, t) {
+  animVolley(rec, run, t, dt) {
     const st = volleyState(rec.it, run.time);
     const near = Math.abs(rec.it.s - run.s) < 70;
     rec.ring.visible = near;
@@ -642,7 +651,7 @@ export class FoeView {
     rec.ring.scale.set(k * 2, k * 2, 1);
     rec.ring.material.opacity = st.hot ? 1 : 0.35 + st.fall * 0.55 + Math.sin(t * 20) * 0.1 * st.fall;
     rec.ball.position.set(0, 1.1 + (1 - st.fall) * 16, -(1 - st.fall) * 10);
-    rec.ball.rotation.x += 0.2;
+    rec.ball.rotation.x += dt * 12;
     const cycle = Math.floor(run.time / rec.it.period + rec.it.phase);
     if (near && st.hot && rec.landed !== cycle) {
       rec.landed = cycle;
@@ -662,7 +671,6 @@ export class FoeView {
     if (rec.hp !== shown || rec.danger !== danger) {
       rec.hp = shown;
       rec.danger = danger;
-      rec.label.material.map?.dispose();
       rec.label.material.map = numberTexture(it.t === "imp" ? "−" + shown : shown, danger);
       rec.label.material.needsUpdate = true;
     }

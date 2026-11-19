@@ -1,8 +1,8 @@
 // Заезд «Снежного кома»: движение кома по трассе, ворота, подбор, удары, финал.
 // Чистая логика без графики. Время заезда на трассе — путь / скорость, поэтому положение
 // движущихся препятствий в каждой точке трассы заранее известно (и проверкам, и роботу).
-import { HALF, LATERAL, GRAVITY, JUMP, BRIDGE_HALF, MAX_SIZE, START, radiusOf, applyGate, isGood, damage, touches, clamp, MONSTER, WEAPON, AVALANCHE, DRAIN, isMonster, impX, shotDamage, crushGain, bonkDamage } from "./rules.js?v=c359cce9";
-import { bridgeAt } from "./levels.js?v=c359cce9";
+import { HALF, LATERAL, GRAVITY, JUMP, BRIDGE_HALF, MAX_SIZE, START, radiusOf, applyGate, isGood, damage, touches, clamp, MONSTER, WEAPON, AVALANCHE, DRAIN, isMonster, impX, shotDamage, crushGain, bonkDamage, pumpGateOp, RUSH } from "./rules.js?v=27cfaaa2";
+import { bridgeAt } from "./levels.js?v=27cfaaa2";
 
 const HAZARD_KINDS = new Set(["rock", "fence", "spikes", "log", "hole", "crusher", "geyser", "snowball", "volley"]);
 
@@ -16,6 +16,7 @@ export class Run {
     this.gunRate = opts.gunRate ?? WEAPON.gun.rate;
     this.spikeTime = opts.spikeTime ?? WEAPON.spike.time;
     this.ammo0 = opts.ammo ?? 0;
+    this.skin = opts.skin || {};
     this.reset();
   }
 
@@ -73,6 +74,10 @@ export class Run {
     this.chase = null; // идущая погоня лавины
     this.chaseDone = 0; // сколько погонь уже позади
     this.bossHp = L.finale.boss ? L.finale.boss.hp : 0;
+    this.gateOps = L.items.map((it) => (it.t === "gate" ? it.panels.map((p) => ({ ...p.op })) : null));
+    this.streak = 0;
+    this.rushT = 0;
+    this.finisherTaps = 0;
     this.save();
   }
   get armed() {
@@ -106,7 +111,33 @@ export class Run {
   }
 
   save() {
-    this.checkpoints.push({ s: this.s, x: this.x, size: this.size, coins: this.coins, used: this.used.slice(), lo: this.lo, gate: this.checkGate, hp: this.hp?.slice(), kills: this.kills && { ...this.kills }, chaseDone: this.chaseDone });
+    this.checkpoints.push({
+      s: this.s, x: this.x, size: this.size, coins: this.coins, used: this.used.slice(),
+      lo: this.lo, gate: this.checkGate, hp: this.hp?.slice(), kills: this.kills && { ...this.kills },
+      chaseDone: this.chaseDone,
+      gateOps: this.gateOps?.map((g) => g && g.map((op) => ({ ...op }))),
+    });
+  }
+
+  bumpStreak() {
+    if (this.rushT > 0) return;
+    this.streak++;
+    if (this.streak >= RUSH.streak) {
+      this.streak = 0;
+      this.rushT = RUSH.time;
+      this.emit({ type: "rush", on: true });
+    }
+  }
+
+  finisherTap() {
+    if (this.mode !== "finale" || this.rest !== null || this.bossDown || this.finisherTaps >= 8) return false;
+    const F = this.level.finale;
+    if (F.kind === "fortress" && this.wall >= this.walls.length) return false;
+    this.finisherTaps++;
+    const add = Math.max(1, Math.round(this.finaleSize * 0.02));
+    this.grow(add);
+    this.emit({ type: "finisher-tap", add, size: this.size, n: this.finisherTaps });
+    return true;
   }
 
   emit(e) {
@@ -155,7 +186,10 @@ export class Run {
     const s0 = this.s;
     let v = L.speed;
     if (this.mode === "finale") v = this.stair > 0 ? 10 : 13;
-    else if (this.boostT > 0) v *= WEAPON.boost.k;
+    else {
+      if (this.boostT > 0) v *= WEAPON.boost.k;
+      if (this.rushT > 0) v *= RUSH.speed;
+    }
     if (this.slow > 0) {
       this.slow -= dt;
       v *= 0.45;
@@ -192,9 +226,10 @@ export class Run {
     const items = L.items;
     const s = this.s;
     while (this.lo < items.length && items[this.lo].s < s - 8) this.lo++;
-    for (let i = this.lo; i < items.length && items[i].s < s + 8; i++) {
+    for (let i = this.lo; i < items.length && items[i].s < s + 17; i++) {
       if (this.used[i]) continue;
       const it = items[i];
+      if (it.s >= s + 8 && it.t !== "spirit") continue;
       switch (it.t) {
         case "gate":
           if (s0 < it.s && s >= it.s) this.gate(it, i);
@@ -202,8 +237,9 @@ export class Run {
         case "pile":
           if (this.y < 0.7 && Math.abs(it.s - s) < r + 0.45 && Math.abs(it.x - this.x) < r + 0.45) {
             this.used[i] = 1;
-            this.grow(it.v);
-            this.emit({ type: "pile", id: i, v: it.v, size: this.size });
+            const v = Math.max(1, Math.round(it.v * (this.skin.pileK || 1)));
+            this.grow(v);
+            this.emit({ type: "pile", id: i, v, size: this.size });
           }
           break;
         case "flake": {
@@ -285,19 +321,30 @@ export class Run {
     this.used[i] = 1;
     let k = it.panels.findIndex((p) => this.x >= p.x0 && this.x < p.x1);
     if (k < 0) k = this.x < 0 ? 0 : it.panels.length - 1;
-    const op = it.panels[k].op;
+    const op = this.gateOps[i][k];
     const before = this.size;
     this.size = applyGate(op, before);
     this.peak = Math.max(this.peak, this.size);
-    this.emit({ type: "gate", id: i, panel: k, op, before, after: this.size, good: isGood(op), best: k === it.best });
+    const good = isGood(op);
+    this.emit({ type: "gate", id: i, panel: k, op, before, after: this.size, good, best: k === it.best });
+    if (good) this.bumpStreak();
+    else this.streak = 0;
     if (this.size <= 0) this.melt();
   }
 
   hit(it, i) {
-    // снежки страшилы и снежища снеговика летят снова и снова; остальное — один раз
+    if (this.rushT > 0 && (it.t === "rock" || it.t === "fence" || it.t === "spikes")) {
+      this.used[i] = 1;
+      this.grow(RUSH.gain);
+      this.coins += RUSH.coins;
+      this.emit({ type: "smash", id: i, s: it.s, x: it.x ?? this.x, y: 0.7, rush: true });
+      return;
+    }
+    this.streak = 0;
     if (it.t !== "snowball" && it.t !== "volley") this.used[i] = 1;
     if (this.chase) this.chase.gap -= AVALANCHE.stumble;
-    const dmg = Math.min(this.size, damage(it.t, this.size));
+    const iceCut = ["rock", "spikes", "hole", "crusher"].includes(it.t) ? (this.skin.iceArmor || 1) : 1;
+    const dmg = Math.min(this.size, Math.max(1, Math.round(damage(it.t, this.size) * iceCut)));
     this.size -= dmg;
     this.lost += dmg;
     this.hits++;
@@ -401,8 +448,11 @@ export class Run {
   // ---------- Монстры ----------
   // ком встретил монстра: шипы и размер больше числа — сминает, иначе бесёнок кусает, а йети отбрасывает
   meet(it, i) {
+    const smasher = this.spikeT > 0 || this.rushT > 0;
     if (it.t === "imp") {
-      if (this.spikeT > 0) return this.kill(i, "spike");
+      if (smasher) return this.kill(i, this.spikeT > 0 ? "spike" : "rush");
+      if (this.invuln > 0) return;
+      this.streak = 0;
       const dmg = Math.min(this.size, it.v);
       this.size -= dmg;
       this.lost += dmg;
@@ -413,7 +463,9 @@ export class Run {
       if (this.size <= 0) this.melt();
       return;
     }
-    if (this.spikeT > 0 || this.size > this.hp[i]) return this.kill(i, this.spikeT > 0 ? "spike" : "crush");
+    if (smasher || this.size > this.hp[i]) return this.kill(i, this.spikeT > 0 ? "spike" : this.rushT > 0 ? "rush" : "crush");
+    if (this.invuln > 0) return;
+    this.streak = 0;
     const dmg = Math.min(this.size, bonkDamage(this.size));
     this.used[i] = 1;
     this.size -= dmg;
@@ -434,14 +486,15 @@ export class Run {
     this.kills.all++;
     let gain = 0;
     // смятый ком йети или страшилы отдаёт часть снега; разбитый снежками или волной — только снежинки
-    if ((it.t === "yeti" || it.t === "thrower") && (how === "crush" || how === "spike")) {
-      gain = crushGain(it.hp);
+    if ((it.t === "yeti" || it.t === "thrower") && (how === "crush" || how === "spike" || how === "rush")) {
+      gain = Math.max(1, Math.round(crushGain(it.hp) * (this.skin.crushK || 1)));
       this.grow(gain);
     }
     const coins = MONSTER[it.t].coins - (how === "bite" ? 1 : 0);
     this.coins += coins;
     if (this.spirit && this.spirit.i === i) this.spirit = null;
     this.emit({ type: "kill", id: i, kind: it.t, how, gain, coins, size: this.size });
+    if (how === "crush" || how === "spike") this.bumpStreak();
   }
   pickup(it, i) {
     this.used[i] = 1;
@@ -477,6 +530,7 @@ export class Run {
     this.gunT = Math.max(0, this.gunT - dt);
     this.spikeT = Math.max(0, this.spikeT - dt);
     this.boostT = Math.max(0, this.boostT - dt);
+    this.rushT = Math.max(0, this.rushT - dt);
     // пушка стреляет сама по ближайшей цели, которую ком сам не сомнёт
     this.shotCD -= dt;
     if (this.armed && this.shotCD <= 0) {
@@ -519,7 +573,7 @@ export class Run {
         this.spirit = null;
         this.emit({ type: "spirit-away", id: sp.i });
       } else {
-        this.drainAcc += this.size * DRAIN * dt;
+        this.drainAcc += this.size * DRAIN * (this.skin.spiritK || 1) * dt;
         if (this.drainAcc >= 1) {
           const dmg = Math.min(this.size, Math.floor(this.drainAcc));
           this.drainAcc -= dmg;
@@ -570,6 +624,7 @@ export class Run {
     if (this.spirit) return { kind: "spirit" };
     const items = L.items;
     const r = this.radius;
+    let gateFallback = null;
     for (let i = this.lo; i < items.length; i++) {
       const it = items[i];
       if (it.s > s + WEAPON.gun.range) break;
@@ -580,8 +635,14 @@ export class Run {
       else if (it.t === "rock") want = it.s < s + 16 && Math.abs(it.x - this.x) < r + it.r + 0.6;
       else if (it.t === "fence") want = it.s < s + 16 && this.x > it.x0 - r && this.x < it.x1 + r;
       if (want) return { kind: "item", i };
+      if (!gateFallback && it.t === "gate" && it.s < s + 22 && it.s > s + 2.5) {
+        let k = it.panels.findIndex((p) => this.x >= p.x0 && this.x < p.x1);
+        if (k < 0) k = this.x < 0 ? 0 : it.panels.length - 1;
+        const op = this.gateOps[i][k];
+        if (op.k === "+" || op.k === "-") gateFallback = { kind: "gate", i, k };
+      }
     }
-    return null;
+    return gateFallback;
   }
   // где цель сейчас (null — цели уже нет)
   aim(tgt) {
@@ -591,6 +652,11 @@ export class Run {
     if (tgt.kind === "wall") {
       const w = this.walls[tgt.k];
       return w && !w.broken ? { s: w.s, x: this.x, y: 2 } : null;
+    }
+    if (tgt.kind === "gate") {
+      if (this.used[tgt.i]) return null;
+      const it = L.items[tgt.i], p = it.panels[tgt.k];
+      return { s: it.s, x: (p.x0 + p.x1) / 2, y: 2.2 };
     }
     if (this.used[tgt.i]) return null;
     const it = L.items[tgt.i];
@@ -616,6 +682,14 @@ export class Run {
       this.hp[i] -= dmg;
       this.emit({ type: "pow", id: i, dmg, n: sh.n, s: p.s, x: p.x, y: p.y });
       if (this.hp[i] <= 0) this.kill(i, "shot");
+    } else if (tgt.kind === "gate") {
+      const cur = this.gateOps[tgt.i][tgt.k];
+      const step = Math.max(1, Math.round(shotDamage(this.size) * 0.25));
+      const res = pumpGateOp(cur, step);
+      if (res) {
+        this.gateOps[tgt.i][tgt.k] = res.op;
+        this.emit({ type: "gate-pump", id: tgt.i, panel: tgt.k, op: res.op, flipped: res.flipped, delta: step, s: p.s, x: p.x, y: p.y });
+      }
     } else {
       const i = tgt.i;
       const it = L.items[i];
@@ -650,9 +724,16 @@ export class Run {
     if (this.failReason === "boss") size = Math.max(size, Math.ceil(this.bossHp * 1.15));
     if (cp.hp) this.hp = cp.hp.slice();
     if (cp.kills) this.kills = { ...cp.kills };
+    if (cp.gateOps) this.gateOps = cp.gateOps.map((g) => g && g.map((op) => ({ ...op })));
     this.chaseDone = cp.chaseDone ?? this.chaseDone;
     this.chase = this.spirit = null;
     this.gunT = this.spikeT = this.boostT = 0;
+    this.slow = 0;
+    this.drainAcc = 0;
+    this.drainShown = 0;
+    this.streak = 0;
+    this.rushT = 0;
+    this.finisherTaps = 0;
     this.shots.length = 0;
     this.size = size;
     this.peak = Math.max(this.peak, size);

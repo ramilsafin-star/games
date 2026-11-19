@@ -1,6 +1,6 @@
 // Модели «Снежного кома»: ёлки, камни, ворота, заборы, прессы, снеговик-босс, облики кома.
 // Всё собирается из простых фигур и текстур, нарисованных на холсте, — без файлов.
-import { T, TAU, GEO, hot, lit, part, at, canvasTexture, labelTexture, thinFog } from "./kit.js?v=c359cce9";
+import { T, TAU, GEO, hot, lit, part, at, canvasTexture, labelTexture, thinFog } from "./kit.js?v=27cfaaa2";
 
 // ---------- Склейка геометрий в одну (вершинные цвета) ----------
 export function merge(list) {
@@ -22,6 +22,7 @@ export function merge(list) {
       if (tint) color.multiplyScalar(tint);
       col.push(color.r, color.g, color.b);
     }
+    local.dispose();
   }
   const out = new T.BufferGeometry();
   out.setAttribute("position", new T.Float32BufferAttribute(pos, 3));
@@ -272,14 +273,12 @@ export function signTexture(text, fill = "#1d5fb8") {
 
 // ---------- Ворота ----------
 const panelMats = new Map();
-function panelMaterial(good) {
+function panelTexture(good) {
   const key = good ? "g" : "b";
   if (!panelMats.has(key)) {
     const tex = canvasTexture(64, 256, (g) => {
-      // сочная заливка сверху вниз, светлая кайма по краям и блик наискосок
       const grad = g.createLinearGradient(0, 0, 0, 256);
       const [c0, c1] = good ? ["16,104,255", "52,156,255"] : ["240,30,70", "255,84,104"];
-      // плотнее у чисел: на белом снегу и в голубом ущелье створка читается издалека
       grad.addColorStop(0, `rgba(${c0},1)`);
       grad.addColorStop(0.12, `rgba(${c0},0.95)`);
       grad.addColorStop(0.65, `rgba(${c1},0.84)`);
@@ -300,13 +299,32 @@ function panelMaterial(good) {
     });
     panelMats.set(key, tex);
   }
-  return thinFog(new T.MeshBasicMaterial({ map: panelMats.get(key), transparent: true, depthWrite: false, side: T.DoubleSide, toneMapped: false, fog: true }), 0.3);
+  return panelMats.get(key);
+}
+function panelMaterial(good) {
+  return thinFog(new T.MeshBasicMaterial({ map: panelTexture(good), transparent: true, depthWrite: false, side: T.DoubleSide, toneMapped: false, fog: true }), 0.3);
 }
 const postMat = thinFog(new T.MeshStandardMaterial({ color: "#f6faff", roughness: 0.4, metalness: 0.1 }), 0.4);
 const capGood = thinFog(lit("#7fd0ff", 1.6), 0.3);
 const capBad = thinFog(lit("#ff6a7a", 1.6), 0.3);
-export const GATE_H = 4.6;
+const gateKeep = new Set([postMat, capGood, capBad]);
+export const keepGateMaterial = (m) => gateKeep.has(m);
+
 const gateLabels = new Map();
+export function updateGatePanel(panelObj, labelText, good) {
+  const key = `${labelText}:${good}`;
+  if (!gateLabels.has(key)) {
+    gateLabels.set(key, labelTexture(labelText, { color: "#ffffff", stroke: good ? "#0c4f9a" : "#8a1424", size: 100 }));
+  }
+  panelObj.label.material.map = gateLabels.get(key);
+  panelObj.label.material.needsUpdate = true;
+  if (panelObj.good !== good) {
+    panelObj.good = good;
+    panelObj.mat.map = panelTexture(good);
+    panelObj.mat.needsUpdate = true;
+  }
+}
+export const GATE_H = 4.6;
 export function gateModel(gate, labels) {
   const group = new T.Group();
   const panels = [];
@@ -530,9 +548,15 @@ function skinTexture(id) {
     });
   return null;
 }
+// Кэш текстур обликов перед skinMaterial():
+const skinTexCache = new Map();
+function cachedSkinTexture(id) {
+  if (!skinTexCache.has(id)) skinTexCache.set(id, skinTexture(id));
+  return skinTexCache.get(id);
+}
 // Материал облика; snow — общий снежный с бликами (его даёт сцена)
 export function skinMaterial(id, env, snow) {
-  const map = skinTexture(id);
+  const map = cachedSkinTexture(id);
   switch (id) {
     case "ice":
       return new T.MeshStandardMaterial({ map, color: "#8fdcff", roughness: 0.1, metalness: 0.2, envMap: env, envMapIntensity: 1.5, flatShading: true, emissive: "#1a7ac0", emissiveIntensity: 0.35 });

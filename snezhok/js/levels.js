@@ -3,7 +3,7 @@
 // Препятствия ставятся только вне коридора, а движущиеся получают такую фазу, чтобы в миг,
 // когда ком едет коридором, они были в стороне. Поэтому любой уровень заведомо проходим;
 // validate() это перепроверяет. Никакой графики: этот же код гоняют проверки в Node.
-import { HALF, BRIDGE_HALF, AIR_TIME, JUMP, GRAVITY, START, radiusOf, applyGate, isGood, rng, hash, clamp, logX, crusherDown, geyserState, touches, crushGain, isMonster, isPickup, throwPos, MONSTER } from "./rules.js?v=c359cce9";
+import { HALF, BRIDGE_HALF, AIR_TIME, JUMP, GRAVITY, START, radiusOf, applyGate, isGood, rng, hash, clamp, logX, crusherDown, geyserState, touches, crushGain, isMonster, isPickup, throwPos, MONSTER } from "./rules.js?v=27cfaaa2";
 
 export const MOUNTAINS = [
   { id: "firs", name: "Ёлочный склон", boss: "Снеговик Сугробыч" },
@@ -441,6 +441,7 @@ function generate(n) {
     const gate = { t: "gate", s, best, at: S, panels: panels.map(([x0, x1], k) => ({ x0, x1, op: ops[k] })) };
     items.push(gate);
     gates.push(gate);
+    solid.push({ s0: s - 2.2, s1: s + 2.2, x0: -HALF, x1: HALF });
     S = applyGate(ops[best], S);
     // небрежный берёт худшие из хороших ворот
     const fair = ops.filter((op) => op.k === "+" || op.k === "*");
@@ -676,7 +677,8 @@ function placeFoes(L) {
   const usable = segs.filter((g) => g.j > 0 && g.type !== "bridge" && g.type !== "slalom");
   const taken = new Set();
   if (n >= FOES.chase && !boss && (n === FOES.chase || R() < 0.45)) {
-    const g = usable.filter((q) => q.b - q.a >= 40)[Math.floor(R() * 99) % Math.max(1, usable.length)];
+    const longSegs = usable.filter((q) => q.b - q.a >= 40);
+    const g = longSegs.length ? longSegs[Math.floor(R() * 99) % longSegs.length] : null;
     if (g) {
       let boosts = 0;
       for (let s = g.a + 10; s <= g.b - 2; s += 13) if (pickup("boost", s)) boosts++;

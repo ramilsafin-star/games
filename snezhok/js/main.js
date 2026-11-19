@@ -1,13 +1,13 @@
 // «Снежный ком»: экраны, управление, звук, сохранение, реклама VK и главный цикл.
-import { HALF, radiusOf, gateLabel, START } from "./rules.js?v=c359cce9";
-import { buildLevel, LEVEL_COUNT, MOUNTAINS, PER_MOUNTAIN, INTRO, FOE_INTRO, QUEST_TEXT, mountainOf } from "./levels.js?v=c359cce9";
-import { Run } from "./run.js?v=c359cce9";
-import { makePilot } from "./pilot.js?v=c359cce9";
-import { SAVE_KEY, UPGRADES, SKINS, upgradeCost, upgradeText, levelReward, readSave, writeSave, setBest, bestOf, gear, skinOpen, AD_AMMO } from "./economy.js?v=c359cce9";
-import { readStorage, writeStorage } from "./kit.js?v=c359cce9";
-import { Sound } from "./sound.js?v=c359cce9";
-import { SnowView, TIERS } from "./view.js?v=c359cce9";
-import { FOE_ICONS, CONFETTI } from "./icons.js?v=c359cce9";
+import { HALF, radiusOf, gateLabel, START, RUSH } from "./rules.js?v=27cfaaa2";
+import { buildLevel, LEVEL_COUNT, MOUNTAINS, PER_MOUNTAIN, INTRO, FOE_INTRO, QUEST_TEXT, mountainOf } from "./levels.js?v=27cfaaa2";
+import { Run } from "./run.js?v=27cfaaa2";
+import { makePilot } from "./pilot.js?v=27cfaaa2";
+import { SAVE_KEY, UPGRADES, SKINS, upgradeCost, upgradeText, levelReward, readSave, writeSave, setBest, bestOf, gear, skinOpen, AD_AMMO } from "./economy.js?v=27cfaaa2";
+import { readStorage, writeStorage } from "./kit.js?v=27cfaaa2";
+import { Sound } from "./sound.js?v=27cfaaa2";
+import { SnowView, TIERS } from "./view.js?v=27cfaaa2";
+import { FOE_ICONS, CONFETTI } from "./icons.js?v=27cfaaa2";
 
 const $ = (name) => document.getElementById(name);
 const host = () => window.vkGameHost;
@@ -65,14 +65,26 @@ function dragScale() {
   const w = view.size?.w || innerWidth;
   return (HALF * 2 * 1.05) / Math.max(260, Math.min(w * 0.62, 700));
 }
+const stageEl = $("stage");
 addEventListener("pointerdown", (e) => {
   if (!e.isPrimary && finger) return;
   if (e.target.closest("button, a, .sheet, .title-card")) return;
   Sound.unlock();
+  if (screen === "title" && !panel) {
+    view.hero.react(1.3);
+    view.hero.say(Math.random() < 0.7 ? "joy" : "surprised", 0.9);
+    Sound.pile(true);
+    return;
+  }
   if (!playing() || paused) return;
   if (run.mode === "ready") begin();
+  if (run.mode === "finale") {
+    run.finisherTap();
+    return;
+  }
   finger = { id: e.pointerId, x: e.clientX, from: run.x };
   target = run.x;
+  stageEl.setPointerCapture?.(e.pointerId);
 });
 addEventListener("pointermove", (e) => {
   if (!finger || finger.id !== e.pointerId || !run) return;
@@ -85,6 +97,7 @@ addEventListener("pointermove", (e) => {
 const lift = (e) => {
   if (finger?.id === e.pointerId) finger = target = null;
 };
+stageEl.addEventListener("lostpointercapture", lift);
 addEventListener("pointerup", lift);
 addEventListener("pointercancel", lift);
 addEventListener("contextmenu", (e) => e.preventDefault());
@@ -92,6 +105,10 @@ addEventListener("keydown", (e) => {
   if (e.code === "Escape" && !e.repeat) {
     if (canPause() && !paused && run.mode !== "ready") pause();
     else if (paused && panel === "pause") resume();
+    else if (["upgrades", "skins", "settings"].includes(panel)) {
+      closePanel();
+      paintTitle();
+    }
     return;
   }
   if (KEYMAP[e.code]) {
@@ -101,10 +118,11 @@ addEventListener("keydown", (e) => {
       Sound.unlock();
       begin();
     }
-  } else if ((e.code === "Space" || e.code === "Enter") && playing() && !paused && run.mode === "ready" && !e.target.closest?.("button")) {
+  } else if ((e.code === "Space" || e.code === "Enter") && playing() && !paused && !e.target.closest?.("button")) {
     e.preventDefault();
     Sound.unlock();
-    begin();
+    if (run.mode === "ready") begin();
+    else if (run.mode === "finale") run.finisherTap();
   }
 });
 addEventListener("keyup", (e) => {
@@ -289,6 +307,16 @@ function paintTitle() {
     b.setAttribute("aria-pressed", String(mountainOf(Number(b.dataset.level)) === m));
   }
   text($("play"), save.lv > LEVEL_COUNT && n === LEVEL_COUNT ? "Играть ещё" : n < Math.min(save.lv, LEVEL_COUNT) ? "Переиграть" : "Играть");
+  const canUpgrade = UPGRADES.some((_, i) => {
+    const cost = upgradeCost(i, save.up[i]);
+    return cost !== null && save.co >= cost;
+  });
+  const canSkin = SKINS.some((sk, i) => {
+    const open = skinOpen(save, i);
+    return (!open && sk.price > 0 && save.co >= sk.price) || (open && sk.kills && save.cur !== i);
+  });
+  $("open-upgrades").classList.toggle("dot", canUpgrade);
+  $("open-skins").classList.toggle("dot", canSkin);
   paintCoins();
 }
 const mountains = $("mountains");
@@ -332,14 +360,22 @@ $("open-settings").addEventListener("click", () => {
   openSettings();
 });
 
+function clearEffects() {
+  clearTimeout(confetti.timer);
+  $("confetti").textContent = "";
+  $("floats").textContent = "";
+  floats.length = 0;
+}
+
 function showMenuScene() {
   const L = buildLevel(save.at);
   if (view.level !== L) view.load(L);
-  run = new Run(L, gear(save.up));
+  run = new Run(L, gear(save.up, save.cur));
   level = L;
   view.snap = true;
 }
 function toTitle() {
+  clearEffects();
   resultDelay = null;
   closePanel();
   paused = false;
@@ -353,12 +389,13 @@ function toTitle() {
 
 // ---------- Уровень ----------
 function startLevel(n, extra = {}) {
+  clearEffects();
   closePanel();
   level = buildLevel(n);
   save.at = n;
   persist();
   view.load(level); // предметы и следы — с чистого листа
-  run = new Run(level, { ...gear(save.up), ...extra });
+  run = new Run(level, { ...gear(save.up, save.cur), ...extra });
   paused = false;
   resultDelay = null;
   slowmo = 0;
@@ -483,7 +520,7 @@ function openSkins() {
         : sk.kills
           ? `<button class="buy hunt" disabled>Монстров ${Math.min(save.kl, sk.kills)}/${sk.kills}</button>`
           : `<button class="buy" data-action="skin" data-index="${i}" ${save.co >= sk.price ? "" : "disabled"}><i class="flake"></i>${fmt(sk.price)}</button>`;
-    return `<div class="skin ${worn ? "worn" : ""}"><i class="orb" style="background:${ORBS[sk.id]}"></i><b>${sk.name}</b>${btn}</div>`;
+    return `<div class="skin ${worn ? "worn" : ""}"><i class="orb" style="background:${ORBS[sk.id]}"></i><b>${sk.name}</b><small>${sk.perk}</small>${btn}</div>`;
   }).join("");
   openPanel("skins", `<h2 id="panel-title">Облики кома</h2>${bankHtml()}<div class="skins">${cards}</div>
     <div class="pair" style="grid-template-columns:1fr"><button class="choice" data-action="back">Назад</button></div>`);
@@ -491,7 +528,7 @@ function openSkins() {
 
 function creditFinish() {
   if (reward) return;
-  const r = (reward = levelReward(level, run, save.up[1]));
+  const r = (reward = levelReward(level, run, save.up[1], save.cur));
   save.kl += run.kills.all;
   tripled = false;
   save.co += r.total;
@@ -618,6 +655,7 @@ $("sheet").addEventListener("click", async (e) => {
     Sound.buy();
     openUpgrades();
     paintCoins();
+    if (i === 0 && screen === "title") showMenuScene();
   } else if (action === "skin") {
     const i = Number(b.dataset.index);
     if (save.sk & (1 << i) || save.co < SKINS[i].price) return;
@@ -706,6 +744,22 @@ function handleEvents() {
         if (e.good) Sound.good(e.op.k === "*");
         else Sound.bad();
         floatText(gateLabel(e.op), e.good ? "good" : "bad", true);
+        break;
+      case "gate-pump":
+        if (e.flipped) {
+          Sound.good(false);
+          floatText(gateLabel(e.op) + "!", "good", true);
+        } else {
+          Sound.pow();
+        }
+        break;
+      case "rush":
+        Sound.wave();
+        banner("Разгон лавины!", "ПРОЛАМЫВАЙ ПРЕГРАДЫ", false, "quick", "boost");
+        break;
+      case "finisher-tap":
+        Sound.pile(false);
+        floatText("+" + e.add, "good", false, Math.random() * 50 - 25);
         break;
       case "hit":
         Sound.hit(e.kind === "hole" || e.kind === "crusher");
@@ -808,8 +862,8 @@ function handleEvents() {
 function finaleBanner() {
   if (finaleShown) return;
   finaleShown = true;
-  if (level.boss) banner(`Нужно больше ${level.finale.boss.hp}!`, level.finale.boss.name.toUpperCase(), true, "quick");
-  else banner("Круши стены!", "ЛЕДЯНАЯ КРЕПОСТЬ", false, "quick");
+  if (level.boss) banner(`Жми чаще! Нужно > ${level.finale.boss.hp}`, level.finale.boss.name.toUpperCase(), true, "quick");
+  else banner("Жми чаще — удар сильнее!", "ЛЕДЯНАЯ КРЕПОСТЬ", false, "quick");
 }
 
 // ---------- Главный цикл ----------
@@ -872,12 +926,13 @@ const QUEST_ICON = { imp: "imps", yeti: "yeti", any: "bigyeti" };
 function buildGear() {
   const q = level.quest;
   $("gear").innerHTML = `
+    <div class="gp rush" hidden><i class="ico">${FOE_ICONS.boost}</i><b>Лавина ×3</b><span class="bar"><i></i></span></div>
     <div class="gp chase" hidden><i class="ico">${FOE_ICONS.chase}</i><b>Лавина</b><span class="bar"><i></i></span></div>
     <div class="gp gun" hidden><i class="ico">${FOE_ICONS.gun}</i><b>Пушка</b><span class="bar"><i></i></span></div>
     <div class="gp spike" hidden><i class="ico">${FOE_ICONS.spike}</i><b>Шипы</b><span class="bar"><i></i></span></div>
     ${q ? `<div class="gp quest"><i class="ico">${FOE_ICONS[QUEST_ICON[q.kind]]}</i><b>${QUEST_TEXT[q.kind]}</b><em>0/${q.need}</em></div>` : ""}`;
   gearEls = {};
-  for (const k of ["chase", "gun", "spike", "quest"]) gearEls[k] = $("gear").querySelector("." + k);
+  for (const k of ["rush", "chase", "gun", "spike", "quest"]) gearEls[k] = $("gear").querySelector("." + k);
   gearShown = {};
 }
 let gearEls = {};
@@ -895,7 +950,10 @@ function gearPill(name, on, k, label = null) {
   if (label !== null) text(el.querySelector("b"), label);
 }
 function paintGear() {
-  if (!gearEls.quest && !level.chases.length && !run.armed && run.spikeT <= 0) return;
+  if (!gearEls.quest && !level.chases.length && !run.armed && run.spikeT <= 0 && run.rushT <= 0 && run.streak === 0) return;
+  const rushOn = run.rushT > 0 || run.streak > 0;
+  gearPill("rush", rushOn, run.rushT > 0 ? run.rushT / RUSH.time : run.streak / RUSH.streak, run.rushT > 0 ? "Разгон!" : `Серия ${run.streak}/${RUSH.streak}`);
+  if (gearEls.rush) gearEls.rush.classList.toggle("active", run.rushT > 0);
   const ch = run.chase;
   gearPill("chase", !!ch, ch ? ch.gap / 14 : 0);
   if (gearEls.chase) gearEls.chase.classList.toggle("close", !!ch && ch.gap < 5);

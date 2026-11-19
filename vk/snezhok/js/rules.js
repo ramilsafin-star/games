@@ -33,6 +33,20 @@ export function gateLabel(op) {
   return sign + op.v;
 }
 
+export function pumpGateOp(op, delta) {
+  if (op.k === "+") return { op: { k: "+", v: Math.min(MAX_SIZE, op.v + delta) }, flipped: false };
+  if (op.k === "-") {
+    const next = op.v - delta;
+    return next > 0
+      ? { op: { k: "-", v: next }, flipped: false }
+      : { op: { k: "+", v: Math.max(1, -next) }, flipped: true };
+  }
+  return null; // × и ÷ не меняем, чтобы сохранить математику коридора
+}
+
+// Комбо за 3 хороших ворот или смятых монстров подряд
+export const RUSH = { streak: 3, time: 3.5, speed: 1.15, gain: 2, coins: 2 };
+
 // ---------- Препятствия ----------
 // frac — доля размера, которую отнимает удар, min — не меньше стольких, h — высота (ком в прыжке
 // выше неё пролетает поверх).

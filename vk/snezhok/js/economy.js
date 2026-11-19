@@ -1,6 +1,6 @@
 // Снежинки (монеты), улучшения, облики кома и сохранение. Без DOM — проверяется в Node.
-import { LEVEL_COUNT } from "./levels.js?v=0b3b8087";
-import { START, WEAPON } from "./rules.js?v=0b3b8087";
+import { LEVEL_COUNT } from "./levels.js?v=9883aac5";
+import { START, WEAPON } from "./rules.js?v=9883aac5";
 
 export const SAVE_KEY = "snezhok-v1";
 
@@ -25,7 +25,17 @@ export const gunTime = (k) => WEAPON.gun.time + 0.6 * k;
 export const gunRate = (k) => WEAPON.gun.rate + 0.35 * k;
 export const spikeTime = (k) => WEAPON.spike.time + 0.6 * k;
 // снаряжение заезда из улучшений
-export const gear = (up) => ({ start: startSize(up[0]), magnet: magnetRadius(up[2]), gunTime: gunTime(up[3] || 0), gunRate: gunRate(up[4] || 0), spikeTime: spikeTime(up[5] || 0) });
+export function gear(up, skinIndex = 0) {
+  const sk = SKINS[skinIndex] || SKINS[0];
+  return {
+    start: startSize(up[0]),
+    magnet: magnetRadius(up[2]) + (sk.magnetAdd || 0),
+    gunTime: gunTime(up[3] || 0) + (sk.weaponAdd || 0),
+    gunRate: gunRate(up[4] || 0),
+    spikeTime: spikeTime(up[5] || 0) + (sk.weaponAdd || 0),
+    skin: sk,
+  };
+}
 // снежки пушки «с собой» за ролик
 export const AD_AMMO = 40;
 export function upgradeText(index, k) {
@@ -38,23 +48,22 @@ export function upgradeText(index, k) {
 }
 
 export const SKINS = [
-  { id: "snow", name: "Снежок", price: 0 },
-  { id: "ice", name: "Ледышка", price: 500 },
-  { id: "candy", name: "Карамелька", price: 1200 },
-  { id: "orange", name: "Мандарин", price: 2500 },
-  { id: "disco", name: "Диско-шар", price: 4500 },
-  { id: "night", name: "Звёздная ночь", price: 7000 },
-  // за охоту: открываются победами над монстрами, а не снежинками
-  { id: "hunter", name: "Охотник на йети", price: 0, kills: 40 },
-  { id: "storm", name: "Буран", price: 0, kills: 120 },
+  { id: "snow", name: "Снежок", price: 0, perk: "Классический ком" },
+  { id: "ice", name: "Ледышка", price: 500, perk: "−20% урона от льда и камней", iceArmor: 0.8 },
+  { id: "candy", name: "Карамелька", price: 1200, perk: "+15% снега из сугробов", pileK: 1.15 },
+  { id: "orange", name: "Мандарин", price: 2500, perk: "Магнит шире на +0,8 м", magnetAdd: 0.8 },
+  { id: "disco", name: "Диско-шар", price: 4500, perk: "+15% снежинок за уровень", coinK: 1.15 },
+  { id: "night", name: "Звёздная ночь", price: 7000, perk: "Духи тянут вдвое слабее", spiritK: 0.5 },
+  { id: "hunter", name: "Охотник на йети", price: 0, kills: 40, perk: "+25% снега за монстров", crushK: 1.25 },
+  { id: "storm", name: "Буран", price: 0, kills: 120, perk: "Пушка и шипы на +1,5 с дольше", weaponAdd: 1.5 },
 ];
 export const skinOpen = (s, i) => !!(s.sk & (1 << i)) || (SKINS[i].kills && s.kl >= SKINS[i].kills);
 
 // Награда за уровень: снежинки × ступень финала × бонус, плюс за сам уровень, за босса — сверху
-export function levelReward(level, run, coinLevel) {
+export function levelReward(level, run, coinLevel, skinIndex = 0) {
   const base = 10 + 2 * level.n;
   const mult = Math.max(1, run.mult || 1);
-  const bonus = coinBonus(coinLevel);
+  const bonus = coinBonus(coinLevel) * (SKINS[skinIndex]?.coinK || 1);
   const boss = level.boss && run.bossDown ? 100 * (level.mountain + 1) : 0;
   const quest = level.quest && run.questDone ? level.quest.reward : 0;
   const total = Math.round(run.coins * mult * bonus) + base + boss + quest;

@@ -1,6 +1,6 @@
 // Эффекты «Снежного кома»: мягкие частицы (снежная пыль, блики, звёздочки, ударные кольца),
 // искры, комья снега, осколки льда и конфетти. Всё в пулах: на сцене три вызова отрисовки.
-import { T, TAU, rand, pick, V, hot, GEO } from "./kit.js?v=c359cce9";
+import { T, TAU, rand, pick, V, hot, GEO } from "./kit.js?v=27cfaaa2";
 
 export const GLOW = 0,
   PUFF = 1,
@@ -93,7 +93,9 @@ export function createFx(scene, quality = 1) {
     q.r1 = c1.r; q.g1 = c1.g; q.b1 = c1.b;
     q.a = alpha; q.kind = kind; q.rot = rand(0, TAU); q.spin = spin; q.drag = drag;
   }
+  let hadPuffs = false;
   function updatePuffs(dt) {
+    if (!alive && !hadPuffs) return;
     const pos = aPos.array, col = aCol.array, misc = aMisc.array;
     for (let i = 0; i < alive; ) {
       const q = cells[i];
@@ -116,6 +118,7 @@ export function createFx(scene, quality = 1) {
       i++;
     }
     geometry.instanceCount = alive;
+    hadPuffs = alive > 0;
     aPos.needsUpdate = aCol.needsUpdate = aMisc.needsUpdate = true;
   }
 
@@ -174,9 +177,11 @@ export function createFx(scene, quality = 1) {
 
   function update(dt) {
     updatePuffs(dt);
+    let sparkDirty = false;
     for (let i = 0; i < SPARKS; i++) {
       const s = sparks[i];
       if (s.life <= 0 && s.s === 0) continue;
+      sparkDirty = true;
       if (s.life > 0) {
         s.life -= dt;
         s.p.addScaledVector(s.v, dt);
@@ -191,10 +196,12 @@ export function createFx(scene, quality = 1) {
       dummy.updateMatrix();
       sparkMesh.setMatrixAt(i, dummy.matrix);
     }
-    sparkMesh.instanceMatrix.needsUpdate = true;
+    if (sparkDirty) sparkMesh.instanceMatrix.needsUpdate = true;
+    let chunkDirty = false;
     for (let i = 0; i < CHUNKS; i++) {
       const c = chunks[i];
       if (c.life <= 0 && c.max === 0) continue;
+      chunkDirty = true;
       if (c.life > 0) {
         c.life -= dt;
         c.v.y -= (c.flutter ? 5 : 22) * dt;
@@ -217,7 +224,7 @@ export function createFx(scene, quality = 1) {
       dummy.updateMatrix();
       chunkMesh.setMatrixAt(i, dummy.matrix);
     }
-    chunkMesh.instanceMatrix.needsUpdate = true;
+    if (chunkDirty) chunkMesh.instanceMatrix.needsUpdate = true;
   }
 
   function clear() {
