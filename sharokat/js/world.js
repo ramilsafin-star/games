@@ -1,6 +1,6 @@
 // Всё, что видно вокруг шара: небо, острова, облака, арки, препятствия, кристаллы, шар и эффекты
-import * as T from "../vendor/three/three.module.min.js?v=f9bbafb0";
-import { HALF, rng } from "./track.js?v=f9bbafb0";
+import * as T from "../vendor/three/three.module.min.js?v=3ef88df3";
+import { HALF, rng } from "./track.js?v=3ef88df3";
 
 const pie = Math.PI;
 export const R = 0.6; // радиус шара
@@ -376,18 +376,35 @@ function ocean(scene, center, y, theme) {
   return { update: (t) => (uniforms.time.value = t) };
 }
 // ---------- Город будущего: башни со светящимися окнами вокруг трассы ----------
+let towerWindowMat = null;
+function getTowerWindowMat() {
+  if (!towerWindowMat) {
+    const windows = canvasTexture(64, 128, (ctx) => {
+      ctx.fillStyle = "#000000";
+      ctx.fillRect(0, 0, 64, 128);
+      for (let y = 4; y < 128; y += 10)
+        for (let x = 4; x < 64; x += 10) {
+          const lit = ((x * 7 + y * 13) % 5) < 3;
+          ctx.fillStyle = lit ? ["#ffe08a", "#3fd6ff", "#ff8fd0"][(x + y) % 3] : "#1a1a33";
+          ctx.fillRect(x, y, 6, 6);
+        }
+    });
+    windows.wrapS = windows.wrapT = T.RepeatWrapping;
+    towerWindowMat = new T.MeshStandardMaterial({
+      map: windows,
+      emissiveMap: windows,
+      emissive: 0xffffff,
+      emissiveIntensity: 0.9,
+      roughness: 0.3,
+      metalness: 0.5,
+      color: "#5a5f8a",
+    });
+    towerWindowMat.userData.keep = true;
+  }
+  return towerWindowMat;
+}
+
 function towers(scene, track, ground) {
-  const windows = canvasTexture(64, 128, (ctx) => {
-    ctx.fillStyle = "#000000";
-    ctx.fillRect(0, 0, 64, 128);
-    for (let y = 4; y < 128; y += 10)
-      for (let x = 4; x < 64; x += 10) {
-        const lit = ((x * 7 + y * 13) % 5) < 3;
-        ctx.fillStyle = lit ? ["#ffe08a", "#3fd6ff", "#ff8fd0"][(x + y) % 3] : "#1a1a33";
-        ctx.fillRect(x, y, 6, 6);
-      }
-  });
-  windows.wrapS = windows.wrapT = T.RepeatWrapping;
   const rand = rng(97 + track.level);
   const spots = [];
   for (let s = 0; s < track.length; s += 9) {
@@ -400,7 +417,7 @@ function towers(scene, track, ground) {
       spots.push({ p, top, w: 4 + rand() * 6, d: 4 + rand() * 6 });
     }
   }
-  const look = new T.MeshStandardMaterial({ map: windows, emissiveMap: windows, emissive: 0xffffff, emissiveIntensity: 0.9, roughness: 0.3, metalness: 0.5, color: "#5a5f8a" });
+  const look = getTowerWindowMat();
   const mesh = new T.InstancedMesh(new T.BoxGeometry(1, 1, 1), look, spots.length);
   const cap = new T.InstancedMesh(new T.BoxGeometry(1, 1, 1), new T.MeshBasicMaterial({ color: "#ff6fb0" }), spots.length);
   const m = new T.Matrix4(),
@@ -449,6 +466,24 @@ export function trampolines(scene, track) {
 }
 
 // ---------- Арки: чекпойнты и финиш ----------
+let finishFlagMat = null;
+function getFinishFlagMat() {
+  if (!finishFlagMat) {
+    finishFlagMat = new T.MeshBasicMaterial({
+      side: T.DoubleSide,
+      map: canvasTexture(256, 64, (ctx) => {
+        for (let x = 0; x < 16; x++)
+          for (let y = 0; y < 4; y++) {
+            ctx.fillStyle = (x + y) % 2 ? "#1d1d2b" : "#ffffff";
+            ctx.fillRect(x * 16, y * 16, 16, 16);
+          }
+      }),
+    });
+    finishFlagMat.userData.keep = true;
+  }
+  return finishFlagMat;
+}
+
 export function gates(scene, track) {
   const list = [];
   for (const g of track.gates) {
@@ -466,19 +501,7 @@ export function gates(scene, track) {
     });
     if (big) {
       // Клетчатая лента «финиш» и связки шаров по бокам
-      const flag = new T.Mesh(
-        new T.PlaneGeometry(2 * r, 0.9),
-        new T.MeshBasicMaterial({
-          side: T.DoubleSide,
-          map: canvasTexture(256, 64, (ctx) => {
-            for (let x = 0; x < 16; x++)
-              for (let y = 0; y < 4; y++) {
-                ctx.fillStyle = (x + y) % 2 ? "#1d1d2b" : "#ffffff";
-                ctx.fillRect(x * 16, y * 16, 16, 16);
-              }
-          }),
-        }),
-      );
+      const flag = new T.Mesh(new T.PlaneGeometry(2 * r, 0.9), getFinishFlagMat());
       flag.position.y = r + 1.5;
       arch.add(flag);
       for (const side of [-1, 1])
@@ -948,28 +971,28 @@ export function ballMesh(scene, skin) {
 
 // ---------- Эффекты: след, искры, фейерверк ----------
 export function effects(scene) {
-  // След за шаром: цепочка светящихся бусин
   const trailCount = 16;
   const trail = new T.InstancedMesh(
     new T.SphereGeometry(R * 0.4, 12, 8),
-    new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3, depthWrite: false }),
+    new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, depthWrite: false }),
     trailCount,
   );
   trail.frustumCulled = false;
+  if (trail.instanceColor === null) trail.setColorAt(0, new T.Color(1, 1, 1));
   scene.add(trail);
-  const history = [];
-  // Искры: общий запас частиц на вспышки
+
+  const history = Array.from({ length: trailCount * 2 }, () => new T.Vector3());
+  let head = 0, filled = 0, trailAcc = 0;
+
   const sparkCount = 160;
   const sparks = new T.InstancedMesh(new T.OctahedronGeometry(0.13, 0), new T.MeshBasicMaterial({ color: 0xffffff }), sparkCount);
   sparks.frustumCulled = false;
   const pool = Array.from({ length: sparkCount }, () => ({ p: new T.Vector3(), v: new T.Vector3(), life: 0, max: 1 }));
-  const color = new T.Color(),
-    m = new T.Matrix4(),
-    q = new T.Quaternion(),
-    sc = new T.Vector3();
+  const color = new T.Color(), m = new T.Matrix4(), q = new T.Quaternion(), sc = new T.Vector3();
   for (let i = 0; i < sparkCount; i++) sparks.setColorAt(i, color.set(candy[i % candy.length]));
   scene.add(sparks);
   let next = 0;
+
   return {
     burst(at, count = 12, speed = 5, life = 0.7, up = 2) {
       for (let k = 0; k < count; k++) {
@@ -981,17 +1004,40 @@ export function effects(scene) {
         s.life = s.max = life * (0.7 + Math.random() * 0.5);
       }
     },
-    update(dt, ballPos, show, tint) {
-      history.unshift(ballPos.clone());
-      if (history.length > trailCount * 2) history.length = trailCount * 2;
-      trail.material.color.set(tint);
+    clear() {
+      filled = 0;
+      trailAcc = 0;
       for (let i = 0; i < trailCount; i++) {
-        const p = history[i * 2 + 2];
-        const k = 1 - i / trailCount;
-        m.compose(p || ballPos, q.identity(), sc.setScalar(show && p ? k * 0.9 : 0));
+        m.compose(history[0], q.identity(), sc.set(0, 0, 0));
         trail.setMatrixAt(i, m);
       }
       trail.instanceMatrix.needsUpdate = true;
+    },
+    update(dt, ballPos, show, tint, rainbow = false) {
+      trailAcc += dt;
+      while (trailAcc >= 0.025) {
+        trailAcc -= 0.025;
+        head = (head - 1 + history.length) % history.length;
+        history[head].copy(ballPos);
+        if (filled < history.length) filled++;
+      }
+      for (let i = 0; i < trailCount; i++) {
+        const idx = (head + i * 2) % history.length;
+        const p = history[idx];
+        const k = 1 - i / trailCount;
+        const visible = show && i * 2 < filled;
+        m.compose(p, q.identity(), sc.setScalar(visible ? k * 0.9 : 0));
+        trail.setMatrixAt(i, m);
+        if (rainbow) {
+          color.setHSL((i / trailCount + (head * 0.03)) % 1, 0.9, 0.6);
+          trail.setColorAt(i, color);
+        } else {
+          trail.setColorAt(i, color.set(tint));
+        }
+      }
+      trail.instanceMatrix.needsUpdate = true;
+      if (trail.instanceColor) trail.instanceColor.needsUpdate = true;
+
       for (let i = 0; i < sparkCount; i++) {
         const s = pool[i];
         if (s.life > 0) {

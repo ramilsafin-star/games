@@ -8,9 +8,9 @@
     <meta name="description" content="Шар катится по радужным горкам в небе: петли, прыжки, трубы и препятствия." />
     <link rel="icon" href="./icon-192.png" />
     <link rel="apple-touch-icon" href="./icon-180.png" />
-    <script src="./vendor/vk/vk-bridge.min.js?v=ed76b2be"></script>
-    <script src="./js/vk-host.js?v=ed76b2be" data-keys="sharokat-v1" data-ad-gap="120"></script>
-    <link rel="stylesheet" href="./style.css?v=ed76b2be" />
+    <script src="./vendor/vk/vk-bridge.min.js?v=9c3d98b1"></script>
+    <script src="./js/vk-host.js?v=9c3d98b1" data-keys="sharokat-v1" data-ad-gap="120"></script>
+    <link rel="stylesheet" href="./style.css?v=9c3d98b1" />
   </head>
   <body>
     <canvas id="game"></canvas>
@@ -29,7 +29,7 @@
         <small id="level-name"></small>
         <div class="progress"><i id="progress-fill"></i><b id="progress-ball"></b><span class="flag">🏁</span></div>
       </div>
-      <div class="gem-count"><span>💎</span><b id="gems">0</b></div>
+      <div class="gem-count"><span>💎</span><b id="gems">0</b><em id="combo" class="combo" hidden>×2</em></div>
     </div>
     <div id="ready" class="ready" hidden>
       <div class="swipe"><span>👆</span></div>
@@ -73,7 +73,7 @@
       <h2>Финиш!</h2>
       <div id="result-stars" class="stars"></div>
       <div class="result-gems">💎 <b id="result-gems"></b> <small>всего <b id="wallet-finish"></b></small></div>
-      <p id="unlocked" class="unlocked" hidden></p>
+      <button id="unlocked" class="unlocked" type="button" hidden></button>
       <div class="actions">
         <button id="to-menu" class="round big" aria-label="В меню">⌂</button>
         <button id="again" class="round big" aria-label="Ещё раз">↻</button>
@@ -81,8 +81,8 @@
       </div>
     </section>
     <div id="nogl" class="nogl" hidden>Для этой игры нужен браузер с 3D-графикой</div>
-    <script src="./js/audio.js?v=ed76b2be"></script>
-    <script type="module" src="./js/game.js?v=ed76b2be"></script>
-    <script src="./js/juice.js?v=ed76b2be"></script>
+    <script src="./js/audio.js?v=9c3d98b1"></script>
+    <script type="module" src="./js/game.js?v=9c3d98b1"></script>
+    <script src="./js/juice.js?v=9c3d98b1"></script>
   </body>
 </html>

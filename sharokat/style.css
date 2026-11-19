@@ -435,7 +435,7 @@ h1 em {
   background: #7cc8ff;
 }
 /* Узкий экран: панель уровня под кнопками звука, чтобы не наезжать на них */
-@media (max-width: 640px) {
+@media (max-width: 790px) {
   .hud {
     top: calc(max(10px, env(safe-area-inset-top)) + 56px);
     width: calc(100% - 24px);
@@ -598,4 +598,50 @@ h1 em {
 
 @media (prefers-reduced-motion: reduce) {
   .shop-open.ping { animation: none; }
+}
+
+/* Индикатор комбо */
+.combo {
+  display: inline-block;
+  font-style: normal;
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #ffd84a;
+  background: rgba(255, 120, 0, 0.4);
+  padding: 2px 6px;
+  border-radius: 999px;
+  margin-left: 6px;
+  box-shadow: 0 0 10px rgba(255, 180, 0, 0.6);
+  transform: scale(1);
+  transition: transform 0.15s ease-out;
+}
+.combo.pop {
+  transform: scale(1.35);
+}
+
+/* Кнопка нового шара на экране финиша */
+button.unlocked {
+  display: block;
+  margin: 12px auto 0;
+  padding: 8px 14px;
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.3), rgba(255, 105, 180, 0.3));
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 999px;
+  color: #fff;
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(255, 105, 180, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+button.unlocked:hover,
+button.unlocked:focus-visible {
+  transform: scale(1.04);
+  box-shadow: 0 6px 20px rgba(255, 105, 180, 0.55);
+}
+
+/* Подсветка текущего уровня в меню */
+.lvl.now {
+  box-shadow: 0 0 0 3px #ffffff, 0 6px 18px rgba(0, 0, 0, 0.35);
+  transform: scale(1.04);
 }

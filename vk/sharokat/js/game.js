@@ -1,15 +1,15 @@
 await window.vkGameHost?.ready;
 // «Шарокат»: шар катится по радужным горкам в небе. Здесь игровой цикл, физика шара, камера, меню.
-import * as T from "../vendor/three/three.module.min.js?v=ed76b2be";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=ed76b2be";
-import { Track, trackMesh, railLights, tubeMeshes, HALF } from "./track.js?v=ed76b2be";
-import { R, sky, scenery, supports, gates, boostPads, obstacles, trampolines, gemField, skins, skinMaterial, ballMesh, effects } from "./world.js?v=ed76b2be";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=ed76b2be";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=ed76b2be";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=ed76b2be";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=ed76b2be";
-import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=ed76b2be";
-import { themeFor } from "./themes.js?v=ed76b2be";
+import * as T from "../vendor/three/three.module.min.js?v=9c3d98b1";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=9c3d98b1";
+import { Track, trackMesh, railLights, tubeMeshes, HALF } from "./track.js?v=9c3d98b1";
+import { R, sky, scenery, supports, gates, boostPads, obstacles, trampolines, gemField, skins, skinMaterial, ballMesh, effects } from "./world.js?v=9c3d98b1";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=9c3d98b1";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=9c3d98b1";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=9c3d98b1";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=9c3d98b1";
+import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=9c3d98b1";
+import { themeFor } from "./themes.js?v=9c3d98b1";
 
 // 20 уровней: каждая из 10 тем встречается дважды
 const LEVELS = 20;
@@ -53,7 +53,10 @@ renderer.shadowMap.type = T.PCFSoftShadowMap;
 const scene = new T.Scene();
 scene.fog = new T.Fog(0xd8eeff, 170, 680);
 const pmrem = new T.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+const room = new RoomEnvironment();
+scene.environment = pmrem.fromScene(room, 0.04).texture;
+room.dispose();
+pmrem.dispose();
 scene.environmentIntensity = 0.55;
 const camera = new T.PerspectiveCamera(64, 1, 0.1, 900);
 const hemi = new T.HemisphereLight(0xffffff, 0xffd6e6, 1.25);
@@ -81,14 +84,20 @@ scene.add(landingShadow);
 // ---------- Уровень ----------
 let lvl = null,
   world = null;
-function disposeWorld() {
-  if (!world) return;
-  world.traverse((o) => {
+function disposeWorld(target = world) {
+  const g = target?.group || target;
+  if (!g) return;
+  g.traverse((o) => {
     if (o.geometry) o.geometry.dispose();
-    if (o.material && !o.material.userData.keep) o.material.dispose?.();
+    if (o.material) {
+      if (!o.material.userData?.keep) {
+        if (Array.isArray(o.material)) o.material.forEach((m) => { m.map?.dispose(); m.dispose(); });
+        else { o.material.map?.dispose(); o.material.dispose(); }
+      }
+    }
   });
-  scene.remove(world);
-  world = null;
+  scene.remove(g);
+  if (target === world || !target) world = null;
 }
 function loadLevel(n) {
   disposeWorld();
@@ -124,7 +133,28 @@ function loadLevel(n) {
   el("level-name").textContent = "Уровень " + (n + 1) + " · " + theme.name;
 }
 // ---------- Шар ----------
-const b = { s: 0, u: 0, uTarget: 0, v: 0, h: 0, vh: 0, knock: 0, boost: 0, checkpoint: 0, gems: 0, state: "menu", fallT: 0, grace: 0 };
+const b = {
+  s: 0,
+  u: 0,
+  uTarget: 0,
+  v: 0,
+  h: 0,
+  vh: 0,
+  knock: 0,
+  boost: 0,
+  checkpoint: 0,
+  gems: 0,
+  state: "menu",
+  fallT: 0,
+  grace: 0,
+  combo: 0,
+  comboT: 0,
+  hopCD: 0,
+  air: false,
+  get p() {
+    return ball.position;
+  },
+};
 const F = {},
   F2 = {},
   pos = new T.Vector3(),
@@ -135,12 +165,31 @@ function cruise() {
   return Math.min(15 + lvl.n * 0.5, 21);
 }
 function resetBall(s) {
-  Object.assign(b, { s, u: 0, uTarget: 0, v: s ? cruise() * 0.7 : 0, h: 0, vh: 0, knock: 0, boost: 0, fallT: 0, grace: 0.8, flying: false });
+  Object.assign(b, {
+    s,
+    u: 0,
+    uTarget: 0,
+    v: s ? cruise() * 0.7 : 0,
+    h: 0,
+    vh: 0,
+    knock: 0,
+    boost: 0,
+    fallT: 0,
+    grace: 0.8,
+    flying: false,
+    air: false,
+    combo: 0,
+    comboT: 0,
+    hopCD: 0,
+  });
   hitCooldown.clear();
   if (!s) {
     b.checkpoint = 0;
     b.gems = 0;
   }
+  el("combo").hidden = true;
+  fx?.clear();
+  el("speed")?.classList.remove("on");
   ballPosition();
   snapCamera = true;
 }
@@ -173,6 +222,11 @@ function respawn() {
     }
   resetBall(from + 3);
   b.gems = keep - back;
+  b.combo = 0;
+  b.comboT = 0;
+  b.hopCD = 0;
+  el("combo").hidden = true;
+  fx.clear();
   el("gems").textContent = b.gems;
   b.state = "play";
   Sound.poof();
@@ -180,12 +234,47 @@ function respawn() {
 }
 function collect(g) {
   g.taken = true;
-  b.gems++;
-  Sound.gem();
-  fx.burst(g.pos, 8, 4, 0.5, 1.5);
+  if (g.mesh && world) world.remove(g.mesh);
+  b.combo++;
+  b.comboT = 3.2; // 3.2 секунды на следующий кристалл
+  const hot = b.combo >= 8;
+  const comboEl = el("combo");
+  if (comboEl) {
+    comboEl.hidden = !hot;
+    if (hot) {
+      comboEl.classList.remove("pop");
+      void comboEl.offsetWidth;
+      comboEl.classList.add("pop");
+      setTimeout(() => comboEl.classList.remove("pop"), 200);
+    }
+  }
+
+  const gain = hot ? 2 : 1;
+  b.gems += gain;
+  Sound.gem(b.combo);
+  fx.burst(ball.position, hot ? 18 : 10, hot ? 7 : 4, 0.6);
   el("gems").textContent = b.gems;
 }
+function hop() {
+  if (b.state !== "play" || b.hopCD > 0) return;
+  // Прыжок запрещён в свободном полёте и внутри трубы
+  if (F.air || F.tube || b.flying) return;
+  b.vh = 7.8;
+  b.h = Math.max(b.h, 0.02);
+  b.air = true;
+  b.hopCD = 2.2; // 2.2 секунды кулдаун
+  Sound.jump?.();
+  fx.burst(ball.position, 8, 3, 0.4, 1);
+}
 function step(dt) {
+  if (b.hopCD > 0) b.hopCD -= dt;
+  if (b.comboT > 0) {
+    b.comboT -= dt;
+    if (b.comboT <= 0) {
+      b.combo = 0;
+      el("combo").hidden = true;
+    }
+  }
   const tr = lvl.track;
   const before = b.s;
   const left = keys.has("arrowleft") || keys.has("a") || keys.has("ф");
@@ -216,7 +305,7 @@ function step(dt) {
   // Дыра под шаром: если он катится по дорожке (не в прыжке), проваливается
   if (F.gaps && !F.air && b.h < 0.05 && F.gaps.some(([g0, g1]) => b.u > g0 + R * 0.5 && b.u < g1 - R * 0.5)) return startFall(true);
   else b.uTarget = clamp(b.uTarget, -F.half - 1.2, F.half + 1.2);
-  // Подскок после удара
+  // Подскок после удара / прыжка
   if (b.h > 0 || b.vh > 0) {
     b.vh -= 26 * dt;
     b.h += b.vh * dt;
@@ -224,6 +313,7 @@ function step(dt) {
       if (b.vh < -4) Sound.land();
       b.h = 0;
       b.vh = 0;
+      b.air = false;
     }
   }
   // Влетел в прыжок / приземлился
@@ -240,9 +330,11 @@ function step(dt) {
   // Качение: поворот вокруг оси «вправо» на пройденный путь
   ball.rotateOnWorldAxis(F.r, -(b.v * dt) / R);
   ball.rotateOnWorldAxis(F.f, ((b.uTarget - b.u) * dt * 3) / R);
-  // Кристаллы рядом
-  // Кристаллы крупные, поэтому и ловятся щедро
-  for (const g of tr.gems) if (!g.taken && Math.abs(g.s - b.s) < 3 && g.pos.distanceToSquared(pos) < 1.7) collect(g);
+  // Кристаллы рядом: радиус притяжения увеличивается в комбо-режиме
+  const pickupRadius = b.combo >= 8 ? 2.8 : 1.3;
+  const pickupRadiusSq = pickupRadius * pickupRadius;
+  for (const g of tr.gems)
+    if (!g.taken && Math.abs(g.s - b.s) < 4 && g.pos.distanceToSquared(pos) < pickupRadiusSq) collect(g);
   // Батуты: подбрасывают шар, в воздухе дуга кристаллов
   for (const pad of tr.pads)
     if (before < pad.s && b.s >= pad.s && b.h <= 0.45 && b.vh <= 0) {
@@ -262,8 +354,6 @@ function step(dt) {
       b.boost = 1.7;
       Sound.boost();
       fovKick = 1;
-      if (!calm.matches) el("speed").classList.add("on");
-      setTimeout(() => el("speed").classList.remove("on"), 1400);
     }
   // Чекпойнты
   for (const c of tr.checkpoints)
@@ -284,6 +374,9 @@ function step(dt) {
     b.knock = hit.push;
     b.v *= hit.slow;
     b.vh = Math.max(b.vh, hit.hop);
+    b.combo = 0;
+    b.comboT = 0;
+    el("combo").hidden = true;
     shake = hit.boing ? 0.2 : 0.45;
     if (hit.boing) Sound.boing();
     else Sound.bump();
@@ -351,6 +444,7 @@ function aim(dt) {
 // ---------- Финиш ----------
 let finishT = -1, finishTimer;
 let pausedState = null;
+let needsRender = false;
 function pause() {
   if (!["ready", "play", "fall"].includes(b.state)) return;
   pausedState = b.state;
@@ -358,12 +452,15 @@ function pause() {
   keys.clear();
   drag = null;
   Sound.roll(0, false);
+  Music.setPaused(true);
+  needsRender = true;
   show("pause");
 }
 function resume() {
   if (!pausedState) return;
   b.state = pausedState;
   pausedState = null;
+  Music.setPaused(false);
   show(b.state === "ready" ? "ready" : "play");
 }
 function finishLevel() {
@@ -386,8 +483,17 @@ function finishLevel() {
     el("result-stars").innerHTML = [1, 2, 3].map((k) => '<span class="' + (k <= stars ? "on" : "") + '">★</span>').join("");
     el("result-gems").textContent = "+" + earned;
     el("next").hidden = lvl.n + 1 >= LEVELS;
-    el("unlocked").hidden = !fresh.length;
-    if (fresh.length) el("unlocked").textContent = "Хватает на новый шар: " + fresh[0].name + "!";
+    const btn = el("unlocked");
+    if (fresh.length) {
+      btn.hidden = false;
+      btn.textContent = `Разблокирован новый шар: ${fresh[0].name}! Нажми, чтобы примерить ✨`;
+      btn.onclick = () => {
+        toMenu();
+        openShop(fresh[0].id);
+      };
+    } else {
+      btn.hidden = true;
+    }
     el("wallet-finish").textContent = save.gems;
     show("finish");
   }, 1600);
@@ -398,7 +504,14 @@ function frame(ms) {
   if (document.hidden) { last = 0; return; }
   const dt = last ? clamp((ms - last) / 1000, 0, 1 / 20) : 0;
   last = ms;
-  if (b.state === "paused") return;
+  if (b.state === "paused") {
+    if (needsRender) {
+      if (glow.on) composer.render();
+      else renderer.render(scene, camera);
+      needsRender = false;
+    }
+    return;
+  }
   clock += dt;
   if (lvl) {
     if (b.state === "play") {
@@ -445,7 +558,10 @@ function frame(ms) {
     heaven.follow(camera.position);
     sun.position.copy(ball.position).add(new T.Vector3(-14, 30, 10));
     sun.target.position.copy(ball.position);
-    fx.update(dt, ball.position, b.state === "play" || b.state === "finish", trailTint());
+    const rainbowTrail = b.combo >= 8 || save.skin === "rainbow";
+    fx.update(dt, ball.position, b.state === "play" || b.state === "finish", trailTint(), rainbowTrail);
+    if (!calm.matches) el("speed").classList.toggle("on", b.boost > 0.3);
+    else el("speed").classList.remove("on");
     // Полоска прогресса
     const share = clamp(b.s / lvl.track.finishAt, 0, 1);
     el("progress-fill").style.width = share * 100 + "%";
@@ -506,16 +622,21 @@ function resize() {
   bloom.resolution.set(w / 2, h / 2);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
+  needsRender = true;
 }
 new ResizeObserver(resize).observe(canvas);
 
 // ---------- Управление ----------
 let drag = null;
+let lastTap = 0;
 canvas.addEventListener("pointerdown", (e) => {
   if (!e.isPrimary) return;
   unlock();
   drag = { id: e.pointerId, x: e.clientX };
   canvas.setPointerCapture(e.pointerId);
+  const now = performance.now();
+  if (now - lastTap < 280) hop();
+  lastTap = now;
   if (b.state === "ready") go();
 });
 canvas.addEventListener("pointermove", (e) => {
@@ -530,6 +651,7 @@ const endDrag = (e) => {
 };
 canvas.addEventListener("pointerup", endDrag);
 canvas.addEventListener("pointercancel", endDrag);
+canvas.addEventListener("lostpointercapture", endDrag);
 const keys = new Set();
 addEventListener("keydown", (e) => {
   keys.add(e.key.toLowerCase());
@@ -537,6 +659,13 @@ addEventListener("keydown", (e) => {
   if ((e.key === " " || e.key === "Enter") && b.state === "ready") {
     e.preventDefault();
     go();
+    return;
+  }
+  if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW" || e.key === "ArrowUp" || e.key === "w" || e.key === "W" || e.key === "ц" || e.key === "Ц") {
+    if (b.state === "play") {
+      e.preventDefault();
+      hop();
+    }
   }
 });
 addEventListener("keydown", (e) => {
@@ -568,6 +697,7 @@ function flash(text) {
 function startLevel(n) {
   clearTimeout(finishTimer);
   pausedState = null;
+  Music.setPaused(false);
   unlock();
   loadLevel(n);
   b.state = "ready";
@@ -584,6 +714,7 @@ function go() {
 function toMenu() {
   clearTimeout(finishTimer);
   pausedState = null;
+  Music.setPaused(false);
   b.state = "menu";
   if (!lvl || lvl.n !== Math.min(save.open, LEVELS) - 1) loadLevel(Math.min(save.open, LEVELS) - 1);
   b.state = "menu";
@@ -596,9 +727,10 @@ function menu() {
   el("levels").innerHTML = Array.from({ length: LEVELS }, (_, i) => {
     const open = i < save.open,
       stars = save.stars[i] || 0,
-      theme = themeFor(i);
+      theme = themeFor(i),
+      isNow = (lvl ? lvl.n : Math.min(save.open, LEVELS) - 1) === i;
     return (
-      '<button class="lvl' + (open ? "" : " locked") + '" data-level="' + i + '"' + (open ? "" : " disabled") +
+      '<button class="lvl' + (open ? "" : " locked") + (isNow ? " now" : "") + '" data-level="' + i + '"' + (open ? "" : " disabled") +
       ' style="--theme:' + theme.ui + '" aria-label="Уровень ' + (i + 1) + ", " + theme.name + '">' +
       "<b>" + (open ? i + 1 : "🔒") + "</b><small>" + (open ? "★".repeat(stars) + "☆".repeat(3 - stars) : "") + "</small></button>"
     );
@@ -654,14 +786,15 @@ function shop() {
     })
     .join("");
 }
-el("shop-open").onclick = () => {
+function openShop(skinId = save.skin) {
   unlock();
   Sound.tick();
   shop();
-  showSkin(save.skin);
+  showSkin(skinId);
   el("shop-note").textContent = "";
   el("shop").hidden = false;
-};
+}
+el("shop-open").onclick = () => openShop(save.skin);
 el("shop-close").onclick = () => {
   el("shop").hidden = true;
   menu();
@@ -725,6 +858,8 @@ function soundButtons() {
   el("music").classList.toggle("off", !save.music);
   el("sound").setAttribute("aria-label", save.sound ? "Выключить звук" : "Включить звук");
   el("music").setAttribute("aria-label", save.music ? "Выключить музыку" : "Включить музыку");
+  el("sound").setAttribute("aria-pressed", String(save.sound));
+  el("music").setAttribute("aria-pressed", String(save.music));
 }
 el("sound").onclick = () => {
   save.sound = !save.sound;

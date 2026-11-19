@@ -208,6 +208,11 @@ Object.assign(Sound, {
     this.tone({ type: "sine", f0: 200, f1: 700, dur: 0.14, vol: 0.3 });
     this.tone({ type: "sine", f0: 700, f1: 260, dur: 0.25, vol: 0.22, at: 0.12 });
   },
+  jump() {
+    if (!this.ready()) return;
+    this.tone({ type: "sine", f0: 240, f1: 520, dur: 0.12, vol: 0.26 });
+    this.noise({ f0: 1800, dur: 0.04, vol: 0.08, filter: "highpass" });
+  },
   whee() {
     if (!this.ready()) return;
     this.tone({ type: "sine", f0: 500, f1: 1400, dur: 0.4, vol: 0.14 });
@@ -373,5 +378,12 @@ const Music = {
     g.cancelScheduledValues(now);
     g.setTargetAtTime(this.level * depth, now, 0.05);
     g.setTargetAtTime(this.level, now + seconds, 0.35);
+  },
+  setPaused(on) {
+    if (!this.bus || !Sound.ctx) return;
+    const g = this.bus.gain,
+      now = Sound.ctx.currentTime;
+    g.cancelScheduledValues(now);
+    g.setTargetAtTime(this.level * (on ? 0.22 : 1), now, 0.08);
   },
 };
