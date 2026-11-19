@@ -250,10 +250,10 @@ const GAMES = [
   },
   {
     id: "steel-derby",
-    title: "Стальной Дерби: Чёрный Карнавал · 12+",
+    title: "Стальной Дерби: Twisted Metal · 12+",
     url: "steel-derby/",
     cover: "covers/rubezh-v2.jpg",
-    description: "Боевые машины, броня, дрифт и ракеты в стиле Twisted Metal: Чёрный Карнавал. 8 машин, турнир и боссы!",
+    description: "Боевые машины, броня, дрифт и ракеты в стиле Twisted Metal. Сразись с боссом Сладкоежкой!",
     color: "#ea580c",
   },
 ];
