@@ -6,16 +6,16 @@
 // На 3-й, 8-й, 13-й… волне — бонусный «Метеорный поток»; на каждой десятой вместо флагмана — Улей.
 // Позже приходят минёры (сбрасывают мины) и щитоносцы (закрывают соседей щитом).
 // Между боями: ангар (постоянные улучшения за кристаллы), задания, «Бой дня» с серией дней.
-import { T, TAU, rand, pick, clamp, V, hot, metal, lit, GEO, part, at, flare, removeModel, readStorage, writeStorage } from "./kit.js?v=ab118089";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=ab118089";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=ab118089";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=ab118089";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=ab118089";
-import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=ab118089";
-import { buildSpace, SUN_DIR } from "./space.js?v=ab118089";
-import { createFx, tone, GLOW, SMOKE, RING, STAR } from "./fx.js?v=ab118089";
-import { MODEL, buildGuns, buildDrone } from "./models.js?v=ab118089";
-import { Sound } from "./sound.js?v=ab118089";
+import { T, TAU, rand, pick, clamp, V, hot, metal, lit, GEO, part, at, flare, removeModel, readStorage, writeStorage } from "./kit.js?v=37c8089d";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=37c8089d";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=37c8089d";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=37c8089d";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=37c8089d";
+import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=37c8089d";
+import { buildSpace, SUN_DIR } from "./space.js?v=37c8089d";
+import { createFx, tone, GLOW, SMOKE, RING, STAR } from "./fx.js?v=37c8089d";
+import { MODEL, buildGuns, buildDrone } from "./models.js?v=37c8089d";
+import { Sound } from "./sound.js?v=37c8089d";
 
 const el = (id) => document.getElementById(id);
 const SAVE = "strazh_save";

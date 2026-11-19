@@ -1,12 +1,12 @@
 // Сцена «Вихря»: игрушечная карта, предметы пачками, вихри, частицы, камера и пьедестал.
 // Правила (rules.js) ничего не знают о графике: сцена только читает их состояние.
-import { T, TAU, clamp, lerp, smooth, PRIM, Shape, canvasTexture } from "./kit.js?v=935ab875";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=935ab875";
-import { modelOf, PAINTS, decorTree } from "./models.js?v=935ab875";
-import { Particles } from "./fx.js?v=935ab875";
-import { MAPS, POWERS } from "./rules.js?v=935ab875";
-import { TRAILS } from "./economy.js?v=935ab875";
-import { Post, skyMaterial, cloudShadows, StormWall, PowerOrbs, Waves, Halos, bossFace } from "./extras.js?v=935ab875";
+import { T, TAU, clamp, lerp, smooth, PRIM, Shape, canvasTexture } from "./kit.js?v=b0d73a34";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=b0d73a34";
+import { modelOf, PAINTS, decorTree } from "./models.js?v=b0d73a34";
+import { Particles } from "./fx.js?v=b0d73a34";
+import { MAPS, POWERS } from "./rules.js?v=b0d73a34";
+import { TRAILS } from "./economy.js?v=b0d73a34";
+import { Post, skyMaterial, cloudShadows, StormWall, PowerOrbs, Waves, Halos, bossFace } from "./extras.js?v=b0d73a34";
 
 // Сочность бледных цветов и мягкий контраст прямо в шейдерах (без отдельного прохода).
 // Только при выводе прямо на экран (TONE_MAPPING): с постобработкой то же делает последний проход.

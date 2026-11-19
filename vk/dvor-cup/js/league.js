@@ -1,6 +1,6 @@
 // «Лига двора»: три кубка с соперниками-характерами и испытаниями, монетки, раздевалка (мячи, форма,
 // украшения двора), награды-значки и сохранение. Без графики — проверяется tests/league.mjs.
-import { TRIALS } from "./match.js?v=aaeea594";
+import { TRIALS } from "./match.js?v=f4633125";
 
 // Все футболисты. Котик и Коала открываются победой в кубке (номер кубка — в LOCKED)
 export const HEROES = ["fox", "raccoon", "bunny", "bear", "frog", "panda", "cat", "koala"];

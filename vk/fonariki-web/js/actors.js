@@ -1,8 +1,8 @@
 // Персонажи и тени. Игрок — ребёнок в жёлтом дождевике с фонарём и банкой за спиной;
 // помощники — лисёнок, зайка и медвежонок. Тени — тёмные дымки со светящимися глазами.
-import { T, TAU, hot, lerp, damp, clamp, GLSL_NOISE } from "./kit.js?v=6e619b94";
-import { rimmed, U } from "./world.js?v=6e619b94";
-import { kindOf } from "./config.js?v=6e619b94";
+import { T, TAU, hot, lerp, damp, clamp, GLSL_NOISE } from "./kit.js?v=bd68ed13";
+import { rimmed, U } from "./world.js?v=bd68ed13";
+import { kindOf } from "./config.js?v=bd68ed13";
 
 const std = (color, rim = "#8a96ff", strength = 0.5) => rimmed(new T.MeshStandardMaterial({ color, roughness: 0.72, metalness: 0 }), rim, 2.4, strength);
 const basic = (color, k = 1) => new T.MeshBasicMaterial({ color: hot(color, k) });

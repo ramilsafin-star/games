@@ -1,5 +1,5 @@
 // Запуск: если модули не загрузились, вместо вечной крутилки — понятная надпись.
-import("./main.js?v=8fd75fe1").catch((error) => {
+import("./main.js?v=c801a85e").catch((error) => {
   const box = document.getElementById("loading");
   if (box) {
     box.classList.add("failed");

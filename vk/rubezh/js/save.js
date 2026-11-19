@@ -1,7 +1,7 @@
 // Профиль игрока «Рубежа»: сохранение (ключ rubezh-v1, меньше 4000 байт), покупки, итоги заданий,
 // звёзды, звание и достижения. Без графики — проверяется в tests/sim.mjs.
-import { WEAPONS, GUNS, PRIMARY, SECONDARY, UPGRADES, UPGRADE_IDS, upgradePrice, GRENADES, GRENADE_IDS, GEAR, KITS, KIT_IDS, ECON, DIFFICULTY, ACHIEVEMENTS, rankOf } from "./data.js?v=76993ec7";
-import { MISSIONS } from "./missions.js?v=76993ec7";
+import { WEAPONS, GUNS, PRIMARY, SECONDARY, UPGRADES, UPGRADE_IDS, upgradePrice, GRENADES, GRENADE_IDS, GEAR, KITS, KIT_IDS, ECON, DIFFICULTY, ACHIEVEMENTS, rankOf } from "./data.js?v=df736523";
+import { MISSIONS } from "./missions.js?v=df736523";
 
 export const SAVE_KEY = "rubezh-v1";
 const N = MISSIONS.length;

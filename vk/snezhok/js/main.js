@@ -1,13 +1,13 @@
 // «Снежный ком»: экраны, управление, звук, сохранение, реклама VK и главный цикл.
-import { HALF, radiusOf, gateLabel, START } from "./rules.js?v=3cff0128";
-import { buildLevel, LEVEL_COUNT, MOUNTAINS, PER_MOUNTAIN, INTRO, FOE_INTRO, QUEST_TEXT, mountainOf } from "./levels.js?v=3cff0128";
-import { Run } from "./run.js?v=3cff0128";
-import { makePilot } from "./pilot.js?v=3cff0128";
-import { SAVE_KEY, UPGRADES, SKINS, upgradeCost, upgradeText, levelReward, readSave, writeSave, setBest, bestOf, gear, skinOpen, AD_AMMO } from "./economy.js?v=3cff0128";
-import { readStorage, writeStorage } from "./kit.js?v=3cff0128";
-import { Sound } from "./sound.js?v=3cff0128";
-import { SnowView, TIERS } from "./view.js?v=3cff0128";
-import { FOE_ICONS, CONFETTI } from "./icons.js?v=3cff0128";
+import { HALF, radiusOf, gateLabel, START } from "./rules.js?v=0b3b8087";
+import { buildLevel, LEVEL_COUNT, MOUNTAINS, PER_MOUNTAIN, INTRO, FOE_INTRO, QUEST_TEXT, mountainOf } from "./levels.js?v=0b3b8087";
+import { Run } from "./run.js?v=0b3b8087";
+import { makePilot } from "./pilot.js?v=0b3b8087";
+import { SAVE_KEY, UPGRADES, SKINS, upgradeCost, upgradeText, levelReward, readSave, writeSave, setBest, bestOf, gear, skinOpen, AD_AMMO } from "./economy.js?v=0b3b8087";
+import { readStorage, writeStorage } from "./kit.js?v=0b3b8087";
+import { Sound } from "./sound.js?v=0b3b8087";
+import { SnowView, TIERS } from "./view.js?v=0b3b8087";
+import { FOE_ICONS, CONFETTI } from "./icons.js?v=0b3b8087";
 
 const $ = (name) => document.getElementById(name);
 const host = () => window.vkGameHost;

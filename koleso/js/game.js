@@ -1,9 +1,9 @@
 // «Колесо огоньков»: колесо обозрения крутится, енотик Фоня бросает огоньки снизу.
 // Нажатие — огонёк летит 0,18 с и садится на обод внизу. Занято рядом — отскок, место встречи видно.
 // Все огоньки на колесе — колесо и парк загораются. Логика — wheel.js (tests/wheel.mjs), уровни — levels.js.
-import { World, LIGHTS } from "./world.js?v=512c1717";
-import { LEVELS } from "./levels.js?v=512c1717";
-import { Wheel } from "./wheel.js?v=512c1717";
+import { World, LIGHTS } from "./world.js?v=8c79cf94";
+import { LEVELS } from "./levels.js?v=8c79cf94";
+import { Wheel } from "./wheel.js?v=8c79cf94";
 
 const el = (id) => document.getElementById(id);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

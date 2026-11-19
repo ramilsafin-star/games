@@ -1,8 +1,8 @@
 // Отрисовка уровня: фон главы, земля (кэш в отдельном холсте), линии, герои, опасности, частицы.
-import { W, H, LINE_VIEW, HERO_R, WALKER_R, BERRY_R, HOUSE_R } from "./world.js?v=8fd75fe1";
-import { patrolAt } from "./sim.js?v=8fd75fe1";
-import { rng, dist, cumLengths, pathAt } from "./geom.js?v=8fd75fe1";
-import * as A from "./art.js?v=8fd75fe1";
+import { W, H, LINE_VIEW, HERO_R, WALKER_R, BERRY_R, HOUSE_R } from "./world.js?v=c801a85e";
+import { patrolAt } from "./sim.js?v=c801a85e";
+import { rng, dist, cumLengths, pathAt } from "./geom.js?v=c801a85e";
+import * as A from "./art.js?v=c801a85e";
 
 const { ellipse, TAU } = A;
 

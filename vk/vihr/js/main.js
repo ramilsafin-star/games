@@ -1,12 +1,12 @@
 // «Вихрь»: экраны, управление, раунд, магазин, звук и связь с VK.
-import { MAPS, Round, SKILL_NAMES, POWERS, BOSS_TIME, GOLD_TIME } from "./rules.js?v=935ab875";
-import { View, QUALITY_NAMES } from "./view.js?v=935ab875";
-import { Sound } from "./sound.js?v=935ab875";
-import { readStorage, writeStorage } from "./kit.js?v=935ab875";
+import { MAPS, Round, SKILL_NAMES, POWERS, BOSS_TIME, GOLD_TIME } from "./rules.js?v=b0d73a34";
+import { View, QUALITY_NAMES } from "./view.js?v=b0d73a34";
+import { Sound } from "./sound.js?v=b0d73a34";
+import { readStorage, writeStorage } from "./kit.js?v=b0d73a34";
 import {
   SAVE_KEY, cleanSave, UPGRADES, SKINS, TRAILS, BOTS, upgradeEffects, upgradePrice, buyUpgrade, buyItem, applyResult, progress,
   missionState, today, BOSS_COINS,
-} from "./economy.js?v=935ab875";
+} from "./economy.js?v=b0d73a34";
 
 const id = (name) => document.getElementById(name);
 const host = () => window.vkGameHost;

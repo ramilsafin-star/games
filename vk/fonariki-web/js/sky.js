@@ -1,6 +1,6 @@
 // Небо одним шейдером: ночной градиент с лиловым краем, звёзды с мерцанием, Млечный путь,
 // луна с ореолом, тонкие облака; на рассвете — персиковый горизонт, солнце, звёзды гаснут.
-import { T, GLSL_NOISE } from "./kit.js?v=6e619b94";
+import { T, GLSL_NOISE } from "./kit.js?v=bd68ed13";
 
 export const MOON_DIR = new T.Vector3(-0.55, 0.42, -0.72).normalize();
 export const SUN_DIR = new T.Vector3(0.75, 0.03, 0.66).normalize();

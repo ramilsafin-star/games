@@ -1,19 +1,19 @@
 // «Фонарики до рассвета»: сцена, камера, экраны, интерфейс, звук и связь с VK.
 // Правила забега — rules.js, помощники — ai.js, сохранение — save.js.
-import { T, TAU, clamp, lerp, damp, hot, readStorage, writeStorage, rand } from "./kit.js?v=6e619b94";
-import * as C from "./config.js?v=6e619b94";
-import { buildLayout } from "./layout.js?v=6e619b94";
-import { Run } from "./rules.js?v=6e619b94";
-import { autopilot } from "./ai.js?v=6e619b94";
-import * as S from "./save.js?v=6e619b94";
-import { t, setLang, getLang, fireflyName, KINDS } from "./lang.js?v=6e619b94";
-import { Renderer, LEVELS, guessLevel } from "./post.js?v=6e619b94";
-import { makeSky, MOON_DIR, SUN_DIR } from "./sky.js?v=6e619b94";
-import { buildWorld, U } from "./world.js?v=6e619b94";
-import { makeCharacter, makeShadow } from "./actors.js?v=6e619b94";
-import { Glows, GroundGlows, Particles, makeFlame, makeBeams } from "./fx.js?v=6e619b94";
-import { Sound } from "./sound.js?v=6e619b94";
-import { Input } from "./input.js?v=6e619b94";
+import { T, TAU, clamp, lerp, damp, hot, readStorage, writeStorage, rand } from "./kit.js?v=bd68ed13";
+import * as C from "./config.js?v=bd68ed13";
+import { buildLayout } from "./layout.js?v=bd68ed13";
+import { Run } from "./rules.js?v=bd68ed13";
+import { autopilot } from "./ai.js?v=bd68ed13";
+import * as S from "./save.js?v=bd68ed13";
+import { t, setLang, getLang, fireflyName, KINDS } from "./lang.js?v=bd68ed13";
+import { Renderer, LEVELS, guessLevel } from "./post.js?v=bd68ed13";
+import { makeSky, MOON_DIR, SUN_DIR } from "./sky.js?v=bd68ed13";
+import { buildWorld, U } from "./world.js?v=bd68ed13";
+import { makeCharacter, makeShadow } from "./actors.js?v=bd68ed13";
+import { Glows, GroundGlows, Particles, makeFlame, makeBeams } from "./fx.js?v=bd68ed13";
+import { Sound } from "./sound.js?v=bd68ed13";
+import { Input } from "./input.js?v=bd68ed13";
 
 const $ = (id) => document.getElementById(id);
 const host = () => window.vkGameHost;

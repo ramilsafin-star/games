@@ -1,17 +1,17 @@
 // Сцена «Маяка»: ночная бухта-диорама. Правила живут в rules.js, здесь только картинка.
 // Координаты правил (x вправо, z от берега в море) в сцене становятся (x, 0, −z): камера стоит над берегом и смотрит в море.
-import * as T from "../vendor/three/three.module.min.js?v=cd4dd037";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=cd4dd037";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=cd4dd037";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=cd4dd037";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=cd4dd037";
-import { makeSky, makeSea, makeFoam, makeDecals } from "./sea.js?v=cd4dd037";
-import { Particles, Marks, DOT, BUBBLE, SPARK, PUFF, STREAK, RAIN, MARK_ASK, MARK_ALARM, MARK_GRAB } from "./fx.js?v=cd4dd037";
+import * as T from "../vendor/three/three.module.min.js?v=95310c01";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=95310c01";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=95310c01";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=95310c01";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=95310c01";
+import { makeSky, makeSea, makeFoam, makeDecals } from "./sea.js?v=95310c01";
+import { Particles, Marks, DOT, BUBBLE, SPARK, PUFF, STREAK, RAIN, MARK_ASK, MARK_ALARM, MARK_GRAB } from "./fx.js?v=95310c01";
 import {
   BOAT_LOOK, LAMP_Y, SHARED, bellGeometry, boatGeometry, harborGeometry, lifeRingGeometry, lighthouseGeometry,
   reefGeometry, shadeBodyGeometry, shadeMaterial, shoreGeometry, toyMaterial, whaleGeometry, findGeometry,
-} from "./models.js?v=cd4dd037";
-import { BOATS, SHADES, BUOY_R, WHALE } from "./rules.js?v=cd4dd037";
+} from "./models.js?v=95310c01";
+import { BOATS, SHADES, BUOY_R, WHALE } from "./rules.js?v=95310c01";
 
 // Уровни графики: 0 — низкий (без свечения, мелкая картинка, мало капель), 1 — средний, 2 — высокий
 const LEVELS = [

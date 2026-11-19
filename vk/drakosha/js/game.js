@@ -1,9 +1,9 @@
 await window.vkGameHost?.ready;
 // «Почта Дракоши»: на письме стёрлось слово — угадывай буквы, пока не улетели четыре марки.
 // Правила — rules.js (проверяются tests/rules.mjs), 3D — world.js, слова и картинки — words.js.
-import { World } from "./world.js?v=ea8eb052";
-import { CARDS, THEMES } from "./words.js?v=ea8eb052";
-import { Round, Deck, ALPHABET, STAMPS } from "./rules.js?v=ea8eb052";
+import { World } from "./world.js?v=fca5c80f";
+import { CARDS, THEMES } from "./words.js?v=fca5c80f";
+import { Round, Deck, ALPHABET, STAMPS } from "./rules.js?v=fca5c80f";
 
 const el = (id) => document.getElementById(id);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

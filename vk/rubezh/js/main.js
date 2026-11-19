@@ -1,15 +1,16 @@
 // «Рубеж: Железный бунт» — экраны, ход задания по раундам, магазин, «Схватка», задание дня, связь с VK.
-import { WEAPONS, PRIMARY, SECONDARY, GUNS, UPGRADES, UPGRADE_IDS, upgradePrice, GRENADES, GRENADE_IDS, GEAR, KITS, KIT_IDS, DIFFICULTY, ECON, ACHIEVEMENTS, DAILY_MODS, rankOf, ROBOTS } from "./data.js?v=76993ec7";
-import { MISSIONS, TIMES } from "./missions.js?v=76993ec7";
-import { MAP_INFO, MAP_IDS, getMap } from "./maps.js?v=76993ec7";
-import { Game, trainingMission, weaponStats } from "./sim.js?v=76993ec7";
-import { Autopilot, applyLook } from "./bot.js?v=76993ec7";
-import * as S from "./save.js?v=76993ec7";
-import { View, QUALITY, detectTier } from "./view.js?v=76993ec7";
-import { Hud } from "./hud.js?v=76993ec7";
-import { Input } from "./input.js?v=76993ec7";
-import { Sound } from "./sound.js?v=76993ec7";
-import { fmtNum, fmtTime, clamp, wrap, yawTo, lookDir, DEG, hashString, rng } from "./util.js?v=76993ec7";
+import { WEAPONS, PRIMARY, SECONDARY, GUNS, UPGRADES, UPGRADE_IDS, upgradePrice, GRENADES, GRENADE_IDS, GEAR, KITS, KIT_IDS, DIFFICULTY, ECON, ACHIEVEMENTS, DAILY_MODS, rankOf, ROBOTS } from "./data.js?v=df736523";
+import { MISSIONS, TIMES } from "./missions.js?v=df736523";
+import { MAP_INFO, MAP_IDS, getMap } from "./maps.js?v=df736523";
+import { Game, trainingMission, weaponStats } from "./sim.js?v=df736523";
+import { Autopilot, applyLook } from "./bot.js?v=df736523";
+import * as S from "./save.js?v=df736523";
+import { View, QUALITY, detectTier } from "./view.js?v=df736523";
+import { Hud } from "./hud.js?v=df736523";
+import { Input } from "./input.js?v=df736523";
+import { Sound } from "./sound.js?v=df736523";
+import { fmtNum, fmtTime, clamp, wrap, yawTo, lookDir, DEG, hashString, rng } from "./util.js?v=df736523";
+import { T } from "./kit.js?v=df736523";
 
 const $ = (id) => document.getElementById(id);
 const host = () => window.vkGameHost;
@@ -1169,6 +1170,7 @@ let acc = 0;
 let photoShot = null;
 let autoOn = false;
 const DT = 1 / 60;
+const nadeEye = new T.Vector3(), nadeDir = new T.Vector3();
 function frame(now) {
   requestAnimationFrame(frame);
   const real = Math.min(0.06, (now - last) / 1000);
@@ -1221,6 +1223,12 @@ function playFrame(real) {
     n++;
   }
   if (!bot && n > 0 && inp.gnext && g.player.grenades.length > 1) g.player.grenades.push(g.player.grenades.shift());
+  if (input.hold.grenade && !input.nadeCanceled && p.grenades.length && p.alive && g.phase === "live" && view.fx) {
+    const d = lookDir(p.yaw, p.pitch + 0.16);
+    nadeEye.set(p.x, g.eye(), p.z);
+    nadeDir.set(d[0], d[1], d[2]);
+    view.fx.nadeArc(nadeEye, nadeDir, GRENADES[p.grenades[0]].color);
+  }
   view.frame(g, dt, real, look, { fov: save.o.fov });
   for (const e of g.events) hud.handle(g, e);
   g.events.length = 0;
@@ -1282,7 +1290,10 @@ window.rubezh = {
 
 // ---------- Запуск ----------
 bootBar(0.6, "Прогреваем шейдеры…");
-addEventListener("resize", () => view.resize());
+addEventListener("resize", () => {
+  view.resize();
+  view.fx?.resize(view.renderer.domElement.height);
+});
 startVista();
 requestAnimationFrame(frame);
 bootBar(1, "Готово");

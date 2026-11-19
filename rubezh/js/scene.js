@@ -1,9 +1,9 @@
 // Сцена карты: коробки мира сливаются в несколько больших сеток (по рисунку поверхности),
 // свет фонарей и затенение у стен запекаются в вершины при загрузке (живых ламп почти нет).
 // Плюс стекло, украшения, небо, погода и объёмные конусы света.
-import { T, PRIM, Shape, canvasTexture, glowTexture, TAU, noiseRand } from "./kit.js?v=fe308c19";
-import { SKINS } from "./maps.js?v=fe308c19";
-import { surfaceTexture, serverGlowTexture, signTexture, TEX_SCALE, TEX_PBR } from "./tex.js?v=fe308c19";
+import { T, PRIM, Shape, canvasTexture, glowTexture, TAU, noiseRand } from "./kit.js?v=5bf0e4b7";
+import { SKINS } from "./maps.js?v=5bf0e4b7";
+import { surfaceTexture, serverGlowTexture, signTexture, TEX_SCALE, TEX_PBR } from "./tex.js?v=5bf0e4b7";
 
 const col = new T.Color();
 const linear = (hex) => new T.Color(hex); // three.js сам переводит sRGB → линейный

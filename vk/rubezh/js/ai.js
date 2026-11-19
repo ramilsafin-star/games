@@ -3,8 +3,8 @@
 // В бою «Стрелки» уходят в укрытия и заходят с фланга, «Бастион» прёт щитом вперёд,
 // «Оса» перелетает между точками и бьёт заряженным лучом, «Колобок» катится и взрывается,
 // «Молот» поливает очередями и пускает ракеты. Бойцы идут за игроком и держат позицию по команде.
-import { MATE } from "./data.js?v=76993ec7";
-import { clamp, wrap, turnTo, yawTo, DEG, TAU, lerp } from "./util.js?v=76993ec7";
+import { MATE } from "./data.js?v=df736523";
+import { clamp, wrap, turnTo, yawTo, DEG, TAU, lerp } from "./util.js?v=df736523";
 
 const FOV = 2.1; // поле зрения робота без тревоги (рад)
 const FOV_COMBAT = 3.6;
@@ -100,7 +100,7 @@ function enterCombat(g, a, target) {
   a.path = null;
   a.decideT = 0.2;
   g.emit("spotted", { id: a.id, camera: !!a.def.camera });
-  if (g.mission.stealth && !g.alarm && !a.alarmT) a.alarmT = a.def.camera ? 0.05 : 1.7;
+  if (g.mission.stealth && !g.alarm && !a.alarmT) a.alarmT = a.def.camera ? 0.75 : 1.7;
   // остальные рядом тоже узнают
   if (!g.mission.stealth || g.alarm)
     for (const b of g.agents) {
@@ -137,8 +137,15 @@ export function thinkRobot(g, a, dt) {
   if (a.stunT > 0) {
     a.stunT -= dt;
     a.goal = null;
-    a.chargeT = 0;
-    if (a.def.boss) a.vent = Math.max(a.vent, 0.5);
+    if (a.chargeT > 0) {
+      a.chargeT = 0;
+      a.beam = null;
+      g.emit("chargeOff", { id: a.id });
+    }
+    if (a.def.boss && a.vent <= 0) {
+      a.vent = 0.5;
+      g.emit("ventOpen", { id: a.id });
+    }
     return;
   }
   a.thinkT -= dt;
@@ -382,7 +389,10 @@ function aimAndFire(g, a, t, dist, dt) {
 export function shoot(g, a, t, dist) {
   const d = a.def;
   const muzzle = muzzleOf(a);
-  const ty = chest(g, t);
+  let ty = chest(g, t);
+  if (t.isPlayer && !g.world.sees(muzzle[0], muzzle[1], muzzle[2], t.x, ty, t.z, "bullet")) {
+    ty = g.eye(t) - 0.08;
+  }
   const pellets = d.pellets || 1;
   let accK = a.team === "robot" ? g.diff.acc : 1;
   const moving = Math.hypot(t.vx || 0, t.vz || 0) || t.speedNow || 0;

@@ -1,8 +1,8 @@
 // Симуляция уровня с постоянным шагом 1/120 с. Физика — matter.js (передаётся снаружи:
 // в браузере window.Matter, в Node — require). DOM не нужен, поэтому проверки гоняют
 // те же правила, что и игра.
-import { dist, rng, cumLengths, pathAt, chaikin, polyLength } from "./geom.js?v=8fd75fe1";
-import { W, H, LINE_T, HERO_R, WALKER_R, BERRY_R, icicle, drawWith } from "./world.js?v=8fd75fe1";
+import { dist, rng, cumLengths, pathAt, chaikin, polyLength } from "./geom.js?v=c801a85e";
+import { W, H, LINE_T, HERO_R, WALKER_R, BERRY_R, icicle, drawWith } from "./world.js?v=c801a85e";
 
 export const HZ = 120;
 export const DT = 1 / HZ;

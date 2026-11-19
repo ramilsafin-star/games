@@ -1,9 +1,9 @@
 await window.vkGameHost?.ready;
 // «Звездочёт Тишка»: мышонок пробирается по обсерватории, настраивает телескопы и не попадается в свет
 // фонарика робота-сторожа. Логика — sim.js (проверяется tests/rooms.mjs), 3D — world.js, комнаты — rooms.js.
-import { World } from "./world.js?v=db686b78";
-import { ROOMS } from "./rooms.js?v=db686b78";
-import { Game } from "./sim.js?v=db686b78";
+import { World } from "./world.js?v=649a9dcd";
+import { ROOMS } from "./rooms.js?v=649a9dcd";
+import { Game } from "./sim.js?v=649a9dcd";
 
 const el = (id) => document.getElementById(id);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

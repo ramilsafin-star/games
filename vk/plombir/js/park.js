@@ -1,6 +1,6 @@
-import * as T from "../vendor/three/three.module.min.js?v=9a976c52";
-import "./gfx.js?v=c5143e6d";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=9a976c52";
+import * as T from "../vendor/three/three.module.min.js?v=8425cb4a";
+import "./gfx.js?v=8425cb4a";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=8425cb4a";
 import {
   scenery,
   truck,
@@ -19,7 +19,7 @@ import {
   balloons,
   butterfly,
   bulbs,
-} from "./models.js?v=c5143e6d";
+} from "./models.js?v=8425cb4a";
 
 const clamp = T.MathUtils.clamp,
   mix = T.MathUtils.lerp;

@@ -1,5 +1,5 @@
 // Общие мелочи графики: three.js, числа, хранилище, шум для шейдеров.
-import * as T from "../vendor/three/three.module.min.js?v=6e619b94";
+import * as T from "../vendor/three/three.module.min.js?v=bd68ed13";
 
 export { T };
 export const TAU = Math.PI * 2;

@@ -1,8 +1,8 @@
 // Приборы боя поверх 3D: прицел, отметки попаданий, лента отключений, направление урона,
 // щит и броня, патроны, цель задания, метки на экране, радар, рация, всплывающие награды.
-import { WEAPONS, GRENADES, KITS } from "./data.js?v=fe308c19";
-import { fmtTime, wrap, yawTo, clamp } from "./util.js?v=fe308c19";
-import { TRAINING } from "./sim.js?v=fe308c19";
+import { WEAPONS, GRENADES, KITS } from "./data.js?v=5bf0e4b7";
+import { fmtTime, wrap, yawTo, clamp } from "./util.js?v=5bf0e4b7";
+import { TRAINING } from "./sim.js?v=5bf0e4b7";
 
 const $ = (id) => document.getElementById(id);
 function text(el, v) {
@@ -282,7 +282,7 @@ export class Hud {
       if (a.team === "squad") add("m" + a.id, a.x, a.y + 2.15, a.z, a.name, "mate");
       if (a.team === "robot" && g.mission.stealth && !g.alarm && !a.def.dummy && (a.aware > 0.2 || a.state === "alert" || a.alarmT > 0)) {
         const sending = a.alarmT > 0;
-        const progress = sending ? 1 - a.alarmT / (a.def.camera ? 0.05 : 1.7) : a.aware;
+        const progress = sending ? 1 - a.alarmT / (a.def.camera ? 0.75 : 1.7) : a.aware;
         add("r" + a.id, a.x, a.y + (a.fly ? 0.7 : a.h + 0.35), a.z, sending ? "Тревога" : "?", sending ? "det hot" : "det", progress);
       }
       if (a.team === "robot" && g.reveal > 0 && !a.def.dummy) add("s" + a.id, a.x, a.y + (a.fly ? 0 : a.h * 0.6), a.z, "", "scan");

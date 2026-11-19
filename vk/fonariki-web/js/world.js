@@ -1,7 +1,7 @@
 // Неподвижный мир: земля с кругом света, трава, лес, кусты и камни, пять мест в лесу,
 // постаменты усилений, лагерь с костром, участок сада с постройками.
-import { T, TAU, GLSL_NOISE, groundY, hot, hash, clamp } from "./kit.js?v=6e619b94";
-import { CAMP, GARDEN, PLACES, PLACE_RADIUS, BUFFS, SHRINES, BUILDING_BY_ID } from "./config.js?v=6e619b94";
+import { T, TAU, GLSL_NOISE, groundY, hot, hash, clamp } from "./kit.js?v=bd68ed13";
+import { CAMP, GARDEN, PLACES, PLACE_RADIUS, BUFFS, SHRINES, BUILDING_BY_ID } from "./config.js?v=bd68ed13";
 
 // Общие для своих шейдеров значения: время, ветер, круг света, костёр, фонари, туман
 export const U = {

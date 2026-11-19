@@ -1,20 +1,20 @@
 // Сцена «Снежного кома». Правила считают трассу прямой (s — вперёд, x — вбок), а здесь она
 // изгибается и идёт под уклон: каждая точка (s, x, y) переводится в мир через «рельсы» path.
 // Правила (rules.js, run.js) ничего не знают о графике; здесь только то, что видно.
-import { T, TAU, GEO, V, clamp, rand, hot, lit, part, at, canvasTexture, labelTexture, glowTexture } from "./kit.js?v=3cff0128";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=3cff0128";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=3cff0128";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=3cff0128";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=3cff0128";
-import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=3cff0128";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=3cff0128";
-import { createFx, tone, GLOW, PUFF, STAR, RING } from "./fx.js?v=3cff0128";
-import { firGeometry, spireGeometry, rockGeometry, pileGeometry, rampGeometry, snowTexture, flakeTexture, crackTexture, bricksTexture, signTexture, gateModel, snowmanModel, keepSnowmanMaterial, skinMaterial, skinGeometry, GATE_H } from "./models.js?v=3cff0128";
-import { Hero } from "./hero.js?v=3cff0128";
-import { HALF, BRIDGE_HALF, radiusOf, gateLabel, logX, crusherLift, geyserState, rng } from "./rules.js?v=3cff0128";
-import { FoeView, keepFoeMaterial } from "./foes.js?v=3cff0128";
-import { heading } from "./levels.js?v=3cff0128";
-import { SKINS } from "./economy.js?v=3cff0128";
+import { T, TAU, GEO, V, clamp, rand, hot, lit, part, at, canvasTexture, labelTexture, glowTexture } from "./kit.js?v=0b3b8087";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=0b3b8087";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=0b3b8087";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=0b3b8087";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=0b3b8087";
+import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=0b3b8087";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=0b3b8087";
+import { createFx, tone, GLOW, PUFF, STAR, RING } from "./fx.js?v=0b3b8087";
+import { firGeometry, spireGeometry, rockGeometry, pileGeometry, rampGeometry, snowTexture, flakeTexture, crackTexture, bricksTexture, signTexture, gateModel, snowmanModel, keepSnowmanMaterial, skinMaterial, skinGeometry, GATE_H } from "./models.js?v=0b3b8087";
+import { Hero } from "./hero.js?v=0b3b8087";
+import { HALF, BRIDGE_HALF, radiusOf, gateLabel, logX, crusherLift, geyserState, rng } from "./rules.js?v=0b3b8087";
+import { FoeView, keepFoeMaterial } from "./foes.js?v=0b3b8087";
+import { heading } from "./levels.js?v=0b3b8087";
+import { SKINS } from "./economy.js?v=0b3b8087";
 
 export const SLOPE = 0.12;
 const PITCH = Math.atan(SLOPE);

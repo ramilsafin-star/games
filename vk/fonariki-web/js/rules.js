@@ -7,10 +7,10 @@ import {
   CATCH_DISTANCE, SHADOW, shadowCount, SHADOW_KINDS, PLACES, FOOD, FREEZE_SECONDS, THAW_HOLD, THAW_REACH, BOSS,
   REWARD_PER_NIGHT, REWARD_DAWN, STARTER_DISTANCE, QUEST_REWARD, INDEX_BONUS, BUFFS, SHRINES, SHRINE_COOLDOWN,
   SHRINE_REACH, EVENTS, GARDEN, CREW, fireflyLight, fireflyCoins, isRare, makeRng, clamp, TAU,
-} from "./config.js?v=6e619b94";
-import { collide, blocked } from "./layout.js?v=6e619b94";
-import { addCaught, gardenAdd, slots, upgradeValue, gardenRate, finishRun } from "./save.js?v=6e619b94";
-import { crewThink } from "./ai.js?v=6e619b94";
+} from "./config.js?v=bd68ed13";
+import { collide, blocked } from "./layout.js?v=bd68ed13";
+import { addCaught, gardenAdd, slots, upgradeValue, gardenRate, finishRun } from "./save.js?v=bd68ed13";
+import { crewThink } from "./ai.js?v=bd68ed13";
 
 const flatDist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const campDist = (a) => Math.hypot(a.x - CAMP.x, a.z - CAMP.z);

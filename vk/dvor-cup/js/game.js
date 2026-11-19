@@ -1,9 +1,9 @@
 // «Дворовой кубок»: футбол один на один. Кубок — лига из трёх кубков (двор, улица, город) с соперниками-характерами
 // и испытаниями, «Вдвоём» — два игрока на одном экране, «Испытания» — мини-игры, «Раздевалка» — мячи, форма,
 // украшения двора за монетки, «Награды» — значки. Матч — match.js, лига — league.js (проверки в tests/), 3D — world.js.
-import { World, ANIMALS, QUALITY, ITEM_COLORS } from "./world.js?v=aaeea594";
-import { Match, Bot, STEP, TRIALS } from "./match.js?v=aaeea594";
-import { HEROES, LOCKED, TIERS, STYLE_TEXT, stepsFor, SHOP, ACH, migrate, unlockedTier, heroLocked, owns, buy, wear, matchCoins, trialStars, trialCoins, award } from "./league.js?v=aaeea594";
+import { World, ANIMALS, QUALITY, ITEM_COLORS } from "./world.js?v=f4633125";
+import { Match, Bot, STEP, TRIALS } from "./match.js?v=f4633125";
+import { HEROES, LOCKED, TIERS, STYLE_TEXT, stepsFor, SHOP, ACH, migrate, unlockedTier, heroLocked, owns, buy, wear, matchCoins, trialStars, trialCoins, award } from "./league.js?v=f4633125";
 
 const el = (id) => document.getElementById(id);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

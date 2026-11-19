@@ -1,9 +1,9 @@
 await window.vkGameHost?.ready;
 // «Велопанда»: панда едет на заднем колесе. Держишь палец — колесо поднимается, отпустил — опускается.
 // Физика — ride.js (проверяется tests/ride.mjs), трассы — tracks.js, 3D — world.js.
-import { World, THEMES, BIKES } from "./world.js?v=74669838";
-import { TRACKS } from "./tracks.js?v=74669838";
-import { Ride, STEP, CONFIG } from "./ride.js?v=74669838";
+import { World, THEMES, BIKES } from "./world.js?v=703678aa";
+import { TRACKS } from "./tracks.js?v=703678aa";
+import { Ride, STEP, CONFIG } from "./ride.js?v=703678aa";
 
 const el = (id) => document.getElementById(id);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

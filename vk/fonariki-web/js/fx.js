@@ -1,7 +1,7 @@
 // Свечение и частицы: светлячки со следами и кольцами мутаций (одна отрисовка на всех), пятна
 // света на земле, искры, угольки, дым, облачка теней, пламя костра, лучи фонарей.
-import { T, TAU, GLSL_NOISE, hot, clamp } from "./kit.js?v=6e619b94";
-import { U } from "./world.js?v=6e619b94";
+import { T, TAU, GLSL_NOISE, hot, clamp } from "./kit.js?v=bd68ed13";
+import { U } from "./world.js?v=bd68ed13";
 
 const quad = () => {
   const g = new T.InstancedBufferGeometry();

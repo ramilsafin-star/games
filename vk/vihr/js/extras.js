@@ -1,13 +1,13 @@
 // Новые эффекты «Вихря»: постобработка (свечение и сглаживание), облака и их тени,
 // стена «Бури», бонусы-сферы, ударные волны и вспышки, лицо Урагана-великана.
 // Всё рисуется пачками и переиспользуется — ни одного нового объекта в кадре.
-import { T, TAU, clamp, smooth, canvasTexture } from "./kit.js?v=935ab875";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=935ab875";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=935ab875";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=935ab875";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=935ab875";
-import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=935ab875";
-import { POWERS } from "./rules.js?v=935ab875";
+import { T, TAU, clamp, smooth, canvasTexture } from "./kit.js?v=b0d73a34";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=b0d73a34";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=b0d73a34";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=b0d73a34";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=b0d73a34";
+import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=b0d73a34";
+import { POWERS } from "./rules.js?v=b0d73a34";
 
 const NOISE = /* glsl */ `
 float xhash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }

@@ -1,7 +1,7 @@
 // Эффекты боя, все из заранее созданных пулов (ничего не создаётся во время стрельбы):
 // искры и огонь (светящиеся точки), дым и масло (мягкие пятна), трассеры и лучи (ленты к камере),
 // следы пуль, обломки роботов и болты, гильзы, ударные волны, вспышки света.
-import { T, PRIM, canvasTexture, glowTexture, TAU } from "./kit.js?v=76993ec7";
+import { T, PRIM, canvasTexture, glowTexture, TAU } from "./kit.js?v=df736523";
 
 const V = () => new T.Vector3();
 const tmp = V(), tmp2 = V(), up = new T.Vector3(0, 1, 0);
@@ -221,10 +221,11 @@ function bitSystem(scene, N, geo, mat, world) {
   scene.add(mesh);
   const d = new T.Object3D();
   const B = Array.from({ length: N }, () => ({ life: 0, p: V(), v: V(), r: new T.Euler(), w: V(), s: 1, rest: false }));
-  let next = 0;
+  let next = 0, alive = 0;
   return {
     add(p, v, s, life, color) {
       const b = B[next];
+      if (b.life <= 0) alive++;
       if (color) mesh.setColorAt(next, tmpC.set(color));
       next = (next + 1) % N;
       b.life = life;
@@ -237,15 +238,18 @@ function bitSystem(scene, N, geo, mat, world) {
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     },
     update(dt) {
+      if (!alive) return;
       for (let i = 0; i < N; i++) {
         const b = B[i];
+        if (b.life <= 0) continue;
+        b.life -= dt;
         if (b.life <= 0) {
+          alive--;
           d.scale.setScalar(0);
           d.updateMatrix();
           mesh.setMatrixAt(i, d.matrix);
           continue;
         }
-        b.life -= dt;
         if (!b.rest) {
           b.v.y -= 14 * dt;
           b.p.addScaledVector(b.v, dt);
@@ -335,8 +339,42 @@ export function createFx(scene, camera, world, q) {
   const fallen = []; // обломки роботов
   const floorAt = (p) => world.groundAt(p.x, p.z, 0.05, p.y + 0.2);
 
+  const arcP0 = V(), arcP1 = V(), arcVel = V(), arcSeg = V(), arcHit = V();
+
   const api = {
     add, smoke, beams, decals,
+    resize(bufferHeight) {
+      const s = Math.max(300, bufferHeight * 0.75);
+      add.mat.uniforms.scale.value = s;
+      smoke.mat.uniforms.scale.value = s;
+    },
+
+    // Рисует пунктирную дугу полёта гранаты и отметку точки падения
+    nadeArc(origin, dir, color = "#ffb03a", speed = 17.5, grav = 15) {
+      arcP0.copy(origin);
+      arcVel.copy(dir).normalize().multiplyScalar(speed);
+      const step = 0.065;
+      for (let i = 0; i < 18; i++) {
+        arcP1.copy(arcP0).addScaledVector(arcVel, step);
+        arcP1.y -= 0.5 * grav * step * step;
+        arcVel.y -= grav * step;
+
+        arcSeg.copy(arcP1).sub(arcP0);
+        const len = arcSeg.length();
+        const hit = len > 0.001
+          ? world.ray(arcP0.x, arcP0.y, arcP0.z, arcSeg.x / len, arcSeg.y / len, arcSeg.z / len, len, "bullet")
+          : null;
+
+        if (hit) {
+          arcHit.copy(arcP0).addScaledVector(arcSeg, hit.t / len);
+          if (i % 2 === 0) beams.add(arcP0, arcHit, color, 0.032, 0.02, 0, 2.2);
+          add.spawn(arcHit, tmp.set(0, 0, 0), color, 0.025, 0.28, 0.28, { mult: 2.5 });
+          break;
+        }
+        if (i % 2 === 0) beams.add(arcP0, arcP1, color, 0.032, 0.02, 0, 2.2);
+        arcP0.copy(arcP1);
+      }
+    },
     flash(p, color, I, range, life) {
       if (!lights.length) return;
       const s = lights[li];

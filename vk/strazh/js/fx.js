@@ -1,6 +1,6 @@
 // Эффекты «Стража орбиты»: мягкие частицы (огонь, дым, вспышки, ударные кольца), искры,
 // обломки кораблей, свет от взрывов и сотовый купол щита вокруг турели.
-import { T, TAU, rand, pick, V, hot, GEO } from "./kit.js?v=ab118089";
+import { T, TAU, rand, pick, V, hot, GEO } from "./kit.js?v=37c8089d";
 
 export const GLOW = 0,
   SMOKE = 1,

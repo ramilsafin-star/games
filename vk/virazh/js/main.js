@@ -1,9 +1,9 @@
 // «Вираж»: меню, управление, приборы, панели, сохранение. Правила — в rules.js, картинка — в view.js.
-import { TRACKS, buildTrack, reverseDef } from "./tracks.js?v=c71ae3b5";
-import { Cup, DIFFS, LAPS, LIVERIES, NITRO_MAX, PHYS, Race, UPGRADE_COST, steerTo } from "./rules.js?v=c71ae3b5";
-import { View } from "./view.js?v=c71ae3b5";
-import { Sound } from "./sound.js?v=c71ae3b5";
-import { clamp, clock, readStorage, seeded, writeStorage } from "./kit.js?v=c71ae3b5";
+import { TRACKS, buildTrack, reverseDef } from "./tracks.js?v=380df180";
+import { Cup, DIFFS, LAPS, LIVERIES, NITRO_MAX, PHYS, Race, UPGRADE_COST, steerTo } from "./rules.js?v=380df180";
+import { View } from "./view.js?v=380df180";
+import { Sound } from "./sound.js?v=380df180";
+import { clamp, clock, readStorage, seeded, writeStorage } from "./kit.js?v=380df180";
 
 const el = (id) => document.getElementById(id);
 const STEP = 1 / 120; // шаг правил, секунд

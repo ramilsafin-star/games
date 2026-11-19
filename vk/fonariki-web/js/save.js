@@ -4,7 +4,7 @@
 import {
   BUILDINGS, BUILDING_BY_ID, UPGRADES, UPGRADE_BY_ID, FIREFLY_BY_ID, MUTATION_BY_ID, BOOK_MUTATIONS, FIREFLIES,
   GARDEN, DAILY, START_COINS, QUEST_HOUSES, CREW_MAX, fireflyRate, bookKey, clamp,
-} from "./config.js?v=6e619b94";
+} from "./config.js?v=bd68ed13";
 
 export const SAVE_KEY = "fonariki-v1";
 export const SAVE_LIMIT = 4000;

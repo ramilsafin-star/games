@@ -18,6 +18,8 @@ export class Input {
     this.lockFailed = false;
     this.crouchToggle = false;
     this.aimToggle = false;
+    this.wheelAt = 0;
+    this.nadeCanceled = false;
     this.bind();
   }
   enabled() {
@@ -78,6 +80,9 @@ export class Input {
     cv.addEventListener("contextmenu", (e) => e.preventDefault());
     addEventListener("wheel", (e) => {
       if (!this.enabled()) return;
+      const now = performance.now();
+      if (now - this.wheelAt < 180) return;
+      this.wheelAt = now;
       this.taps.next = true;
     }, { passive: true });
     document.addEventListener("pointerlockchange", () => {
@@ -163,6 +168,7 @@ export class Input {
         pid = e.pointerId;
         lx = e.clientX;
         ly = e.clientY;
+        if (kind === "release") this.nadeCanceled = false;
         el.setPointerCapture?.(e.pointerId);
         el.classList.add("on");
         if (kind === "hold" || kind === "release") this.hold[name] = true;
@@ -175,13 +181,22 @@ export class Input {
         this.lookMove(e.clientX - lx, e.clientY - ly);
         lx = e.clientX;
         ly = e.clientY;
+        if (kind === "release") {
+          const gswap = $("t-gswap")?.getBoundingClientRect();
+          const overCancel = gswap && e.clientX >= gswap.left - 12 && e.clientX <= gswap.right + 12 && e.clientY >= gswap.top - 12 && e.clientY <= gswap.bottom + 12;
+          this.nadeCanceled = !!overCancel;
+          el.classList.toggle("on", !this.nadeCanceled);
+        }
       });
       const up = (e) => {
         if (e.pointerId !== pid) return;
         pid = -1;
         el.classList.remove("on");
-        if (kind === "release" && this.hold[name] && e.type === "pointerup" && this.enabled()) this.taps[name] = true;
+        if (kind === "release" && this.hold[name] && !this.nadeCanceled && e.type === "pointerup" && this.enabled()) {
+          this.taps[name] = true;
+        }
         if (kind === "hold" || kind === "release") this.hold[name] = false;
+        this.nadeCanceled = false;
       };
       for (const n of ["pointerup", "pointercancel", "lostpointercapture"]) el.addEventListener(n, up);
     };

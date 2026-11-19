@@ -1,12 +1,12 @@
 // Отрисовка: рендерер, свечение (bloom), цветокоррекция, сглаживание FXAA и уровни качества.
 // MSAA на композере не включать (правило репозитория): свои шейдеры дают NaN на краях, свечение
 // растягивает их в чёрные пятна. Края сглаживает FXAA на высоком качестве.
-import { T, clamp } from "./kit.js?v=6e619b94";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=6e619b94";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=6e619b94";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=6e619b94";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=6e619b94";
-import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=6e619b94";
+import { T, clamp } from "./kit.js?v=bd68ed13";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=bd68ed13";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=bd68ed13";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=bd68ed13";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=bd68ed13";
+import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=bd68ed13";
 
 // Уровни качества: плотность пикселей, свечение, трава, следы светлячков, FXAA
 export const LEVELS = {

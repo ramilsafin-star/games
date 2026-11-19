@@ -1,11 +1,11 @@
 // Правила раунда «Рубежа» без графики: игрок, оружие, роботы, гранаты, ракеты, цели задания.
 // Один и тот же код идёт в браузере и в Node (tests/sim.mjs гоняет автопилот по всем заданиям).
 // Вид и звук читают состояние и очередь событий game.events.
-import { WEAPONS, GRENADES, ROBOTS, MATE, MATE_NAMES, DIFFICULTY, PLAYER, ECON, KITS } from "./data.js?v=fe308c19";
-import { getMap } from "./maps.js?v=fe308c19";
-import { World } from "./world.js?v=fe308c19";
-import { rng, clamp, wrap, lookDir, yawTo, DEG, TAU, lerp } from "./util.js?v=fe308c19";
-import { thinkRobot, thinkMate, thinkVip, moveAgent, alertAll } from "./ai.js?v=fe308c19";
+import { WEAPONS, GRENADES, ROBOTS, MATE, MATE_NAMES, DIFFICULTY, PLAYER, ECON, KITS } from "./data.js?v=5bf0e4b7";
+import { getMap } from "./maps.js?v=5bf0e4b7";
+import { World } from "./world.js?v=5bf0e4b7";
+import { rng, clamp, wrap, lookDir, yawTo, DEG, TAU, lerp } from "./util.js?v=5bf0e4b7";
+import { thinkRobot, thinkMate, thinkVip, moveAgent, alertAll } from "./ai.js?v=5bf0e4b7";
 
 // Учебная мишень полигона
 const DUMMY = {

@@ -1,9 +1,9 @@
 await window.vkGameHost?.ready;
 // «Светлячковый концерт»: светлячки-нотки летят по дорожкам, ребёнок нажимает на кружок в такт —
 // звучит нота мелодии, светлячок зажигает окошко концертного домика. Ритм — rhythm.js, 3D — world.js.
-import { Stage, LANE_COLORS } from "./world.js?v=08fe098e";
-import { SONGS, CHORDS } from "./songs.js?v=08fe098e";
-import { parseSong, Judge, Clock, WINDOW } from "./rhythm.js?v=08fe098e";
+import { Stage, LANE_COLORS } from "./world.js?v=bef37700";
+import { SONGS, CHORDS } from "./songs.js?v=bef37700";
+import { parseSong, Judge, Clock, WINDOW } from "./rhythm.js?v=bef37700";
 
 const el = (id) => document.getElementById(id);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

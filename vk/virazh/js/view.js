@@ -1,15 +1,15 @@
 // Сцена «Виража»: дорога, земля, декорации четырёх тем, машины, камера, частицы.
-import * as T from "../vendor/three/three.module.min.js?v=c71ae3b5";
-import { clamp, damp, lerp, seeded, smooth, wrapAngle } from "./kit.js?v=c71ae3b5";
-import { trackPoint } from "./tracks.js?v=c71ae3b5";
-import { LIVERIES, PHYS } from "./rules.js?v=c71ae3b5";
-import { PROPS, canvasTexture, fuse, makeCar, makePodiumBlock } from "./models.js?v=c71ae3b5";
-import { Pool, Streaks } from "./fx.js?v=c71ae3b5";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=c71ae3b5";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=c71ae3b5";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=c71ae3b5";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=c71ae3b5";
-import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=c71ae3b5";
+import * as T from "../vendor/three/three.module.min.js?v=380df180";
+import { clamp, damp, lerp, seeded, smooth, wrapAngle } from "./kit.js?v=380df180";
+import { trackPoint } from "./tracks.js?v=380df180";
+import { LIVERIES, PHYS } from "./rules.js?v=380df180";
+import { PROPS, canvasTexture, fuse, makeCar, makePodiumBlock } from "./models.js?v=380df180";
+import { Pool, Streaks } from "./fx.js?v=380df180";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=380df180";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=380df180";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=380df180";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=380df180";
+import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=380df180";
 
 // Последний проход высокой графики: сглаживание (FXAA, раз MSAA на композере нельзя), радиальное размытие на нитро и виньетка
 const FINAL = {

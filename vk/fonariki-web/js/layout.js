@@ -1,6 +1,6 @@
 // Раскладка леса: деревья, тропинки, места в лесу, препятствия. Одинаковая у всех (постоянное зерно).
 // Без three.js: из неё же берёт столкновения проверка в Node.
-import { CAMP, PLACES, PLACE_RADIUS, GARDEN, MAP_RADIUS, makeRng } from "./config.js?v=6e619b94";
+import { CAMP, PLACES, PLACE_RADIUS, GARDEN, MAP_RADIUS, makeRng } from "./config.js?v=bd68ed13";
 
 const CELL = 10;
 

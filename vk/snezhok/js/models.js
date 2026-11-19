@@ -1,6 +1,6 @@
 // Модели «Снежного кома»: ёлки, камни, ворота, заборы, прессы, снеговик-босс, облики кома.
 // Всё собирается из простых фигур и текстур, нарисованных на холсте, — без файлов.
-import { T, TAU, GEO, hot, lit, part, at, canvasTexture, labelTexture, thinFog } from "./kit.js?v=3cff0128";
+import { T, TAU, GEO, hot, lit, part, at, canvasTexture, labelTexture, thinFog } from "./kit.js?v=0b3b8087";
 
 // ---------- Склейка геометрий в одну (вершинные цвета) ----------
 export function merge(list) {

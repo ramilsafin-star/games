@@ -1,8 +1,8 @@
 // «Грозовой каньон»: управление, приборы, панели, звук и главный цикл.
-import { LEVELS, ZONES, PERKS, PERK_COST, Raid } from "./rules.js?v=a3d819ef";
-import { CanyonView } from "./view.js?v=a3d819ef";
-import { Sound } from "./sound.js?v=a3d819ef";
-import { readStorage, writeStorage } from "./kit.js?v=a3d819ef";
+import { LEVELS, ZONES, PERKS, PERK_COST, Raid } from "./rules.js?v=8c0d46b5";
+import { CanyonView } from "./view.js?v=8c0d46b5";
+import { Sound } from "./sound.js?v=8c0d46b5";
+import { readStorage, writeStorage } from "./kit.js?v=8c0d46b5";
 
 const id = name => document.getElementById(name);
 const canvas = id("stage");

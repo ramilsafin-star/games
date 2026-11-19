@@ -1,8 +1,8 @@
 // Помощники (вместо других игроков сетевой версии) и автопилот игрока для проверок.
 // Помощник ловит светлячков рядом с лагерем, носит их к костру, убегает от теней, размораживает
 // застывших и идёт с фонарём на Большую тень. Возвращает «куда бежать» и «жать ли кнопку».
-import { CAMP, DEPOSIT_RADIUS, THAW_REACH, CATCH_DISTANCE, GARDEN, NIGHT_SECONDS, PLACES, SHRINE_REACH, SHRINES, BOSS, FOOD, TAU } from "./config.js?v=6e619b94";
-import { slots } from "./save.js?v=6e619b94";
+import { CAMP, DEPOSIT_RADIUS, THAW_REACH, CATCH_DISTANCE, GARDEN, NIGHT_SECONDS, PLACES, SHRINE_REACH, SHRINES, BOSS, FOOD, TAU } from "./config.js?v=bd68ed13";
+import { slots } from "./save.js?v=bd68ed13";
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const toward = (from, to, k = 1) => {

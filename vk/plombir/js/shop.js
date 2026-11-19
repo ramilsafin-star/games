@@ -1,7 +1,7 @@
 await window.vkGameHost?.ready;
-import { flavors } from "./models.js?v=c5143e6d";
-import { Park } from "./park.js?v=c5143e6d";
-import { icon, speaker, picto, tune } from "./icons.js?v=c5143e6d";
+import { flavors } from "./models.js?v=8425cb4a";
+import { Park } from "./park.js?v=8425cb4a";
+import { icon, speaker, picto, tune } from "./icons.js?v=8425cb4a";
 
 const el = (id) => document.getElementById(id);
 // Порядок гостей совпадает с pals в models.js. voice — файл в voices/ со словами из thanks.

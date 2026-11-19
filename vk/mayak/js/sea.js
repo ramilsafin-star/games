@@ -1,7 +1,7 @@
 // Небо и море «Маяка»: два шейдера. Небо — прямоугольник на весь экран позади сцены,
 // море — большая плоскость с бегущими бликами, пятнами света от лучей и вспышки, туманом и пеной у берега.
 // Цвета пишутся линейными: тон и sRGB накладывает OutputPass в конце.
-import * as T from "../vendor/three/three.module.min.js?v=cd4dd037";
+import * as T from "../vendor/three/three.module.min.js?v=95310c01";
 
 const NOISE = /* glsl */ `
   float hash(vec2 p) {

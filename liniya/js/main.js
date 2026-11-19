@@ -1,11 +1,11 @@
 // «Линия спасения»: экраны, ввод, игровой цикл, сохранение и связь с VK.
-import { LEVELS, CHAPTERS, PER_CHAPTER, ATTRACT, dailyLevel } from "./levels.js?v=8fd75fe1";
-import { useMatter, createSim, DT, play } from "./sim.js?v=8fd75fe1";
-import { Pen, starsFor, W, H, flyHit } from "./world.js?v=8fd75fe1";
-import { View, THEMES } from "./view.js?v=8fd75fe1";
-import { Sound } from "./sound.js?v=8fd75fe1";
-import { FOLK, critter } from "./art.js?v=8fd75fe1";
-import * as R from "./rules.js?v=8fd75fe1";
+import { LEVELS, CHAPTERS, PER_CHAPTER, ATTRACT, dailyLevel } from "./levels.js?v=c801a85e";
+import { useMatter, createSim, DT, play } from "./sim.js?v=c801a85e";
+import { Pen, starsFor, W, H, flyHit } from "./world.js?v=c801a85e";
+import { View, THEMES } from "./view.js?v=c801a85e";
+import { Sound } from "./sound.js?v=c801a85e";
+import { FOLK, critter } from "./art.js?v=c801a85e";
+import * as R from "./rules.js?v=c801a85e";
 
 useMatter(window.Matter);
 const host = window.vkGameHost;

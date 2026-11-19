@@ -1,20 +1,20 @@
 // Вид «Рубежа»: рендер, уровни качества (сами снижаются, если кадров мало), пост-обработка
 // (свечение, цветокоррекция, виньетка, размытие при уроне, сглаживание FXAA — без MSAA),
 // камера от первого лица с отдачей и тряской, оружие в руках, роботы и эффекты по событиям правил.
-import { T, PRIM, glowTexture, canvasTexture, TAU } from "./kit.js?v=fe308c19";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=fe308c19";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=fe308c19";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=fe308c19";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=fe308c19";
-import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=fe308c19";
-import { buildScene, makeEnvironment } from "./scene.js?v=fe308c19";
-import { createFx } from "./fx.js?v=fe308c19";
-import { buildRobot, buildGun, modelMats } from "./models.js?v=fe308c19";
-import { Sound } from "./sound.js?v=fe308c19";
-import { TIMES } from "./missions.js?v=fe308c19";
-import { World } from "./world.js?v=fe308c19";
-import { getMap } from "./maps.js?v=fe308c19";
-import { lookDir, clamp, lerp } from "./util.js?v=fe308c19";
+import { T, PRIM, glowTexture, canvasTexture, TAU } from "./kit.js?v=5bf0e4b7";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=5bf0e4b7";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=5bf0e4b7";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=5bf0e4b7";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=5bf0e4b7";
+import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=5bf0e4b7";
+import { buildScene, makeEnvironment } from "./scene.js?v=5bf0e4b7";
+import { createFx } from "./fx.js?v=5bf0e4b7";
+import { buildRobot, buildGun, modelMats } from "./models.js?v=5bf0e4b7";
+import { Sound } from "./sound.js?v=5bf0e4b7";
+import { TIMES } from "./missions.js?v=5bf0e4b7";
+import { World } from "./world.js?v=5bf0e4b7";
+import { getMap } from "./maps.js?v=5bf0e4b7";
+import { lookDir, clamp, lerp } from "./util.js?v=5bf0e4b7";
 
 // ---------- Уровни качества ----------
 export const QUALITY = {
@@ -189,6 +189,7 @@ export class View {
     this.grade.uniforms.res.value.set(w * pr, h * pr);
     this.fxaa.uniforms.res.value.set(w * pr, h * pr);
     this.bloom.resolution.set(w / 2, h / 2);
+    this.fx?.resize(this.renderer.domElement.height);
   }
 
   setBrightness(value) {
@@ -212,6 +213,7 @@ export class View {
     this.mainPass.scene = scene;
     this.mainPass.camera = this.camera;
     this.fx = createFx(scene, this.camera, world, this.q);
+    this.fx.resize(this.renderer.domElement.height);
     // свет для оружия в руках — как на карте; старое оружие снимаем с камеры
     this.vmCamera.clear();
     this.vmScene.clear();

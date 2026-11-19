@@ -1,13 +1,13 @@
 // 3D «Почты Дракоши»: уютная волшебная почта. На столе — подставка с плитками-буквами, картинка-подсказка
 // в рамке, лист с четырьмя марками, дракончик Дракоша; сзади — почтовый ящик, полки с посылками, окно в закат.
-import * as T from "../vendor/three/three.module.min.js?v=0bbe0307";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=0bbe0307";
-import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=0bbe0307";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=0bbe0307";
-import { polish } from "./gfx.js?v=ea8eb052";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=0bbe0307";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=0bbe0307";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=0bbe0307";
+import * as T from "../vendor/three/three.module.min.js?v=e9c797b1";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=e9c797b1";
+import { RoundedBoxGeometry } from "../vendor/three/RoundedBoxGeometry.js?v=e9c797b1";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=e9c797b1";
+import { polish } from "./gfx.js?v=e9c797b1";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=e9c797b1";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=e9c797b1";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=e9c797b1";
 
 const pie = Math.PI;
 const clamp = T.MathUtils.clamp;

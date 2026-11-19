@@ -1,7 +1,7 @@
 // Модели «Маяка»: всё собирается из простых фигур и сливается в одну геометрию с цветами в вершинах.
 // У вершины есть ещё «свечение» (glow): окна, гирлянды и стёкла горят сами, без света сцены.
 // Нос лодки смотрит в −Z, как принято в three.js.
-import * as T from "../vendor/three/three.module.min.js?v=cd4dd037";
+import * as T from "../vendor/three/three.module.min.js?v=95310c01";
 
 const TAU = Math.PI * 2;
 const M = new T.Matrix4();

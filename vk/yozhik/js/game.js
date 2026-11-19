@@ -1,9 +1,9 @@
 await window.vkGameHost?.ready;
 // «Ёжик-почтальон»: ребёнок рисует пальцем рельсы от почты до станции, вагончик с ёжиком едет сам.
 // Физика — physics.js (шаг 1/120 с, заезд повторяется точно), картинка — world.js, уровни — levels.js.
-import { World, SKINS, railUp } from "./world.js?v=46671f0f";
-import { LEVELS, WORLDS, STORIES, FREE_LEVEL } from "./levels.js?v=46671f0f";
-import { Run, DT, processStroke, makeRail, anchors, canDraw, blockedSegment, SNAP, drawStrokes, fixedRails, railAt, predictJumps, bendRail } from "./physics.js?v=46671f0f";
+import { World, SKINS, railUp } from "./world.js?v=03262ed9";
+import { LEVELS, WORLDS, STORIES, FREE_LEVEL } from "./levels.js?v=03262ed9";
+import { Run, DT, processStroke, makeRail, anchors, canDraw, blockedSegment, SNAP, drawStrokes, fixedRails, railAt, predictJumps, bendRail } from "./physics.js?v=03262ed9";
 
 const el = (id) => document.getElementById(id);
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);

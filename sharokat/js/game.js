@@ -1,14 +1,14 @@
 // «Шарокат»: шар катится по радужным горкам в небе. Здесь игровой цикл, физика шара, камера, меню.
-import * as T from "../vendor/three/three.module.min.js?v=96f16026";
-import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=96f16026";
-import { Track, trackMesh, railLights, tubeMeshes, HALF } from "./track.js?v=f444f678";
-import { R, sky, scenery, supports, gates, boostPads, obstacles, trampolines, gemField, skins, skinMaterial, ballMesh, effects } from "./world.js?v=f444f678";
-import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=96f16026";
-import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=96f16026";
-import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=96f16026";
-import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=96f16026";
-import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=96f16026";
-import { themeFor } from "./themes.js?v=f444f678";
+import * as T from "../vendor/three/three.module.min.js?v=f9bbafb0";
+import { RoomEnvironment } from "../vendor/three/RoomEnvironment.js?v=f9bbafb0";
+import { Track, trackMesh, railLights, tubeMeshes, HALF } from "./track.js?v=f9bbafb0";
+import { R, sky, scenery, supports, gates, boostPads, obstacles, trampolines, gemField, skins, skinMaterial, ballMesh, effects } from "./world.js?v=f9bbafb0";
+import { EffectComposer } from "../vendor/three/postprocessing/EffectComposer.js?v=f9bbafb0";
+import { RenderPass } from "../vendor/three/postprocessing/RenderPass.js?v=f9bbafb0";
+import { UnrealBloomPass } from "../vendor/three/postprocessing/UnrealBloomPass.js?v=f9bbafb0";
+import { OutputPass } from "../vendor/three/postprocessing/OutputPass.js?v=f9bbafb0";
+import { ShaderPass } from "../vendor/three/postprocessing/ShaderPass.js?v=f9bbafb0";
+import { themeFor } from "./themes.js?v=f9bbafb0";
 
 // 20 уровней: каждая из 10 тем встречается дважды
 const LEVELS = 20;

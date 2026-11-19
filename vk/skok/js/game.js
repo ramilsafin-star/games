@@ -2,9 +2,9 @@ await window.vkGameHost?.ready;
 // «Заводной Скок»: заводной зайчик сам едет по верстаку; нажатие — прыжок.
 // Перепрыгнуть гайки, винтики и кнопки, забраться на кубики, собрать шестерёнки, доехать до коробки.
 // Логика — jump.js (проверяется tests/jump.mjs), трассы — tracks.js, 3D — world.js.
-import { World } from "./world.js?v=ba789b8b";
-import { TRACKS } from "./tracks.js?v=ba789b8b";
-import { Run, plan, STEP } from "./jump.js?v=ba789b8b";
+import { World } from "./world.js?v=c78a4454";
+import { TRACKS } from "./tracks.js?v=c78a4454";
+import { Run, plan, STEP } from "./jump.js?v=c78a4454";
 
 const el = (id) => document.getElementById(id);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

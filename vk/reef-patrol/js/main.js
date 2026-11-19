@@ -1,5 +1,5 @@
-import { DEPTHS, MODULES, Patrol, RULES, dayCode, dailyRule } from "./rules.js?v=387c2c1e";
-import { ReefView } from "./view.js?v=387c2c1e";
+import { DEPTHS, MODULES, Patrol, RULES, dayCode, dailyRule } from "./rules.js?v=697b562b";
+import { ReefView } from "./view.js?v=697b562b";
 
 const id = name => document.getElementById(name);
 const canvas = id("reef");

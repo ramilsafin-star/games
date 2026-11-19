@@ -1,7 +1,7 @@
 // «Маяк»: управление, приборы, подсказки, панели и сохранение. Правила — в rules.js, картинка — в view.js.
-import { NIGHTS, UPGRADES, Bay, STORM_AT, FINDS } from "./rules.js?v=cd4dd037";
-import { BayView } from "./view.js?v=cd4dd037";
-import { Sound } from "./sound.js?v=cd4dd037";
+import { NIGHTS, UPGRADES, Bay, STORM_AT, FINDS } from "./rules.js?v=95310c01";
+import { BayView } from "./view.js?v=95310c01";
+import { Sound } from "./sound.js?v=95310c01";
 
 const id = (name) => document.getElementById(name);
 const canvas = id("sea");

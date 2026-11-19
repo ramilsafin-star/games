@@ -2,7 +2,7 @@ await window.vkGameHost?.ready;
 // «Радужная пушка»: добрый шутер. Мир посерел, по небу плывут хмурые тучки. Касаешься тучки —
 // пушка стреляет краской, тучка становится цветной и весёлой. За раскрашенных тучек в небе дуга
 // за дугой загорается радуга, на последней дуге приходит Большая Хмурь. Проиграть нельзя.
-import * as T from "../vendor/three/three.module.min.js?v=17172773";
+import * as T from "../vendor/three/three.module.min.js?v=60eafae4";
 
 const TAU = Math.PI * 2;
 const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;

@@ -1,5 +1,5 @@
 // Монеты, улучшения, облики и сохранение «Вихря». Без DOM: тесты в Node считают экономику.
-import { MAPS } from "./rules.js?v=935ab875";
+import { MAPS } from "./rules.js?v=b0d73a34";
 
 export const SAVE_KEY = "vihr-v1";
 

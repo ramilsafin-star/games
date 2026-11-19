@@ -8,10 +8,10 @@ import {
 	Vector2,
 	Vector3,
 	WebGLRenderTarget
-} from '../three.module.min.js?v=ab118089';
-import { Pass, FullScreenQuad } from './Pass.js?v=ab118089';
-import { CopyShader } from '../shaders/CopyShader.js?v=ab118089';
-import { LuminosityHighPassShader } from '../shaders/LuminosityHighPassShader.js?v=ab118089';
+} from '../three.module.min.js?v=37c8089d';
+import { Pass, FullScreenQuad } from './Pass.js?v=37c8089d';
+import { CopyShader } from '../shaders/CopyShader.js?v=37c8089d';
+import { LuminosityHighPassShader } from '../shaders/LuminosityHighPassShader.js?v=37c8089d';
 
 /**
  * This pass is inspired by the bloom pass of Unreal Engine. It creates a
