@@ -248,4 +248,12 @@ const GAMES = [
     description: "Веди отряд против боевых роботов, выполняй задания и сразись с шагоходом.",
     color: "#9c3f18",
   },
+  {
+    id: "steel-derby",
+    title: "Стальной Дерби: Twisted Metal · 12+",
+    url: "steel-derby/",
+    cover: "covers/rubezh-v2.jpg",
+    description: "Боевые машины, броня, дрифт и ракеты в стиле Twisted Metal. Сразись с боссом Сладкоежкой!",
+    color: "#ea580c",
+  },
 ];
