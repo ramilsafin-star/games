@@ -250,10 +250,10 @@ const GAMES = [
   },
   {
     id: "steel-derby",
-    title: "Стальной Дерби: Twisted Metal · 12+",
+    title: "Стальной Дерби · 12+",
     url: "steel-derby/",
-    cover: "covers/rubezh-v2.jpg",
-    description: "Боевые машины, броня, дрифт и ракеты в стиле Twisted Metal. Сразись с боссом Сладкоежкой!",
+    cover: "covers/steel-derby-combat.jpg",
+    description: "Выбери одну из 21 машины и устрой бой на арене. Дрифтуй, пускай ракеты, бей цепной молнией и сбивай броню соперников.",
     color: "#ea580c",
   },
 ];
