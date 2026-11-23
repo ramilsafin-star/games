@@ -9,6 +9,7 @@
   <script src="assets/vehicle-surfaces.js"></script>
   <script src="assets/sculpted-racers.js"></script>
   <script src="assets/sculpted-shells.js"></script>
+  <script src="./assets/derby-art.js?v=f2fed317"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;600;700;900&display=swap');
     * { box-sizing: border-box; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
@@ -662,7 +663,7 @@
     const STORE_KEY = 'steel_derby_colossus_v5';
     let profile = {
       scrap: 500,
-      selectedVehicle: 'vaz2107',
+      selectedVehicle: 'iskra',
       selectedMode: 'arena',
       selectedMap: 'terminal',
       custom: {},
@@ -1110,7 +1111,7 @@
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       renderer.outputEncoding = THREE.sRGBEncoding;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 0.94;
+      renderer.toneMappingExposure = 0.92;
       wrap.appendChild(renderer.domElement);
     } catch (err) {
       document.getElementById('webgl-error').classList.remove('hidden');
@@ -1127,6 +1128,7 @@
 
     // 360° Procedural Panoramic HDR Studio & Biome Environment Reflections (PMREM)
     let currentEnvKey = null;
+    let environmentTarget = null;
     function updateEnvMap(envKey = 'garage') {
       if (currentEnvKey === envKey && scene.environment) return;
       currentEnvKey = envKey;
@@ -1200,14 +1202,41 @@
           ctx.fillStyle = 'rgba(255,140,50,0.85)';
           for (let i = 0; i < 10; i++) ctx.fillRect(i * 52 + 8, 108, 22, 20);
         }
-        const eqTex = new THREE.CanvasTexture(c);
+        const skyMap = envKey === 'garage' ? null : DerbyArt.skyTexture(envKey);
+        if (skyMap) {
+          ctx.drawImage(skyMap.image, 0, 0, 512, 256);
+          // A dark horizon gives paint and polished metal a readable belt line.
+          ctx.fillStyle = 'rgba(18,25,37,.79)';
+          ctx.fillRect(0, 124, 512, 10);
+          for (let i = 0; i < 34; i++) {
+            const h = 3 + (i * 13 % 19);
+            ctx.fillRect(i * 15.7, 126 - h, 6 + i % 8, h);
+          }
+        }
+        // Expand bright sky and studio strips to scene-linear radiance before
+        // convolution. An eight-bit white softbox otherwise looks grey in chrome.
+        const rgba = ctx.getImageData(0, 0, 512, 256).data;
+        const pixels = new Uint8Array(rgba.length);
+        for (let i = 0; i < rgba.length; i += 4) {
+          const highlight = Math.max(rgba[i], rgba[i+1], rgba[i+2]) / 255;
+          const strength = .86 + 3.1 * Math.pow(highlight, 7);
+          const r = Math.pow(rgba[i] / 255, 2.2) * strength;
+          const g = Math.pow(rgba[i+1] / 255, 2.2) * strength;
+          const b = Math.pow(rgba[i+2] / 255, 2.2) * strength;
+          const exponent = Math.ceil(Math.log2(Math.max(r,g,b,1e-6)));
+          const scale = 255 / Math.pow(2, exponent);
+          pixels[i] = r * scale; pixels[i+1] = g * scale; pixels[i+2] = b * scale; pixels[i+3] = exponent + 128;
+        }
+        const eqTex = new THREE.DataTexture(pixels,512,256,THREE.RGBAFormat);
+        eqTex.flipY = true;
+        eqTex.encoding = THREE.RGBEEncoding;
         eqTex.mapping = THREE.EquirectangularReflectionMapping;
-        eqTex.encoding = THREE.sRGBEncoding;
+        eqTex.needsUpdate = true;
         const pmrem = new THREE.PMREMGenerator(renderer);
-        pmrem.compileEquirectangularShader();
-        const prevEnv = scene.environment;
-        scene.environment = pmrem.fromEquirectangular(eqTex).texture;
-        if (prevEnv) prevEnv.dispose();
+        const previous = environmentTarget;
+        environmentTarget = pmrem.fromEquirectangular(eqTex);
+        scene.environment = environmentTarget.texture;
+        previous?.dispose();
         eqTex.dispose();
         pmrem.dispose();
       } catch (_) {}
@@ -1356,6 +1385,7 @@
           blurMat.uniforms.uTexel.value.set(1 / Math.max(2, pw >> 1), 1 / Math.max(2, ph >> 1));
         },
         render(aberration = 0) {
+          DerbyArt.reflect(renderer, scene, camera, performance.now());
           if (!enabled || !ready) {
             renderer.setRenderTarget(null);
             renderer.render(scene, camera);
@@ -1780,6 +1810,7 @@
         clearcoat: finish === 'matte' ? 0.12 : 1.0,
         clearcoatRoughness: finish === 'matte' ? 0.54 : 0.13
       });
+      DerbyArt.paint(mat, finish);
       mat.userData.baseColor = mat.color.clone();
       if (finish === 'chameleon') mat.userData.chameleon = true;
       return mat;
@@ -2112,7 +2143,7 @@
       material.userData.shared = true;
     }
 
-    function createWheel(radius, width, accentHex, style = 'sport') {
+    function createWheel(radius, width, accentHex, style = 'sport', outside = 1) {
       const wheel = new THREE.Group();
       const offroad = style === 'offroad';
       const rimRadius = radius * (offroad ? 0.60 : style === 'whitewall' ? 0.59 : 0.69);
@@ -2195,6 +2226,7 @@
         }
       }
       wheel.add(spokes, bolts);
+      DerbyArt.detailWheels(wheel, radius, width, outside, style);
       return wheel;
     }
 
@@ -2386,6 +2418,13 @@
         port.position.set(x, y, z + 0.035);
         turret.add(port);
         gunPorts.push(port);
+        if (spec.weaponType === 'tesla') {
+          // Terminals on the vertical coil follow its axis.
+          const top = new THREE.Group(); top.rotation.x = -Math.PI/2; port.add(top);
+          DerbyArt.muzzle(top, 'arcRelay', .105);
+        } else if (!['rocket','atgm'].includes(spec.weaponType) || radius) {
+          DerbyArt.muzzle(port, spec.weaponType, radius || (spec.weaponType === 'minigun' ? .16 : .085));
+        }
       };
       if (isColossus) {
         // КОЛОСС-Х: гигантская цитадель-башня с багровыми энергоконтурами, дымовыми мортирами и сдвоенной 152-мм пушкой
@@ -2450,6 +2489,9 @@
         }
         for (let r = 0; r < 2; r++) for (let c = -1; c <= 1; c++) {
           addPart(turret, new THREE.CylinderGeometry(0.095, 0.095, 1.32, 10).rotateX(Math.PI / 2), MAT_STEEL, c * 0.27, 0.28 + r * 0.24, 0.12);
+          const socket = new THREE.Group();
+          socket.position.set(c*.27,.28+r*.24,.83); turret.add(socket);
+          DerbyArt.muzzle(socket,'rocket',.081);
           addPart(turret, new THREE.ConeGeometry(0.085, 0.22, 8).rotateX(Math.PI / 2), MAT_TAILLIGHT, c * 0.27, 0.28 + r * 0.24, 0.86, 0, 0, 0, false);
         }
       } else if (spec.weaponType === 'minigun') {
@@ -2514,7 +2556,7 @@
       ctx.save();
       ctx.clip(panel);
       for (const [x, y] of [[146, 146], [364, 142]]) {
-        const iris = ctx.createRadialGradient(x + 9, y + 8, 8, x, y, 52);
+        const iris = ctx.createRadialGradient(x + 4, y + 5, 8, x, y, 52);
         iris.addColorStop(0, '#080c18');
         iris.addColorStop(0.48, irisColor);
         iris.addColorStop(0.77, irisColor);
@@ -2524,7 +2566,16 @@
         ctx.fillStyle = iris;
         ctx.fill();
         ctx.beginPath();
-        ctx.ellipse(x + 6, y - 1, 24, 32, 0, 0, Math.PI * 2);
+        ctx.save();
+        for (let i=0; i<96; i++){
+          const angle=i*Math.PI/48, inner=27+(i*17%11), outer=41+(i*13%6);
+          ctx.strokeStyle=i%3?'rgba(5,22,32,.30)':'rgba(246,238,195,.48)';
+          ctx.lineWidth=1.2; ctx.beginPath();
+          ctx.moveTo(x+Math.cos(angle)*inner,y+Math.sin(angle)*inner);
+          ctx.lineTo(x+Math.cos(angle+.045)*outer,y+Math.sin(angle+.045)*outer);ctx.stroke();
+        }
+        ctx.restore();ctx.beginPath();
+        ctx.ellipse(x + 4, y - 1, 28, 33, 0, 0, Math.PI * 2);
         ctx.fillStyle = '#090e19';
         ctx.fill();
         ctx.beginPath();
@@ -2882,11 +2933,16 @@
       data.parts.forEach(([role, finish, ...buffers], index) => {
         const material = finish === 'paint' ? paint : finish === 'face' ? face : sculptedMaterial(finish);
         const geometry = sculptedGeometry(`${spec.id}/${index}`, buffers);
-        addPart(groups[role], geometry, material, 0, 0, 0, 0, 0, 0, finish !== 'face');
+        const part = addPart(groups[role], geometry, material, 0, 0, 0, 0, 0, 0, finish !== 'face');
+        if (role === 'main' && finish === 'paint') {
+          DerbyArt.bodywork(body,part,spec.id);
+          DerbyArt.rearDeck(body,groups.rear,part,spec.id);
+        }
       });
       for (const mount of data.muzzles) {
         const tip = new THREE.Object3D();
         tip.position.fromArray(mount);
+        DerbyArt.muzzle(tip, spec.weaponType, truck ? .132 : volt ? .133 : .126);
         body.add(tip);
         muzzles.push(tip);
       }
@@ -3768,7 +3824,7 @@
             const pivot = new THREE.Group();
             pivot.position.set(sx, wRad, sz);
             pivot.userData = { baseY: wRad, side: sx >= 0 ? 1 : -1, front: sz >= 0 ? 1 : -1 };
-            const wh = createWheel(wRad, wWid, accentHex, wheelStyle);
+            const wh = createWheel(wRad, wWid, accentHex, wheelStyle, Math.sign(sx));
             pivot.add(wh);
             root.add(pivot);
             wheels.push(wh);
@@ -3794,7 +3850,7 @@
       for (const s of [-1, 1]) {
         const flame = new THREE.Mesh(
           new THREE.ConeGeometry(isTank ? 0.22 : 0.14, isTank ? 1.35 : 1.0, 8).rotateX(-Math.PI / 2),
-          new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.88, blending: THREE.AdditiveBlending })
+          DerbyArt.nitroPlume()
         );
         flame.position.set(s * (w * 0.28), 0.48, -l * 0.5 - 0.65);
         flame.visible = false;
@@ -3870,7 +3926,7 @@
     // 6. GARAGE SHOWROOM PODIUM
     // =========================================================================
     function addStudioLighting(stage, shadowSize) {
-      const key = new THREE.DirectionalLight(0xffede1, 2.05);
+      const key = new THREE.DirectionalLight(0xffe7d3, 1.66);
       key.position.set(4.7, 7.6, 3.8);
       key.castShadow = true;
       key.shadow.mapSize.set(shadowSize, shadowSize);
@@ -3879,18 +3935,18 @@
       key.shadow.normalBias = 0.025;
       key.shadow.radius = 3;
       stage.add(key);
-      const edge = new THREE.DirectionalLight(0x90bbff, 1.38);
+      const edge = new THREE.DirectionalLight(0xa1c9ff, 1.65);
       edge.position.set(-4, 3.4, -5.4);
       stage.add(edge);
-      const bounce = new THREE.DirectionalLight(0xffa864, 0.54);
+      const bounce = new THREE.DirectionalLight(0xffae77, 0.76);
       bounce.position.set(-5.5, 2.6, 1.3);
       stage.add(bounce);
       stage.add(new THREE.HemisphereLight(0xaec3ed, 0x2c2739, 0.54));
     }
 
-    function buildShowroom() {
+    function buildShowroom(shadowSize = 2048) {
       const room = new THREE.Group();
-      addStudioLighting(room, 2048);
+      addStudioLighting(room, shadowSize);
       const textureCanvas = document.createElement('canvas');
       textureCanvas.width = textureCanvas.height = 256;
       const texCtx = textureCanvas.getContext('2d');
@@ -3950,6 +4006,7 @@
           addPart(bay, new THREE.BoxGeometry(8.7, 0.024, 0.10), floorStripe, side * 7.2, 0.014, -12.0, 0, 0, 0, false);
         }
       }
+      DerbyArt.fitShowroom(room);
       return room;
     }
 
@@ -3961,9 +4018,10 @@
     const podiumBase = new THREE.Mesh(
       new THREE.CylinderGeometry(4.18, 4.30, 0.17, 64),
       new THREE.MeshStandardMaterial({
-        color: new THREE.Color(0x273341).convertSRGBToLinear(), roughness: 0.72, metalness: 0.14, envMapIntensity: 0.54
+        color: new THREE.Color(0x202b38).convertSRGBToLinear(), roughness: 0.58, metalness: 0.25, envMapIntensity: 0.60
       })
     );
+    DerbyArt.turntable(podiumBase.material);
     podiumBase.position.y = podiumHeight - 0.085;
     podiumBase.receiveShadow = true;
     podiumGroup.add(podiumBase);
@@ -3981,7 +4039,7 @@
     let garagePreviewVehicleId = null;
     let garageOrbitYaw = 0.65, garageTargetYaw = 0.65;
     let garageOrbitPitch = 0.28, garageTargetPitch = 0.28;
-    let garageZoom = 8.15, garageTargetZoom = 8.15;
+    let garageZoom = 7.35, garageTargetZoom = 7.35;
     let garageTestTimer = 0;
     let isDraggingGarage = false;
     let dragStartX = 0, dragStartY = 0;
@@ -3996,16 +4054,7 @@
       const stage = new THREE.Scene();
       stage.background = new THREE.Color(0x101a2a).convertSRGBToLinear();
       stage.fog = new THREE.Fog(stage.background.clone(), 8.5, 26);
-      addStudioLighting(stage, 1024);
-      const floor = new THREE.Mesh(
-        new THREE.PlaneGeometry(240, 240).rotateX(-Math.PI / 2),
-        new THREE.MeshStandardMaterial({
-          color: new THREE.Color(0x293746).convertSRGBToLinear(), roughness: 0.67, metalness: 0.13, envMapIntensity: 0.64
-        })
-      );
-      floor.position.y = -0.014;
-      floor.receiveShadow = true;
-      stage.add(floor);
+      stage.add(buildShowroom(1024));
       const lens = new THREE.PerspectiveCamera(33, CARD_WIDTH / CARD_HEIGHT, 0.1, 100);
       const target = new THREE.WebGLRenderTarget(CARD_WIDTH * 2, CARD_HEIGHT * 2);
       const pixels = new Uint8Array(target.width * target.height * 4);
@@ -4046,8 +4095,8 @@
         });
         const center = bounds.getCenter(new THREE.Vector3());
         const size = bounds.getSize(new THREE.Vector3());
-        const distance = Math.max(size.z * 1.48, size.y * 2.86, size.x * 1.92);
-        lens.position.copy(center).addScaledVector(new THREE.Vector3(0.62, 0.24, 0.75), distance);
+        const distance = Math.max(size.z * 1.34, size.y * 2.75, size.x * 1.90);
+        lens.position.copy(center).addScaledVector(new THREE.Vector3(0.62, 0.21, 0.75), distance);
         lens.lookAt(center.x, center.y * 0.92, center.z);
         renderer.setRenderTarget(target);
         renderer.render(stage, lens);
@@ -4083,7 +4132,7 @@
     function getVehicleCardSource(spec) {
       const portrait = customizedPortraits.get(spec.id);
       if (portrait && portrait.key === vehicleLookKey(getCustom(spec.id))) return portrait.src;
-      return `assets/vehicle-cards/${spec.id}.webp`;
+      return `assets/vehicle-cards/${spec.id}.webp?v=quayside1`;
     }
 
     function refreshCustomizedPortraits() {
@@ -4279,10 +4328,10 @@
         ctx.beginPath(); ctx.arc(360, 128, 44, 0, Math.PI * 2); ctx.fill();
       }
 
-      const tex = new THREE.CanvasTexture(c);
+      const tex = DerbyArt.skyTexture(mapId) || new THREE.CanvasTexture(c);
       tex.encoding = THREE.sRGBEncoding;
       return new THREE.Mesh(
-        new THREE.SphereGeometry(260, 28, 16),
+        new THREE.SphereGeometry(260, 64, 32),
         new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide, fog: false, depthWrite: false })
       );
     }
@@ -4312,7 +4361,7 @@
       const ctx = c.getContext('2d');
       ctx.clearRect(0, 0, 128, 128);
       ctx.strokeStyle = '#38bdf8';
-      ctx.lineWidth = 14;
+      ctx.lineWidth = 7;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       for (const y of [44, 98]) {
@@ -4424,42 +4473,6 @@
       );
     }
 
-    function makeGroundTexture(mapId) {
-      const c = document.createElement('canvas');
-      c.width = 512; c.height = 512;
-      const ctx = c.getContext('2d');
-      const m = MAPS.find(x => x.id === mapId) || MAPS[0];
-      ctx.fillStyle = '#' + m.ground.toString(16).padStart(6, '0');
-      ctx.fillRect(0, 0, 512, 512);
-      const fleck = mapId === 'terminal' ? 2 : 6;
-      for (let i = 0; i < 2400; i++) {
-        ctx.fillStyle = i % 2 ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.09)';
-        ctx.fillRect(Math.random() * 512, Math.random() * 512, fleck, fleck);
-      }
-      if (mapId === 'terminal') {
-        ctx.strokeStyle = 'rgba(13,32,37,0.26)';
-        ctx.lineWidth = 2.5;
-        ctx.strokeRect(1, 1, 510, 510);
-        const tex = new THREE.CanvasTexture(c);
-        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-        tex.repeat.set(22, 22);
-        tex.encoding = THREE.sRGBEncoding;
-        tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-        return tex;
-      }
-      ctx.strokeStyle = mapId === 'shanghai' ? 'rgba(34,211,238,0.34)' : mapId === 'uralmash' ? 'rgba(251,146,60,0.28)' : 'rgba(180,95,25,0.25)';
-      ctx.lineWidth = 6;
-      ctx.strokeRect(4, 4, 504, 504);
-      ctx.setLineDash([28, 22]);
-      ctx.strokeStyle = mapId === 'shanghai' ? 'rgba(232,121,249,0.28)' : 'rgba(250,204,21,0.24)';
-      ctx.beginPath(); ctx.moveTo(256, 0); ctx.lineTo(256, 512); ctx.moveTo(0, 256); ctx.lineTo(512, 256); ctx.stroke();
-      const tex = new THREE.CanvasTexture(c);
-      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-      tex.repeat.set(16, 16);
-      tex.encoding = THREE.sRGBEncoding;
-      return tex;
-    }
-
     const PICKUP_META = {
       heal:     { name: 'РЕМОНТ', icon: '💚', color: 0x22c55e, instant: true },
       shield:   { name: 'ТУРБО-ЩИТ', icon: '🛡', color: 0x38bdf8, instant: true },
@@ -4502,16 +4515,17 @@
       core.position.y = 1.4;
       g.add(core);
       const beam = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.95, 1.15, 7.5, 14, 1, true),
-        new THREE.MeshBasicMaterial({ color: meta.color, transparent: true, opacity: 0.2, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false })
+        new THREE.CylinderGeometry(.55, 1.04, 3.6, 24, 1, true),
+        new THREE.MeshBasicMaterial({ color: meta.color, map: DerbyArt.pickupBeam(), transparent: true, opacity: .30, side: THREE.FrontSide, blending: THREE.AdditiveBlending, depthWrite: false })
       );
-      beam.position.y = 3.75;
+      DerbyArt.pickupBase(g);
+      beam.position.y = 1.8;
       g.add(beam);
       const ring = new THREE.Mesh(
-        new THREE.RingGeometry(1.1, 1.45, 24).rotateX(-Math.PI / 2),
+        new THREE.RingGeometry(1.10, 1.20, 40).rotateX(-Math.PI / 2),
         new THREE.MeshBasicMaterial({ color: meta.color, side: THREE.DoubleSide })
       );
-      ring.position.y = 0.08;
+      ring.position.y = 0.185;
       g.add(ring);
       return { root: g, core };
     }
@@ -4562,7 +4576,11 @@
           put(metalParts, 0x384953, x + sx, 3.5, z, 3.6, 7, 5.2);
           put(metalParts, ochre, x + sx * 0.5, height * 0.72, z, 1.3, height * 0.58, 1.3, -sx * 0.063);
         }
-        put(metalParts, ochre, x, height, z - 5, 17.8, 2.8, 26);
+        put(metalParts, ochre, x, height, z - 5, 17.8, 0.82, 26);
+        for (const edge of [-7.8, 7.8]) {
+          put(metalParts, ochre, x + edge, height + 2.5, z - 5, .32, .38, 26);
+          for (let j=0; j<8; j++) put(metalParts, ochre, x+edge, height+1.2, z-17+j*3.3, .30, 2.6, .30);
+        }
         put(metalParts, 0x41636c, x, height + 2, z + 5, 4.7, 3, 4.2);
         put(lightParts, 0xff9870, x - 7.2, height + 1.6, z + 6, 0.65, 0.54, 0.65);
         put(lightParts, 0x75eaff, x + 4, height - 1.5, z + 7, 3.5, 0.18, 0.75);
@@ -4640,6 +4658,7 @@
 
     function buildArena(mapId, forBattle = true) {
       clearArena();
+      DerbyArt.reflectionOn(forBattle ? mapId : null);
       lightningLight.intensity = 0;
       explosionLight.intensity = 0;
       showroom.visible = !forBattle;
@@ -4657,11 +4676,11 @@
       scene.background.setHex(m.sky);
       scene.fog.color.setHex(m.fog);
       const terminal = mapId === 'terminal';
-      if (terminal) scene.fog.color.convertSRGBToLinear();
-      scene.fog.near = terminal ? 64 : mapId === 'gobi' ? 32 : 48;
-      scene.fog.far = terminal ? 245 : mapId === 'gobi' ? 145 : 210;
+      scene.fog.color.convertSRGBToLinear();
+      scene.fog.near = terminal ? 64 : mapId === 'gobi' ? 53 : 48;
+      scene.fog.far = terminal ? 245 : mapId === 'gobi' ? 210 : 230;
       sunLight.color.setHex(terminal ? 0xffdbb0 : mapId === 'shanghai' ? 0x93c5fd : mapId === 'gobi' ? 0xffe4a0 : 0xffcfa0);
-      sunLight.intensity = terminal ? 1.48 : mapId === 'shanghai' ? 1.1 : 1.9;
+      sunLight.intensity = terminal ? 1.48 : mapId === 'shanghai' ? 1.1 : 1.5;
       sunLight.position.set(terminal ? -52 : 38, terminal ? 54 : 65, 32);
       hemiLight.color.setHex(terminal ? 0xb7e8ff : 0xdbeafe);
       hemiLight.groundColor.setHex(terminal ? 0x4b4640 : 0x1e293b);
@@ -4671,25 +4690,23 @@
 
       const ground = new THREE.Mesh(
         new THREE.PlaneGeometry(ARENA_HALF * 2.5, ARENA_HALF * 2.5).rotateX(-Math.PI / 2),
-        new THREE.MeshStandardMaterial({
-          map: makeGroundTexture(mapId),
-          bumpMap: makeGroundBumpTexture(mapId),
-          bumpScale: terminal ? 0.04 : mapId === 'gobi' ? 0.35 : 0.16,
-          roughness: terminal ? 0.44 : mapId === 'shanghai' ? 0.22 : 0.85,
-          metalness: terminal ? 0.17 : mapId === 'shanghai' ? 0.42 : 0.05
-        })
+        DerbyArt.road(mapId)
       );
       ground.receiveShadow = true;
       arenaGroup.add(ground);
+
+      DerbyArt.paintedTrack(arenaGroup,mapId,ARENA_HALF);
+      DerbyArt.barricades(arenaGroup,mapId,ARENA_HALF);
+      DerbyArt.skyline(arenaGroup,mapId,ARENA_HALF);
 
       // Perimeter walls
       const wallMat = new THREE.MeshStandardMaterial({ color: mapId === 'gobi' ? 0x92400e : 0x1e293b, roughness: 0.7 });
       const glowMat = new THREE.MeshBasicMaterial({ color: m.accent });
       for (const s of [-1, 1]) {
         addPart(arenaGroup, new THREE.BoxGeometry(ARENA_HALF * 2 + 4, 3.8, 2.5), wallMat, 0, 1.9, s * ARENA_HALF);
-        addPart(arenaGroup, new THREE.BoxGeometry(ARENA_HALF * 2, 0.3, 2.7), glowMat, 0, 3.6, s * ARENA_HALF, 0, 0, 0, false);
+        addPart(arenaGroup, new THREE.BoxGeometry(ARENA_HALF * 2, 0.09, 2.1), wallMat, 0, 3.6, s * ARENA_HALF, 0, 0, 0, false);
         addPart(arenaGroup, new THREE.BoxGeometry(2.5, 3.8, ARENA_HALF * 2 + 4), wallMat, s * ARENA_HALF, 1.9, 0);
-        addPart(arenaGroup, new THREE.BoxGeometry(2.7, 0.3, ARENA_HALF * 2), glowMat, s * ARENA_HALF, 3.6, 0, 0, 0, 0, false);
+        addPart(arenaGroup, new THREE.BoxGeometry(2.1, 0.09, ARENA_HALF * 2), wallMat, s * ARENA_HALF, 3.6, 0, 0, 0, 0, false);
       }
 
       const aTex = getArenaTextures();
@@ -4730,16 +4747,24 @@
         }
         weatherMode = 'rain';
       } else {
-        const rockMat = new THREE.MeshStandardMaterial({ color: 0x9a5b32, bumpMap: aTex.get('rockBump'), bumpScale: 0.35, roughness: 0.92 });
+        const rockMat = new THREE.MeshStandardMaterial({ vertexColors:true, side:THREE.DoubleSide, roughness:.93 });
         for (let i = 0; i < 16; i++) {
           const a = (i / 16) * Math.PI * 2;
           const dist = ARENA_HALF + 16 + (i % 3) * 10;
-          addPart(arenaGroup, new THREE.CylinderGeometry(6, 12, 16 + (i % 4) * 6, 7), rockMat, Math.cos(a) * dist, 8, Math.sin(a) * dist);
+          addPart(arenaGroup, DerbyArt.sandstone(i, 13 + (i % 4) * 5), rockMat, Math.cos(a) * dist, 0, Math.sin(a) * dist);
         }
         weatherMode = 'sand';
       }
 
 
+      if (terminal || mapId === 'shanghai') {
+        // Only skyline and architecture participate in the reduced-resolution pass.
+        // Road, HUD effects and dynamic battle actors remain on the main layer.
+        arenaGroup.traverse(node => {
+          if ((node.isMesh || node.isInstancedMesh) && node !== ground && !node.material?.transparent) node.layers.enable(1);
+        });
+        sunLight.layers.enable(1); hemiLight.layers.enable(1);
+      }
       // Destructible Cover (Corrugated Steel Containers / Stratified Stone Boulders)
       const cPalette = terminal ? [0xc45027, 0x176673, 0xf4a746, 0x557c87] : [0xdc2626, 0x2563eb, 0xd97706, 0x059669];
       const contTex = aTex.get('container');
@@ -4750,7 +4775,7 @@
         let mesh, radius, hp, kind, color;
         if (mapId === 'gobi') {
           color = 0xa16236;
-          mesh = new THREE.Mesh(new THREE.DodecahedronGeometry(2.6, 0), new THREE.MeshStandardMaterial({ color, bumpMap: aTex.get('rockBump'), bumpScale: 0.3, roughness: 0.92 }));
+          mesh = new THREE.Mesh(new THREE.DodecahedronGeometry(2.6, 0), new THREE.MeshStandardMaterial({ color: new THREE.Color(color).convertSRGBToLinear(), bumpMap: aTex.get('rockBump'), bumpScale: 0.035, roughness: 0.92 }));
           mesh.position.set(cx, 1.8, cz);
           mesh.scale.set(1.2, 0.9, 1.0);
           mesh.castShadow = true; mesh.receiveShadow = true;
@@ -4761,9 +4786,11 @@
           mesh.position.set(cx, 1.4, cz);
           mesh.rotation.y = ang;
           mesh.castShadow = true; mesh.receiveShadow = true;
+          DerbyArt.containerDoors(mesh);
           radius = 3.1; hp = 160; kind = 'container';
         }
         arenaGroup.add(mesh);
+        if (terminal || mapId === 'shanghai') mesh.traverse(node => node.layers.enable(1));
         covers.push({ mesh, x: cx, z: cz, radius, hp, kind, color });
       }
 
@@ -4791,7 +4818,7 @@
         const deck = new THREE.Group();
         deck.position.y = 1.175;
         deck.rotation.x = pitch;
-        addPart(deck, new THREE.BoxGeometry(5.6, 0.32, slant), MAT_DARK, 0, -0.16, 0);
+        addPart(deck, new THREE.BoxGeometry(5.6, 0.32, slant), DerbyArt.rampSurface(), 0, -0.16, 0);
         for (const side of [-1, 1]) {
           addPart(deck, new THREE.BoxGeometry(0.23, 0.06, slant), MAT_AMBER, side * 2.68, 0.035, 0, 0, 0, 0, false);
         }
@@ -4813,7 +4840,7 @@
       for (const [px, pz] of padSpots) {
         const pad = new THREE.Mesh(
           new THREE.PlaneGeometry(5.8, 5.8).rotateX(-Math.PI / 2),
-          new THREE.MeshBasicMaterial({ map: animatedChevronTex, color: 0x38bdf8, transparent: true, opacity: 0.88, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
+          new THREE.MeshBasicMaterial({ map: animatedChevronTex, color: 0x77dddb, transparent: true, opacity: 0.60, depthWrite: false, side: THREE.DoubleSide })
         );
         pad.position.set(px, 0.09, pz);
         arenaGroup.add(pad);
@@ -4928,8 +4955,9 @@
       const wGeo = new THREE.BufferGeometry();
       wGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
       const wMat = new THREE.PointsMaterial({
+        map: DerbyArt.weatherSprite(weatherMode),
         color: terminal ? 0xbededf : weatherMode === 'rain' ? 0x93c5fd : weatherMode === 'sand' ? 0xfde68a : 0xff7b29,
-        size: terminal ? 0.31 : weatherMode === 'rain' ? 0.35 : weatherMode === 'sand' ? 0.9 : 0.48,
+        size: terminal ? .46 : weatherMode === 'rain' ? .85 : weatherMode === 'sand' ? .70 : .42,
         transparent: true,
         opacity: terminal ? 0.24 : weatherMode === 'sand' ? 0.52 : 0.78,
         blending: weatherMode === 'sparks' ? THREE.AdditiveBlending : THREE.NormalBlending,
@@ -6097,6 +6125,11 @@
       player.yaw = Math.PI;
       player.meshObj.root.position.set(player.x, player.y, player.z);
       player.meshObj.root.rotation.y = player.yaw;
+      if (!matchMedia('(pointer: coarse)').matches) {
+        player.meshObj.bodyGroup.traverse(part => {
+          if (part.isMesh && !part.material?.transparent) part.layers.enable(1);
+        });
+      }
       chasePosition.set(player.x, player.y + 5, player.z + 9.4);
       chaseFocus.set(player.x, player.y + 1.5, player.z - 4.8);
       camera.position.copy(chasePosition);
@@ -7754,18 +7787,18 @@
       } else {
         const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw);
         const portrait = camera.aspect < 1;
-        const camDist = 9.4 + speed * 1.4 + boost * 0.7 + (portrait ? 3.2 : 0);
+        const camDist = 8.15 + speed * 1.85 + boost * 0.8 + (portrait ? 3.8 : 0);
         const offset = player.drifting ? THREE.MathUtils.clamp((player.vx * fz - player.vz * fx) * 0.065, -1.3, 1.3) : 0;
         const limit = ARENA_HALF - 2.3;
         const wantCamX = THREE.MathUtils.clamp(player.x - fx * camDist - fz * offset, -limit, limit);
         const wantCamZ = THREE.MathUtils.clamp(player.z - fz * camDist + fx * offset, -limit, limit);
-        const camY = Math.max(player.y, getGroundHeight(wantCamX, wantCamZ)) + 4.45 + (portrait ? 2.4 : 0);
+        const camY = Math.max(player.y, getGroundHeight(wantCamX, wantCamZ)) + 3.55 + (portrait ? 3.0 : 0);
         const damp = 1 - Math.exp(-9 * rawDt);
         const snap = Math.hypot(player.x - chasePosition.x, player.z - chasePosition.z) > 26 ? 1 : damp;
         chasePosition.x += (wantCamX - chasePosition.x) * snap;
         chasePosition.y += (camY - chasePosition.y) * snap;
         chasePosition.z += (wantCamZ - chasePosition.z) * snap;
-        const look = (portrait ? 3.8 : 4.8) + speed * 2.4;
+        const look = (portrait ? 3.6 : 4.2) + speed * 2.4;
         chaseFocus.x += (player.x + fx * look + player.vx * 0.095 - chaseFocus.x) * snap;
         chaseFocus.y += (player.y + (portrait ? 0.45 : 1.5) - chaseFocus.y) * snap;
         chaseFocus.z += (player.z + fz * look + player.vz * 0.095 - chaseFocus.z) * snap;
@@ -8534,7 +8567,7 @@
         }
         updateFX(dt);
         const dist = window.innerWidth < 640 ? (garageZoom + 2.5) : garageZoom;
-        const offsetX = window.innerWidth < 640 ? 0 : 1.55;
+        const offsetX = window.innerWidth < 640 ? 0 : 2.42;
         camera.position.set(
           Math.sin(garageOrbitYaw) * dist * Math.cos(garageOrbitPitch) + offsetX,
           1.35 + Math.sin(garageOrbitPitch) * dist,
@@ -8554,7 +8587,7 @@
     }
 
     window.onload = async function () {
-      await loadVehicleSurfaces();
+      await Promise.all([loadVehicleSurfaces(), DerbyArt.skyReady]);
       buildArena(profile.selectedMap, false);
       renderGarageUI();
       rebuildGaragePreview();
