@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Стальной дерби 3D · Терминал 17</title>
-  <script src="./vendor/vk/vk-bridge.min.js?v=aad35ad3"></script>
-    <script src="./js/vk-host.js?v=aad35ad3" data-keys="steel_derby_colossus_v5" data-ad-gap="120"></script>
+  <script src="./vendor/vk/vk-bridge.min.js?v=6f21422e"></script>
+    <script src="./js/vk-host.js?v=6f21422e" data-keys="steel_derby_colossus_v5" data-ad-gap="120"></script>
     <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="assets/vehicle-surfaces.js"></script>
   <script src="assets/sculpted-racers.js"></script>
   <script src="assets/sculpted-shells.js"></script>
-  <script src="./assets/derby-art.js?v=aad35ad3"></script>
+  <script src="./assets/derby-art.js?v=6f21422e"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;600;700;900&display=swap');
     * { box-sizing: border-box; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
@@ -2430,6 +2430,22 @@
           DerbyArt.muzzle(port, spec.weaponType, radius || (spec.weaponType === 'minigun' ? .16 : .085));
         }
       };
+
+      const weaponKey = typeof spec === 'string' ? spec : (spec?.weaponType || spec?.weapon || '');
+      const turretGroup = turret;
+      const muzzlePoints = gunPorts;
+      const createMuzzle = (x, y, z) => {
+        const m = new THREE.Object3D();
+        m.position.set(x, y, z);
+        turretGroup.add(m);
+        return m;
+      };
+      const darkMetalMat = MAT_DARK;
+      const bodyAccentMat = paint?.isMaterial ? paint : new THREE.MeshStandardMaterial({
+        color: (spec && (spec.accentColor || spec.color)) || 0x38bdf8,
+        roughness: 0.35,
+        metalness: 0.6
+      });
       if (isColossus) {
         // КОЛОСС-Х: гигантская цитадель-башня с багровыми энергоконтурами, дымовыми мортирами и сдвоенной 152-мм пушкой
         const tGeo = makeSculptedHull([
@@ -2510,6 +2526,144 @@
         addPart(spinBarrels, new THREE.CylinderGeometry(0.16, 0.16, 0.08, 12).rotateX(Math.PI / 2), MAT_DARK, 0, 0, 0.55);
         turret.add(spinBarrels);
         addGunPort(0, 0.26, 1.64);
+      } else if (weaponKey === 'pulseTwin' || spec?.id === 'iskra') {
+        // «Искра»: низкопрофильная двухствольная импульсная турель
+        const base = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.46, 0.54, 0.16, 16),
+          darkMetalMat
+        );
+        base.position.y = 0.08;
+        base.castShadow = true;
+        turretGroup.add(base);
+
+        const housing = new THREE.Mesh(
+          new THREE.BoxGeometry(0.68, 0.24, 0.74),
+          bodyAccentMat
+        );
+        housing.position.set(0, 0.24, -0.04);
+        housing.castShadow = true;
+        turretGroup.add(housing);
+
+        const glowMat = new THREE.MeshStandardMaterial({
+          color: 0x38bdf8,
+          emissive: 0x0ea5e9,
+          emissiveIntensity: 1.6,
+          roughness: 0.25,
+        });
+
+        [-0.2, 0.2].forEach((offsetX) => {
+          const barrel = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.065, 0.08, 0.92, 12),
+            darkMetalMat
+          );
+          barrel.rotation.x = Math.PI / 2;
+          barrel.position.set(offsetX, 0.25, 0.58);
+          barrel.castShadow = true;
+          turretGroup.add(barrel);
+
+          const tipRing = new THREE.Mesh(
+            new THREE.TorusGeometry(0.072, 0.02, 8, 16),
+            glowMat
+          );
+          tipRing.position.set(offsetX, 0.25, 1.02);
+          turretGroup.add(tipRing);
+
+          muzzlePoints.push(createMuzzle(offsetX, 0.25, 1.08));
+        });
+
+        return { turret: turretGroup, mesh: turretGroup, spinBarrels: null, gunPorts: muzzlePoints, muzzlePoints };
+      } else if (weaponKey === 'magnet' || spec?.id === 'buksir') {
+        // «Буксир»: поворотная электромагнитная пушка-гарпун с катушкой
+        const base = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.54, 0.62, 0.2, 16),
+          darkMetalMat
+        );
+        base.position.y = 0.1;
+        base.castShadow = true;
+        turretGroup.add(base);
+
+        const cradle = new THREE.Mesh(
+          new THREE.BoxGeometry(0.76, 0.3, 0.82),
+          bodyAccentMat
+        );
+        cradle.position.set(0, 0.3, -0.05);
+        cradle.castShadow = true;
+        turretGroup.add(cradle);
+
+        const core = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.11, 0.15, 1.05, 14),
+          darkMetalMat
+        );
+        core.rotation.x = Math.PI / 2;
+        core.position.set(0, 0.34, 0.56);
+        core.castShadow = true;
+        turretGroup.add(core);
+
+        const coilMat = new THREE.MeshStandardMaterial({
+          color: 0xf59e0b,
+          emissive: 0xd97706,
+          emissiveIntensity: 1.4,
+          roughness: 0.3,
+        });
+
+        [0.36, 0.58, 0.8].forEach((posZ) => {
+          const coil = new THREE.Mesh(
+            new THREE.TorusGeometry(0.2, 0.038, 10, 18),
+            coilMat
+          );
+          coil.position.set(0, 0.34, posZ);
+          turretGroup.add(coil);
+        });
+
+        muzzlePoints.push(createMuzzle(0, 0.34, 1.12));
+        return { turret: turretGroup, mesh: turretGroup, spinBarrels: null, gunPorts: muzzlePoints, muzzlePoints };
+      } else if (weaponKey === 'arcRelay' || spec?.id === 'volt') {
+        // «Вольт»: высоковольтная дуговая турель с двумя разрядными электродами
+        const base = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.48, 0.56, 0.18, 16),
+          darkMetalMat
+        );
+        base.position.y = 0.09;
+        base.castShadow = true;
+        turretGroup.add(base);
+
+        const generator = new THREE.Mesh(
+          new THREE.BoxGeometry(0.72, 0.28, 0.68),
+          bodyAccentMat
+        );
+        generator.position.set(0, 0.26, -0.06);
+        generator.castShadow = true;
+        turretGroup.add(generator);
+
+        const arcMat = new THREE.MeshStandardMaterial({
+          color: 0x93c5fd,
+          emissive: 0x3b82f6,
+          emissiveIntensity: 1.8,
+          roughness: 0.2,
+        });
+
+        [-0.24, 0.24].forEach((offsetX, idx) => {
+          const prong = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.045, 0.075, 0.88, 10),
+            darkMetalMat
+          );
+          prong.rotation.x = Math.PI / 2;
+          prong.rotation.z = idx === 0 ? 0.08 : -0.08;
+          prong.position.set(offsetX * 1.15, 0.3, 0.52);
+          prong.castShadow = true;
+          turretGroup.add(prong);
+
+          const node = new THREE.Mesh(
+            new THREE.SphereGeometry(0.085, 12, 12),
+            arcMat
+          );
+          node.position.set(offsetX * 1.25, 0.3, 0.96);
+          turretGroup.add(node);
+
+          muzzlePoints.push(createMuzzle(offsetX * 1.25, 0.3, 1.02));
+        });
+
+        return { turret: turretGroup, mesh: turretGroup, spinBarrels: null, gunPorts: muzzlePoints, muzzlePoints };
       } else {
         addPart(turret, new THREE.CylinderGeometry(0.29, 0.36, 0.12, 16), MAT_WHEEL_METAL, 0, 0.047, -0.05);
         addPart(turret, racerNoseTrim(0.58, 0.28, 0.79), MAT_DARK, 0, 0.23, -0.02);
@@ -2524,7 +2678,7 @@
           addPart(turret, new THREE.BoxGeometry(0.38, 0.1, 0.90), MAT_DRL, 0, 0.39, 0.36, 0, 0, 0, false);
         }
       }
-      return { turret, spinBarrels, gunPorts };
+      return { turret, mesh: turret, spinBarrels, gunPorts, muzzlePoints: gunPorts };
     }
 
     function makeRacerFaceTexture(irisColor, lidColor, expression) {
@@ -3862,9 +4016,31 @@
         exhaustFlames.push(flame);
       }
 
-      const wObj = muzzlePoints.length ? { turret: new THREE.Group(), spinBarrels: null } : buildTurretMesh(spec, paint, isColossus);
-      wObj.turret.position.set(0, turretY, isTank ? 0.12 : -0.08);
-      bodyGroup.add(wObj.turret);
+      const SIGNATURE_TURRET_MOUNTS = {
+        iskra:  { y: 1.18, z: -0.15, scale: 0.92 }, // низкая крыша спорткупе
+        buksir: { y: 1.92, z:  0.35, scale: 1.08 }, // высокая кабина тягача
+        volt:   { y: 1.32, z: -0.10, scale: 0.96 }, // крыша фастбэка
+      };
+
+      const fallbackBodyMuzzlePoints = [...muzzlePoints];
+      const turretData = buildTurretMesh(spec, paint, isColossus);
+      const turret = turretData.mesh || turretData.turret;
+
+      if (spec.signatureBody && SIGNATURE_TURRET_MOUNTS[spec.id]) {
+        const mount = SIGNATURE_TURRET_MOUNTS[spec.id];
+        turret.position.set(0, mount.y, mount.z);
+        turret.scale.setScalar(mount.scale);
+      } else {
+        turret.position.set(0, turretY, isTank ? 0.12 : -0.08);
+      }
+      bodyGroup.add(turret);
+
+      const activeMuzzlePoints =
+        turretData.muzzlePoints && turretData.muzzlePoints.length
+          ? turretData.muzzlePoints
+          : turretData.gunPorts && turretData.gunPorts.length
+            ? turretData.gunPorts
+            : fallbackBodyMuzzlePoints;
 
       const shieldMesh = new THREE.Mesh(
         new THREE.SphereGeometry(Math.max(w, l) * 0.66, 18, 12),
@@ -3923,7 +4099,7 @@
       bodyGroup.add(antennaPivot);
 
       if (!spec.signatureBody && !isColossus && !isSweetBoss) applySculptedShells(bodyGroup, spec.id);
-      return { root, bodyGroup, paint, turret: wObj.turret, spinBarrels: wObj.spinBarrels, zones, wheels, wheelPivots, frontWheelPivots, exhaustFlames, shieldMesh, iceBlock, isTank, contactShadow, antennaPivot, muzzlePoints, gunPorts: wObj.gunPorts || muzzlePoints };
+      return { root, bodyGroup, paint, turret, spinBarrels: turretData.spinBarrels, zones, wheels, wheelPivots, frontWheelPivots, exhaustFlames, shieldMesh, iceBlock, isTank, contactShadow, antennaPivot, muzzlePoints: activeMuzzlePoints, gunPorts: activeMuzzlePoints };
     }
 
     // =========================================================================
