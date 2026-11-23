@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Стальной дерби 3D · Терминал 17</title>
-  <script src="./vendor/vk/vk-bridge.min.js?v=b565e380"></script>
-    <script src="./js/vk-host.js?v=b565e380" data-keys="steel_derby_colossus_v5" data-ad-gap="120"></script>
+  <script src="./vendor/vk/vk-bridge.min.js?v=aad35ad3"></script>
+    <script src="./js/vk-host.js?v=aad35ad3" data-keys="steel_derby_colossus_v5" data-ad-gap="120"></script>
     <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="assets/vehicle-surfaces.js"></script>
   <script src="assets/sculpted-racers.js"></script>
   <script src="assets/sculpted-shells.js"></script>
-  <script src="./assets/derby-art.js?v=b565e380"></script>
+  <script src="./assets/derby-art.js?v=aad35ad3"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;600;700;900&display=swap');
     * { box-sizing: border-box; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
@@ -4044,6 +4044,29 @@
     let garageOrbitYaw = 0.65, garageTargetYaw = 0.65;
     let garageOrbitPitch = 0.28, garageTargetPitch = 0.28;
     let garageZoom = 7.35, garageTargetZoom = 7.35;
+    const garageFrame = { dirty: true, radius: 2.7, height: 1.0, distance: 7.35 };
+    const garageControls = document.getElementById('garage-controls');
+    const updateGarageFrame = () => { garageFrame.dirty = true; };
+    new ResizeObserver(updateGarageFrame).observe(garageControls);
+    window.addEventListener('resize', updateGarageFrame);
+
+    function frameGarageCamera() {
+      const width = window.innerWidth, height = window.innerHeight;
+      const panel = garageControls.getBoundingClientRect();
+      const narrow = width < 640;
+      const freeWidth = narrow ? width - 28 : Math.max(90, panel.left - 16);
+      const top = narrow ? Math.min(86, height * .13) : Math.min(78, height * .13);
+      const bottom = narrow ? panel.top : height - Math.min(66, height * .11);
+      const freeHeight = Math.max(60, bottom - top);
+      const centerX = narrow ? width / 2 : (freeWidth + 16) / 2;
+      const centerY = (top + bottom) / 2;
+      camera.setViewOffset(width, height, width / 2 - centerX, height / 2 - centerY, width, height);
+      const halfFov = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+      const fitWidth = garageFrame.radius * height / (freeWidth * halfFov * .86);
+      const fitHeight = (garageFrame.height + garageFrame.radius * .37) * height / (freeHeight * halfFov * .86);
+      garageFrame.distance = Math.max(6.9, fitWidth + .45, fitHeight + .45);
+      garageFrame.dirty = false;
+    }
     let garageTestTimer = 0;
     let isDraggingGarage = false;
     let dragStartX = 0, dragStartY = 0;
@@ -4176,6 +4199,9 @@
         podiumGroup.rotation.y = 0;
       }
       previewMesh = buildVehicleMesh(spec, cust, { isEnemy: false });
+      garageFrame.radius = Math.hypot(spec.bodyL / 2 + .20, spec.bodyW / 2 + .23);
+      garageFrame.height = spec.isTank || ['buksir','kamaz','sweetpaz','mater'].includes(spec.id) ? 1.43 : 1.00;
+      garageFrame.dirty = true;
       previewMesh.root.position.set(0, podiumHeight, 0);
       scene.add(previewMesh.root);
       const card = document.querySelector(`[data-veh="${spec.id}"] .veh-card-art`);
@@ -6138,6 +6164,7 @@
       chaseFocus.set(player.x, player.y + 1.5, player.z - 4.8);
       camera.position.copy(chasePosition);
       camera.lookAt(chaseFocus);
+      camera.clearViewOffset();
       camera.fov = 54;
       camera.updateProjectionMatrix();
       driveVfx.style.opacity = '0';
@@ -6175,6 +6202,7 @@
       game.screen = 'garage';
       game.paused = false;
       driveVfx.style.opacity = '0';
+      garageFrame.dirty = true;
       camera.fov = 52;
       camera.updateProjectionMatrix();
       document.getElementById('pause-modal').classList.add('hidden');
@@ -8570,14 +8598,14 @@
           }
         }
         updateFX(dt);
-        const dist = window.innerWidth < 640 ? (garageZoom + 2.5) : garageZoom;
-        const offsetX = window.innerWidth < 640 ? 0 : 2.42;
+        if (garageFrame.dirty) frameGarageCamera();
+        const dist = garageFrame.distance * garageZoom / 7.35;
         camera.position.set(
-          Math.sin(garageOrbitYaw) * dist * Math.cos(garageOrbitPitch) + offsetX,
-          1.35 + Math.sin(garageOrbitPitch) * dist,
+          Math.sin(garageOrbitYaw) * dist * Math.cos(garageOrbitPitch),
+          garageFrame.height + Math.sin(garageOrbitPitch) * dist,
           Math.cos(garageOrbitYaw) * dist * Math.cos(garageOrbitPitch)
         );
-        camera.lookAt(offsetX * 0.6, camera.aspect < 0.85 ? -1.45 : 1.12, 0);
+        camera.lookAt(0, garageFrame.height, 0);
       } else if (game.screen === 'battle') {
         if (!game.paused) {
           updateBattle(dt, elapsed);
